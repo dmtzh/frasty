@@ -40,7 +40,7 @@ def test_add_item_race_condition(folder_path: str):
         "html",
         folder_path
     )
-    id = "add_" + CrockfordId.new_id().get_value()
+    id = "add_" + CrockfordId.new_id()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     num_parallel_instances = 100
@@ -76,7 +76,7 @@ def test_update_item_race_condition(folder_path: str):
         "html",
         folder_path
     )
-    id = "update_" + CrockfordId.new_id().get_value()
+    id = "update_" + CrockfordId.new_id()
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     num_parallel_instances = 20

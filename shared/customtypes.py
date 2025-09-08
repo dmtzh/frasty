@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from .utils.crockfordid import CrockfordId, calculate_checksum_for_crockford_base32_id
+from .utils.crockfordid import CrockfordId
 
 @dataclass(frozen=True)
 class Error:
@@ -20,13 +20,12 @@ class IdValue(str):
         return instance
     
     def to_value_with_checksum(self):
-        checksum = calculate_checksum_for_crockford_base32_id(self)
-        return self + checksum
+        return CrockfordId(self).get_value_with_checksum()
     
     @classmethod
     def new_id(cls):
         crockford_id = CrockfordId.new_id()
-        return cls(crockford_id.get_value())
+        return cls(crockford_id)
     
     @classmethod
     def from_value_with_checksum(cls, value_with_checksum: str):
@@ -35,4 +34,4 @@ class IdValue(str):
             case None:
                 return None
             case crockford_id:
-                return cls(crockford_id.get_value())
+                return cls(crockford_id)

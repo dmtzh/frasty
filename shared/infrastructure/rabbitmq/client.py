@@ -86,7 +86,7 @@ class RabbitMQClient:
         if queue_name is not None:
             queue = RabbitQueue(name=queue_name, passive=True)
         else:
-            name = CrockfordId.new_id(4).get_value()
+            name = CrockfordId.new_id(4)
             self._broker.create_auto_delete_queue(name)
             queue = RabbitQueue(name=name, passive=True)
         self._broker.bind_queue_to_exchange(queue.name, event_group, event)
