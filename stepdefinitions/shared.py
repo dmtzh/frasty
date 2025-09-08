@@ -5,25 +5,7 @@ from expression import Result
 from expression.collections.block import Block
 from expression.extra.result.traversable import traverse
 
-from shared.utils.crockfordid import CrockfordId
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
-
-def validate_input_id(input_dict: dict, id: str) -> Result[str, list[ValueErr]]:
-    if id not in input_dict:
-        return Result.Error([ValueMissing(id)])
-    raw_id = input_dict.get(id)
-    if not isinstance(raw_id, str):
-        return Result.Error([ValueInvalid(id)])
-    match raw_id.strip():
-        case "":
-            return Result.Error([ValueInvalid(id)])
-        case raw_id_stripped:
-            opt_id = CrockfordId.from_value_with_checksum(raw_id_stripped)
-            match opt_id:
-                case None:
-                    return Result.Error([ValueInvalid(id)])
-                case _:
-                    return Result.Ok(raw_id_stripped)
 
 @dataclass(frozen=True)
 class HttpResponseData:
