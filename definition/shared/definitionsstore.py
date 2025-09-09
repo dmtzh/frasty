@@ -1,5 +1,5 @@
 import os
-from typing import Any, ParamSpec, TypeVar
+from typing import Any
 
 import config
 from shared.customtypes import IdValue
@@ -8,9 +8,6 @@ import shared.dtodefinition as shdtodef
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-
-P = ParamSpec("P")
-R = TypeVar("R")
 
 class DefinitionsStore:
     def __init__(self):

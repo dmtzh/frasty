@@ -62,7 +62,7 @@ async def handle(request: AddDefinitionRequest):
                 return f"'{name}' value is invalid"
     res = await add_definition_workflow(request.resource)
     match res:
-        case Result(tag=ResultTag.OK, ok=id):
+        case Result(tag=ResultTag.OK, ok=id) if type(id) is IdValue:
             id_with_checksum = id.to_value_with_checksum()
             return {"id": id_with_checksum}
         case Result(tag=ResultTag.ERROR, error=error):
@@ -77,5 +77,5 @@ async def handle(request: AddDefinitionRequest):
                     step_name = get_step_definition_name(type(step))
                     errors = [{"loc": ["body", "resource", "step"], "type": "value_error", "msg": f"step '{step_name}' not alllowed"}]
                     raise RequestValidationError(errors)
-                case StorageError(message=_):
+                case StorageError():
                     raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")

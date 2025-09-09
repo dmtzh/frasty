@@ -69,7 +69,7 @@ class CrockfordId(str):
             return None
         value_without_checksum = value[:-1]
         checksum = value[-1]
-        res = CrockfordId._from_value(value_without_checksum, length)
+        res = CrockfordId.from_value(value_without_checksum, length)
         if res is None:
             return None
         calculated_checksum = _calculate_checksum_for_crockford_base32_id(res)
@@ -78,7 +78,7 @@ class CrockfordId(str):
         return res
     
     @staticmethod
-    def _from_value(value: str, length: int):
+    def from_value(value: str, length: int):
         if not value or len(value) != length:
             return None
         is_valid = all(char in _alphabet for char in value)

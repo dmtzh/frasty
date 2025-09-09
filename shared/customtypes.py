@@ -15,6 +15,7 @@ class Error:
         return cls(message=str(error))
 
 class IdValue(str):
+    _length: int = 8
     def __new__(cls, value):
         instance = super().__new__(cls, value)
         return instance
@@ -24,12 +25,21 @@ class IdValue(str):
     
     @classmethod
     def new_id(cls):
-        crockford_id = CrockfordId.new_id()
+        crockford_id = CrockfordId.new_id(cls._length)
         return cls(crockford_id)
     
     @classmethod
     def from_value_with_checksum(cls, value_with_checksum: str):
-        opt_crockford_id = CrockfordId.from_value_with_checksum(value_with_checksum)
+        opt_crockford_id = CrockfordId.from_value_with_checksum(value_with_checksum, cls._length)
+        match opt_crockford_id:
+            case None:
+                return None
+            case crockford_id:
+                return cls(crockford_id)
+    
+    @classmethod
+    def from_value(cls, value: str):
+        opt_crockford_id = CrockfordId.from_value(value, cls._length)
         match opt_crockford_id:
             case None:
                 return None
