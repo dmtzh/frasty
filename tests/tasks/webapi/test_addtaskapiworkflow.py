@@ -1,13 +1,13 @@
 from expression import Result
 import pytest
 
-from shared.customtypes import Error, IdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Error, TaskIdValue
 from tasks.webapi.addtaskapiworkflow import AddDefinitionError, AddTaskResource, DefinitionValidationError, InputValidationError, TaskNameMissing, add_task_workflow
 
 @pytest.fixture
 def add_definition_handler():
     async def handler(raw_definiiton):
-        definition_id = IdValue.new_id()
+        definition_id = DefinitionIdValue.new_id()
         return Result.Ok(definition_id)
     return handler
 

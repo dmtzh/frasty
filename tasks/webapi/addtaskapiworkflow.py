@@ -4,7 +4,7 @@ from typing import Any
 
 from expression import Result
 
-from shared.customtypes import Error, IdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Error, TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task, TaskName
 from shared.tasksstore import tasks_storage
@@ -55,7 +55,7 @@ def apply_add_task(id: TaskIdValue, task: Task):
     return tasks_storage.add(id, task)
 
 @coroutine_result[WorkflowError]()
-async def add_task_workflow(add_definition_handler: Callable[[list[dict[str, str]]], Coroutine[Any, Any, Result[IdValue, DefinitionValidationError | AddDefinitionError]]], resource: AddTaskResource):
+async def add_task_workflow(add_definition_handler: Callable[[list[dict[str, str]]], Coroutine[Any, Any, Result[DefinitionIdValue, DefinitionValidationError | AddDefinitionError]]], resource: AddTaskResource):
     task_name = await validate_task_name(resource.name).map_error(InputValidationError)
     definition_id = await async_result(add_definition_handler)(resource.definition)
     id = TaskIdValue.new_id()

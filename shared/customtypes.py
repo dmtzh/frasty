@@ -52,3 +52,6 @@ class TaskIdValue(IdValue):
 
 class RunIdValue(IdValue):
     '''Run id'''
+
+class DefinitionIdValue(IdValue):
+    '''Definition id'''

@@ -4,7 +4,7 @@ from typing import Any
 
 from expression import Result, effect
 
-from shared.customtypes import IdValue
+from shared.customtypes import DefinitionIdValue
 
 class TaskName(str):
     def __new__(cls, value):
@@ -24,7 +24,7 @@ class TaskName(str):
 @dataclass(frozen=True)
 class Task:
     name: TaskName
-    definition_id: IdValue
+    definition_id: DefinitionIdValue
 
 class TaskAdapter:
     @effect.result[Task, str]()
@@ -37,7 +37,7 @@ class TaskAdapter:
         opt_name = TaskName.parse(raw_name)
         name = yield from Result.Ok(opt_name) if opt_name is not None else Result.Error(f"invalid name {raw_name}")
         
-        opt_definition_id = IdValue.from_value(raw_definition_id)
+        opt_definition_id = DefinitionIdValue.from_value(raw_definition_id)
         definition_id = yield from Result.Ok(opt_definition_id) if opt_definition_id is not None else Result.Error(f"invalid definition_id {raw_definition_id}")
         
         return Task(name=name, definition_id=definition_id)

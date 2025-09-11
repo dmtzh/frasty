@@ -6,7 +6,7 @@ from expression import Result
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
-from shared.customtypes import IdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
@@ -32,7 +32,7 @@ def definition_validation_error_response_to_errors(json_response: dict):
     errors = list(map(update_location, detail))
     return errors
 @async_ex_to_error_result(AddDefinitionError.from_exception)
-async def add_definition_handler(raw_definition: list[dict[str, str]]) -> Result[IdValue, DefinitionValidationError | AddDefinitionError]:
+async def add_definition_handler(raw_definition: list[dict[str, str]]) -> Result[DefinitionIdValue, DefinitionValidationError | AddDefinitionError]:
     add_definition_url = config.ADD_DEFINITION_URL
     timeout_15_seconds = aiohttp.ClientTimeout(total=15)
     json_data = {"resource": raw_definition}
@@ -43,7 +43,7 @@ async def add_definition_handler(raw_definition: list[dict[str, str]]) -> Result
                     case 200:
                         json_response = await response.json()
                         definition_id_with_checksum = json_response.get("id")
-                        opt_definition_id = IdValue.from_value_with_checksum(definition_id_with_checksum)
+                        opt_definition_id = DefinitionIdValue.from_value_with_checksum(definition_id_with_checksum)
                         match opt_definition_id:
                             case None:
                                 return Result.Error(AddDefinitionError(f"Unexpected response when add definition: {json_response}"))

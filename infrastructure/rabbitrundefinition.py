@@ -9,7 +9,7 @@ from expression import Result
 from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.customtypes import Error, IdValue
+from shared.customtypes import DefinitionIdValue, Error, IdValue, RunIdValue
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
@@ -22,15 +22,16 @@ RUN_DEFINITION_COMMAND = "run_definition"
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(task_id: IdValue, run_id: IdValue, definition_id: IdValue, metadata: dict | None) -> PythonPickleMessage:
-        is_metadata_valid = metadata is None or isinstance(metadata, dict)
+    def data_to_message(definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict) -> PythonPickleMessage:
+        is_metadata_valid = isinstance(metadata, dict)
         if not is_metadata_valid:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
-        task_id_dict = {"task_id": task_id.to_value_with_checksum()}
-        run_id_dict = {"run_id": run_id.to_value_with_checksum()}
-        metadata_dict = (metadata or {}) | task_id_dict | run_id_dict
-        command_data = {"definition_id": definition_id.to_value_with_checksum(), "metadata": metadata_dict}
-        correlation_id = run_id_dict["run_id"]
+        definition_id_with_checksum = definition_id.to_value_with_checksum()
+        run_id_with_checksum = run_id.to_value_with_checksum()
+        metadata_dict = metadata |\
+            {"definition_id": definition_id_with_checksum, "run_id": run_id_with_checksum}
+        command_data = {"metadata": metadata_dict}
+        correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
 
@@ -119,8 +120,8 @@ class _python_pickle:
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
 
-def run(rabbit_client: RabbitMQClient, task_id: IdValue, run_id: IdValue, definition_id: IdValue, metadata: dict | None = None):
-    message = _python_pickle.data_to_message(task_id, run_id, definition_id, metadata)
+def run(rabbit_client: RabbitMQClient, definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict):
+    message = _python_pickle.data_to_message(definition_id, run_id, metadata)
     return rabbit_client.send_command(RUN_DEFINITION_COMMAND, message)
 
 class handler:
