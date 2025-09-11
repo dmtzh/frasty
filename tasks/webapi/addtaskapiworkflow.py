@@ -4,11 +4,10 @@ from typing import Any
 
 from expression import Result
 
-from shared.customtypes import Error, IdValue
+from shared.customtypes import Error, IdValue, TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task, TaskName
 from shared.tasksstore import tasks_storage
-from shared.types import TaskIdValue
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 

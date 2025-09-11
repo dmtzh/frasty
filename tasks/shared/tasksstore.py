@@ -1,11 +1,12 @@
 import os
 
-import config
+from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.task import Task, TaskAdapter
-from shared.types import TaskIdValue
+
+import config
 
 class TasksStore:
     def __init__(self):
@@ -29,5 +30,13 @@ class TasksStore:
                 raise ValueError("Task already exists")
             return None, task
         return self._item_action(add_func)(id)
+    
+    async def get(self, id: TaskIdValue):
+        opt_ver_with_value = await self._file_repo_with_ver.get(id)
+        match opt_ver_with_value:
+            case (_, value):
+                return value
+            case None:
+                return None
 
 tasks_storage = TasksStore()

@@ -1,4 +1,4 @@
-from tasks.shared.types import TaskIdValue
+from shared.customtypes import TaskIdValue
 
 def test_new_id_length():
     id_value_len = 3

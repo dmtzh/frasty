@@ -6,9 +6,8 @@ from expression import Result
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
-from shared.customtypes import IdValue
+from shared.customtypes import IdValue, TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
-from shared.types import TaskIdValue
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 

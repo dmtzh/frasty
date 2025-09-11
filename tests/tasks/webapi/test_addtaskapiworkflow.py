@@ -1,8 +1,7 @@
 from expression import Result
 import pytest
 
-from shared.customtypes import Error, IdValue
-from shared.types import TaskIdValue
+from shared.customtypes import Error, IdValue, TaskIdValue
 from tasks.webapi.addtaskapiworkflow import AddDefinitionError, AddTaskResource, DefinitionValidationError, InputValidationError, TaskNameMissing, add_task_workflow
 
 @pytest.fixture

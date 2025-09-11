@@ -45,3 +45,10 @@ class IdValue(str):
                 return None
             case crockford_id:
                 return cls(crockford_id)
+
+class TaskIdValue(IdValue):
+    '''Task id'''
+    _length: int = 3
+
+class RunIdValue(IdValue):
+    '''Run id'''
