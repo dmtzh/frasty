@@ -55,3 +55,6 @@ class RunIdValue(IdValue):
 
 class DefinitionIdValue(IdValue):
     '''Definition id'''
+
+class StepIdValue(IdValue):
+    '''Step id'''

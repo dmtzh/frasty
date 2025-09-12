@@ -45,9 +45,9 @@ async def handle_complete_step_command(input):
     def event_handler(cmd: completestephandler.CompleteStepCommand, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
         match evt:
             case RunningDefinitionState.Events.DefinitionCompleted():
-                return rabbit_definition_completed.publish(rabbit_client, cmd.opt_task_id, cmd.run_id, cmd.definition_id, evt.result, cmd.metadata)
+                return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, evt.result, cmd.metadata)
             case RunningDefinitionState.Events.StepRunning():
-                return rabbit_step.run(rabbit_client, cmd.opt_task_id, cmd.run_id, cmd.definition_id, evt.step_id, evt.step_definition, evt.input_data, cmd.metadata)
+                return rabbit_step.run(rabbit_client, None, cmd.run_id, cmd.definition_id, evt.step_id, evt.step_definition, evt.input_data, cmd.metadata)
             case _:
                 async def error_res():
                     return Result.Error(Error(f"Unsupported event {evt}"))
@@ -55,7 +55,7 @@ async def handle_complete_step_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def completestep_failure_handler(cmd: completestephandler.CompleteStepCommand, error):
         result = CompletedWith.Error(str(error))
-        return rabbit_definition_completed.publish(rabbit_client, cmd.opt_task_id, cmd.run_id, cmd.definition_id, result, cmd.metadata)
+        return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, result, cmd.metadata)
     match input:
         case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is completestephandler.CompleteStepCommand:
             res = await completestephandler.handle(event_handler, cmd)

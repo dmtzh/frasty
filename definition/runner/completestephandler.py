@@ -5,7 +5,7 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import Error, IdValue
+from shared.customtypes import DefinitionIdValue, Error, IdValue, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import StorageError, NotFoundException, NotFoundError
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import ResultTag
@@ -15,10 +15,9 @@ from shared.runningdefinitionsstore import running_definitions_storage
 
 @dataclass(frozen=True)
 class CompleteStepCommand:
-    opt_task_id: IdValue | None
-    run_id: IdValue
-    definition_id: IdValue
-    step_id: IdValue
+    run_id: RunIdValue
+    definition_id: DefinitionIdValue
+    step_id: StepIdValue
     result: CompletedResult
     metadata: dict
 
@@ -29,7 +28,7 @@ def state_not_found_ex_to_err(ex: NotFoundException, run_id: IdValue, definition
 @async_ex_to_error_result(StorageError.from_exception)
 @async_ex_to_error_result(state_not_found_ex_to_err, NotFoundException)
 @running_definitions_storage.with_storage
-def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_step_id: IdValue, completed_step_result: CompletedResult):
+def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_step_id: StepIdValue, completed_step_result: CompletedResult):
     if state is None:
         raise NotFoundException()
     def complete_current_step_and_run_next():

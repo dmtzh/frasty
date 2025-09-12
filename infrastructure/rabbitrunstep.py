@@ -212,7 +212,7 @@ class handler:
     
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def _send_response(self, result: CompletedResult):
-        return rabbit_complete_step.run(self._rabbit_client, self._opt_task_id, self._run_id, self._definition_id, self._step_id, result, self._metadata)
+        return rabbit_complete_step.run(self._rabbit_client, self._run_id, self._definition_id, self._step_id, result, self._metadata)
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, CompletedResult | None]]):
         def result_to_log_output(result: CompletedResult):

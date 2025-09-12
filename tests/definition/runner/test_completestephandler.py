@@ -7,7 +7,7 @@ from runner import completestephandler
 from shared.domainrunning import RunningDefinitionState
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
-from shared.customtypes import Error, IdValue
+from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.domaindefinition import Definition
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -49,19 +49,18 @@ def html_response_result():
     return html_response_data
 
 async def create_complete_step_cmd(storage_setup_func: Callable[[RunningDefinitionState | None, dict], Tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]):
-    run_id = IdValue.new_id()
-    definition_id = IdValue.new_id()
+    run_id = RunIdValue.new_id()
+    definition_id = DefinitionIdValue.new_id()
     html_data = HttpResponseData(200, "text/html", "<html><body>test html content</body></html>")
     html_response_data = CompletedWith.Data(HttpResponseData.to_dict(html_data))
     cmd_dict = {
-        "opt_task_id": definition_id,
         "run_id": run_id,
         "definition_id": definition_id,
         "result": html_response_data,
         "metadata": {"command": "cmd1"}
     }
     evt = await running_definitions_storage.with_storage(storage_setup_func)(run_id, definition_id, cmd_dict)
-    cmd = completestephandler.CompleteStepCommand(cmd_dict["opt_task_id"], cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"], cmd_dict["metadata"])
+    cmd = completestephandler.CompleteStepCommand(cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"], cmd_dict["metadata"])
     return (evt, cmd)
 
 
@@ -327,7 +326,7 @@ async def test_handle_returns_no_event_when_step_running_but_step_id_different(r
         evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
-        cmd_dict["step_id"] = IdValue.new_id()
+        cmd_dict["step_id"] = StepIdValue.new_id()
         cmd_dict["result"] = CompletedWith.Data("test html content")
         evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(cmd_dict["result"]))
         return (evt, state)
@@ -351,8 +350,8 @@ async def test_handle_returns_None_when_state_not_found(runtime_error_event_hand
         cmd_dict["step_id"] = state.running_step_id()
         return (evt, state)
     _, cmd = await create_complete_step_cmd(apply_set_first_step_running)
-    wrong_definition_id = IdValue.new_id()
-    cmd_with_wrong_definition_id = completestephandler.CompleteStepCommand(cmd.opt_task_id, cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result, cmd.metadata)
+    wrong_definition_id = DefinitionIdValue.new_id()
+    cmd_with_wrong_definition_id = completestephandler.CompleteStepCommand(cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result, cmd.metadata)
 
     handle_res = await completestephandler.handle(runtime_error_event_handler, cmd_with_wrong_definition_id)
 
