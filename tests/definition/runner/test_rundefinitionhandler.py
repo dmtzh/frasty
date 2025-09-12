@@ -7,7 +7,7 @@ from shared.definitionsstore import definitions_storage
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
 from runner import rundefinitionhandler
-from shared.customtypes import Error, IdValue
+from shared.customtypes import DefinitionIdValue, Error, RunIdValue
 from shared.domaindefinition import Definition
 from stepdefinitions.html import GetContentFromHtml, GetContentFromHtmlConfig, GetLinksFromHtml, GetLinksFromHtmlConfig
 from stepdefinitions.httpresponse import FilterSuccessResponse
@@ -41,30 +41,30 @@ def definition2():
 
 @pytest_asyncio.fixture(scope="session")
 async def existing_definition_id1(definition1: Definition):
-    definition_id = IdValue.new_id()
+    definition_id = DefinitionIdValue.new_id()
     await definitions_storage.add(definition_id, definition1)
     yield definition_id
 
 @pytest_asyncio.fixture(scope="session")
 async def existing_definition_id2(definition2: Definition):
-    definition_id = IdValue.new_id()
+    definition_id = DefinitionIdValue.new_id()
     await definitions_storage.add(definition_id, definition2)
     yield definition_id
 
 @pytest.fixture
 def run_id():
-    return IdValue.new_id()
+    return RunIdValue.new_id()
 
 @pytest.fixture
 def cmd1(existing_definition_id1, run_id):
     metadata = {"command": "cmd1"}
-    cmd = rundefinitionhandler.RunDefinitionCommand(task_id=existing_definition_id1, run_id=run_id, definition_id=existing_definition_id1, metadata=metadata)
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id1, run_id=run_id, metadata=metadata)
     return cmd
 
 @pytest.fixture
 def cmd2(existing_definition_id2, run_id):
     metadata = {"command": "cmd2"}
-    cmd = rundefinitionhandler.RunDefinitionCommand(task_id=existing_definition_id2, run_id=run_id, definition_id=existing_definition_id2, metadata=metadata)
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id2, run_id=run_id, metadata=metadata)
     return cmd
 
 FIRST_STEP_INPUT_DATA = {"url": "http://localhost", "http_method": "GET"}
@@ -171,9 +171,9 @@ async def test_handle_returns_no_event_when_first_step_already_completed(cmd1, d
 
 
 async def test_handle_returns_None_when_definition_id_does_not_exist(run_first_step_handler):
-    def_id = IdValue.new_id()
-    run_id = IdValue.new_id()
-    cmd = rundefinitionhandler.RunDefinitionCommand(task_id=def_id, run_id=run_id, definition_id=def_id, metadata={})
+    def_id = DefinitionIdValue.new_id()
+    run_id = RunIdValue.new_id()
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=def_id, run_id=run_id, metadata={})
     
     handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
 
@@ -184,7 +184,6 @@ async def test_handle_returns_None_when_definition_id_does_not_exist(run_first_s
 async def test_handle_passes_correct_data_to_run_first_step_handler(cmd1):
     passed_data = {}
     async def run_first_step_handler(cmd: rundefinitionhandler.RunDefinitionCommand, evt: RunningDefinitionState.Events.StepRunning):
-        passed_data["task_id"] = cmd.task_id
         passed_data["run_id"] = cmd.run_id
         passed_data["definition_id"] = cmd.definition_id
         passed_data["metadata"] = cmd.metadata
@@ -194,7 +193,6 @@ async def test_handle_passes_correct_data_to_run_first_step_handler(cmd1):
     
     await rundefinitionhandler.handle(run_first_step_handler, cmd1)
 
-    assert cmd1.task_id == passed_data["task_id"]
     assert cmd1.run_id == passed_data["run_id"]
     assert cmd1.definition_id == passed_data["definition_id"]
     assert cmd1.metadata == passed_data["metadata"]

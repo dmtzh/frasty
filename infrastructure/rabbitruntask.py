@@ -80,11 +80,11 @@ class _python_pickle:
         @staticmethod
         def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[TaskIdValue, RunIdValue, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
             task_id_unvalidated, run_id_unvalidated, metadata_unvalidated = parsed_data
-            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, RabbitMessageError]:
+            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
                 opt_id = id_parser(id_unvalidated)
                 match opt_id:
                     case None:
-                        return Result.Error(rabbit_msg_err(ValidationError, f"Invalid '{id_name}' value {id_unvalidated}"))
+                        return Result.Error(f"Invalid '{id_name}' value {id_unvalidated}")
                     case valid_id:
                         return Result.Ok(valid_id)
             
@@ -96,8 +96,10 @@ class _python_pickle:
                     res = input_adapter(task_id, run_id, metadata_unvalidated, logger)
                     return Result.Ok(res)
                 case _:
-                    error = task_id_res.swap().default_value(None) or run_id_res.error
-                    return Result.Error(error)
+                    errors_with_none = [task_id_res.swap().default_value(None), run_id_res.swap().default_value(None)]
+                    errors = [err for err in errors_with_none if err is not None]
+                    err = rabbit_msg_err(ValidationError, ", ".join(errors))
+                    return Result.Error(err)
         
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):

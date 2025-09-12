@@ -22,17 +22,17 @@ import rundefinitionhandler
 async def handle_run_definition_command(input, logger: Logger):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_first_step_handler(cmd: rundefinitionhandler.RunDefinitionCommand, evt: RunningDefinitionState.Events.StepRunning):
-        return rabbit_step.run(rabbit_client, cmd.task_id, cmd.run_id, cmd.definition_id, evt.step_id, evt.step_definition, evt.input_data, cmd.metadata)
+        return rabbit_step.run(rabbit_client, None, cmd.run_id, cmd.definition_id, evt.step_id, evt.step_definition, evt.input_data, cmd.metadata)
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rundefinition_failure_handler(cmd: rundefinitionhandler.RunDefinitionCommand, error):
+    def rabbit_rundefinition_failure_handler(cmd: rundefinitionhandler.RunDefinitionCommand, error):
         result = CompletedWith.Error(str(error))
-        return rabbit_definition_completed.publish(rabbit_client, cmd.task_id, cmd.run_id, cmd.definition_id, result, cmd.metadata)
+        return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, result, cmd.metadata)
     match input:
         case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is rundefinitionhandler.RunDefinitionCommand:
             res = await rundefinitionhandler.handle(rabbit_run_first_step_handler, cmd)
             match res:
                 case Result(tag=ResultTag.ERROR, error=error):
-                    res = await rundefinition_failure_handler(cmd, error)
+                    res = await rabbit_rundefinition_failure_handler(cmd, error)
             return res
         case Result(tag=ResultTag.ERROR, error=error):
             # TODO: Handle error case

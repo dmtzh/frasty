@@ -9,7 +9,7 @@ from infrastructure import rabbitrunstep as rabbit_step
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
-from shared.customtypes import IdValue
+from shared.customtypes import DefinitionIdValue, IdValue
 from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.dtodefinition import DefinitionAdapter
@@ -33,7 +33,10 @@ async def add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
 
 @app.get("/definitions/{id}")
 async def get_definition(id: str):
-    opt_definition = await definitions_storage.get(IdValue(id[:-1]))
+    opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
+    if opt_def_id is None:
+        raise HTTPException(status_code=404)
+    opt_definition = await definitions_storage.get(opt_def_id)
     if opt_definition is None:
         raise HTTPException(status_code=404)
     definition_dto = DefinitionAdapter.to_list(opt_definition)

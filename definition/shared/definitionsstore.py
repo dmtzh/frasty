@@ -2,7 +2,7 @@ import os
 from typing import Any
 
 import config
-from shared.customtypes import IdValue
+from shared.customtypes import DefinitionIdValue, IdValue
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.infrastructure.serialization.json import JsonSerializer
@@ -36,7 +36,7 @@ class DefinitionsStore:
             return None, definition
         return self._item_action(add_func)(id)
     
-    async def get(self, id: IdValue):
+    async def get(self, id: DefinitionIdValue):
         opt_ver_with_definition = await self._file_repo_with_ver.get(id)
         if opt_ver_with_definition is None:
             return None
