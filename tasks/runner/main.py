@@ -54,10 +54,12 @@ async def handle_run_task_command(input, logger: Logger):
         task = await get_task(cmd.task_id)
         run_def_cmd = RunDefinitionCommand(task.definition_id, cmd.run_id, cmd.metadata)
         await rabbit_run_definition_handler(run_def_cmd)
+        return run_def_cmd
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_runtask_failure_handler(cmd: RunTaskCommand, error):
+    async def rabbit_runtask_failure_handler(cmd: RunTaskCommand, error):
         result = CompletedWith.Error(str(error))
-        return rabbit_definition_completed.publish(rabbit_client, cmd.task_id, cmd.run_id, cmd.run_id, result, cmd.metadata)
+        res = await rabbit_definition_completed.publish(rabbit_client, cmd.task_id, cmd.run_id, cmd.run_id, result, cmd.metadata)
+        return res.map(lambda _: result)
     match input:
         case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is RunTaskCommand:
             res = await run_task_workflow(cmd)
