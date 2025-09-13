@@ -68,7 +68,7 @@ runningdefinitionsstore.running_definitions_storage.with_storage = wrap_first_pa
         wrap_with_running_definitions_storage_error_condition
     )
 
-definitionsstore.definitions_storage.get = wrap_storage_get_with_error_condition(
-        definitionsstore.definitions_storage.get,
+definitionsstore.definitions_storage.get_with_ver = wrap_storage_get_with_error_condition(
+        definitionsstore.definitions_storage.get_with_ver,
         _DEFINITIONS_STORAGE_ERROR_KEY
     )

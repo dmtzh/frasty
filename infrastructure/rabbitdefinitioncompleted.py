@@ -181,10 +181,13 @@ class subscriber:
 
 class Severity(StrEnum):
     LOW = "low"
+    HIGH = "high"
 
 def handle_processing_failure(severity: Severity):
     match severity:
         case Severity.LOW:
             bits = secrets.randbits(1)
+        case Severity.HIGH:
+            bits = secrets.randbits(3)
     requeue = bits > 0
     raise NackMessage(requeue=requeue)

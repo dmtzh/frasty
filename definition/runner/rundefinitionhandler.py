@@ -21,13 +21,13 @@ class RunDefinitionCommand:
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
-async def get_definition(id: DefinitionIdValue) -> Result[Definition, NotFoundError]:
-    opt_definition = await definitions_storage.get(id)
-    match opt_definition:
+async def get_definition(id: DefinitionIdValue) -> Result[tuple[Definition, int], NotFoundError]:
+    opt_definition_with_ver = await definitions_storage.get_with_ver(id)
+    match opt_definition_with_ver:
         case None:
             return Result.Error(NotFoundError(f"Definition {id} not found"))
-        case task:
-            return Result.Ok(task)
+        case definition_with_ver:
+            return Result.Ok(definition_with_ver)
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
@@ -82,10 +82,12 @@ class RunFirstStepError:
 
 @coroutine_result()
 async def run_definition_workflow(run_first_step_handler: Callable[[RunDefinitionCommand, RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]], cmd: RunDefinitionCommand):
-    definition = await get_definition(cmd.definition_id)
+    definition, ver = await get_definition(cmd.definition_id)
     evt = await apply_run_first_step(cmd.run_id, cmd.definition_id, definition)
     if type(evt) is RunningDefinitionState.Events.StepRunning:
-        await async_result(run_first_step_handler)(cmd, evt).map_error(lambda err: RunFirstStepError(evt.step_id, err))
+        metadata = cmd.metadata | {"definition_version": ver}
+        run_def_cmd = RunDefinitionCommand(cmd.definition_id, cmd.run_id, metadata)
+        await async_result(run_first_step_handler)(run_def_cmd, evt).map_error(lambda err: RunFirstStepError(evt.step_id, err))
     return evt
 
 async def clean_up_failed_run(cmd: RunDefinitionCommand, error: Any):

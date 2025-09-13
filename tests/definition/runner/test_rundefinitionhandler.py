@@ -195,7 +195,7 @@ async def test_handle_passes_correct_data_to_run_first_step_handler(cmd1):
 
     assert cmd1.run_id == passed_data["run_id"]
     assert cmd1.definition_id == passed_data["definition_id"]
-    assert cmd1.metadata == passed_data["metadata"]
+    assert cmd1.metadata | {"definition_version": 1} == passed_data["metadata"]
     assert FIRST_STEP_INPUT_DATA == passed_data["input_data"]
     assert type(FIRST_STEP_DEFINITION) is type(passed_data["step_definition"])
 

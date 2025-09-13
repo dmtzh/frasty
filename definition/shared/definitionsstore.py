@@ -36,11 +36,11 @@ class DefinitionsStore:
             return None, definition
         return self._item_action(add_func)(id)
     
-    async def get(self, id: DefinitionIdValue):
+    async def get_with_ver(self, id: DefinitionIdValue):
         opt_ver_with_definition = await self._file_repo_with_ver.get(id)
         if opt_ver_with_definition is None:
             return None
-        _, definition = opt_ver_with_definition
-        return definition
+        ver, definition = opt_ver_with_definition
+        return (definition, ver)
 
 definitions_storage = DefinitionsStore()

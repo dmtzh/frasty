@@ -36,10 +36,11 @@ async def get_definition(id: str):
     opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
     if opt_def_id is None:
         raise HTTPException(status_code=404)
-    opt_definition = await definitions_storage.get(opt_def_id)
-    if opt_definition is None:
+    opt_definition_with_ver = await definitions_storage.get_with_ver(opt_def_id)
+    if opt_definition_with_ver is None:
         raise HTTPException(status_code=404)
-    definition_dto = DefinitionAdapter.to_list(opt_definition)
+    definition, _ = opt_definition_with_ver
+    definition_dto = DefinitionAdapter.to_list(definition)
     return definition_dto
 
 @app.post("/definition/manual-run", status_code=201)
