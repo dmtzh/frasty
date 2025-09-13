@@ -1,6 +1,7 @@
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
+
 from expression import Result
 from fastapi import HTTPException
 
@@ -88,7 +89,7 @@ async def clean_up_failed_run(error: WorkflowError):
 # ==================================
 @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
 def _rabbit_run_task_handler(cmd: RunTaskCommand):
-    return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "webapi", {})
+    return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "tasks_webapi", {})
 
 async def handle(raw_id_with_checksum: str):
     res = await run_task_workflow(_rabbit_run_task_handler, raw_id_with_checksum)

@@ -29,5 +29,7 @@ async def lifespan(app: FastAPI):
     if rabbitmqconfig is None:
         raise ValueError("Invalid RabbitMQ configuration")
     await _rabbit_broker.connect(rabbitmqconfig)
+    await _broker.start()
     yield
     await _rabbit_broker.disconnect()
+    await _broker.stop()

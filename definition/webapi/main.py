@@ -63,7 +63,6 @@ async def get_status(id: str):
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
 async def complete_manual_run_definition_with_result(input, logger: Logger):
-    logger.info(f"received input: {input}")
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
     @manual_run_storage.with_storage
@@ -73,6 +72,7 @@ async def complete_manual_run_definition_with_result(input, logger: Logger):
         new_state = state.complete(result)
         return (None, new_state)
     
+    logger.info(f"complete manual run definition with result received input: {input}")
     match input:
         case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_definition_completed.DefinitionCompletedData:
             res = await apply_complete(data.definition_id, data.result)

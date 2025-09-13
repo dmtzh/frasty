@@ -12,7 +12,7 @@ from expression import Result
 from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.customtypes import Error, IdValue
+from shared.customtypes import Error, IdValue, RunIdValue, TaskIdValue
 from shared.completedresult import CompletedResult, CompletedResultAdapter
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
@@ -44,7 +44,7 @@ class _python_pickle:
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, input_adapter: Callable[[IdValue | None, IdValue, IdValue, CompletedResult, dict, LoggerAdapter], R]):
+        def __init__(self, input_adapter: Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R]):
             self._input_adapter = input_adapter
         
         @staticmethod
@@ -96,40 +96,41 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[IdValue | None, IdValue, IdValue, CompletedResult, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str | None, str, str, dict, dict]):
-            Res = Result[R, RabbitMessageError]
-            opt_task_id_unvalidated, run_id_unvalidated, definition_id_unvalidated, result_unvalidated, metadata_unvalidated = parsed_data
-            def validate_task_id() -> Result[IdValue | None, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str | None, str, str, dict, dict]) -> Result[R, RabbitMessageError]:
+            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
+                opt_id = id_parser(id_unvalidated)
+                match opt_id:
+                    case None:
+                        return Result.Error(f"Invalid '{id_name}' value {id_unvalidated}")
+                    case valid_id:
+                        return Result.Ok(valid_id)
+            def validate_task_id() -> Result[IdValue | None, str]:
                 match opt_task_id_unvalidated:
                     case None:
                         return Result.Ok(None)
                     case task_id_unvalidated:
-                        opt_task_id  = IdValue.from_value_with_checksum(task_id_unvalidated)
+                        opt_task_id  = TaskIdValue.from_value_with_checksum(task_id_unvalidated)
                         match opt_task_id:
                             case None:
-                                return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'task_id' value {task_id_unvalidated}"))
+                                return Result.Error(f"Invalid 'task_id' value {task_id_unvalidated}")
                             case task_id:
                                 return Result.Ok(task_id)
-            def validate_id(id_unvalidated: str, id_name: str) -> Result[IdValue, RabbitMessageError]:
-                opt_id = IdValue.from_value_with_checksum(id_unvalidated)
-                match opt_id:
-                    case None:
-                        return Result.Error(rabbit_msg_err(ValidationError, f"Invalid '{id_name}' value {id_unvalidated}"))
-                    case valid_id:
-                        return Result.Ok(valid_id)
-
+            
+            opt_task_id_unvalidated, run_id_unvalidated, definition_id_unvalidated, result_unvalidated, metadata_unvalidated = parsed_data
             opt_task_id_res = validate_task_id()
-            run_id_res = validate_id(run_id_unvalidated, "run_id")
-            definition_id_res = validate_id(definition_id_unvalidated, "definition_id")
+            run_id_res = validate_id(RunIdValue.from_value_with_checksum, run_id_unvalidated, "run_id")
+            definition_id_res = validate_id(IdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
             result_res = CompletedResultAdapter.from_dict(result_unvalidated).map_error(lambda _: rabbit_msg_err(ValidationError, f"Invalid 'result' value {result_unvalidated}"))
             match opt_task_id_res, run_id_res, definition_id_res, result_res:
                 case Result(tag=ResultTag.OK, ok=opt_task_id), Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id), Result(tag=ResultTag.OK, ok=result):
                     logger = logger_creator.create(opt_task_id, run_id, None)
                     res = input_adapter(opt_task_id, run_id, definition_id, result, metadata_unvalidated, logger)
-                    return Res.Ok(res)
+                    return Result.Ok(res)
                 case _:
-                    error = opt_task_id_res.swap().default_value(None) or run_id_res.swap().default_value(None) or definition_id_res.swap().default_value(None) or result_res.error
-                    return Res.Error(error)
+                    errors_with_none = [opt_task_id_res.swap().default_value(None), run_id_res.swap().default_value(None), definition_id_res.swap().default_value(None), result_res.swap().default_value(None)]
+                    errors = [err for err in errors_with_none if err is not None]
+                    err = rabbit_msg_err(ValidationError, ", ".join(errors))
+                    return Result.Error(err)
         
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):
@@ -144,7 +145,7 @@ class _python_pickle:
 @dataclass(frozen=True)
 class DefinitionCompletedData:
     opt_task_id: IdValue | None
-    run_id: IdValue
+    run_id: RunIdValue
     definition_id: IdValue
     result: CompletedResult
     metadata: dict
@@ -154,7 +155,7 @@ def publish(rabbit_client: RabbitMQClient, opt_task_id: IdValue | None, run_id: 
     return rabbit_client.send_event(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, message)
 
 class subscriber:
-    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[IdValue | None, IdValue, IdValue, CompletedResult], R] | Callable[[IdValue | None, IdValue, IdValue, CompletedResult, dict], R], queue_name: str | None):
+    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult], R] | Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult, dict], R], queue_name: str | None):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
@@ -163,14 +164,12 @@ class subscriber:
         self._input_adapter = validate_input_adapter()
         self._queue_name = queue_name
     
-    def _consume_input(self, opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
+    def _consume_input(self, opt_task_id: IdValue | None, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
             logger.info(f"RECEIVED metadata {metadata}")
             params = inspect.signature(self._input_adapter).parameters
             include_metadata_param = len(params) > 4
             if include_metadata_param:
-                metadata_keys_to_exclude = ["task_id", "run_id", "definition_id", "step_id"]
-                metadata_dict = {k: v for k, v in metadata.items() if k not in metadata_keys_to_exclude}
-                params_array = [opt_task_id, run_id, definition_id, result, metadata_dict]
+                params_array = [opt_task_id, run_id, definition_id, result, metadata]
                 return self._input_adapter(*params_array)
             else:
                 params_array = [opt_task_id, run_id, definition_id, result]
