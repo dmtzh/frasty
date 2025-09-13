@@ -13,6 +13,7 @@ from shared.utils.result import ResultTag
 
 import addtaskapihandler
 from config import lifespan, rabbit_client
+import getrunstateapihandler
 import runtaskapihandler
 from webapitaskrunstate import WebApiTaskRunState
 from webapitaskrunstore import web_api_task_run_storage
@@ -26,6 +27,10 @@ async def add_task(request: addtaskapihandler.AddTaskRequest):
 @app.post("/tasks/{id}/run", status_code=201)
 async def run_task(id: str):
     return await runtaskapihandler.handle(id)
+
+@app.get("/tasks/{id}/run/{run_id}")
+async def get_run_state(id: str, run_id: str):
+    return await getrunstateapihandler.handle(id, run_id)
 
 @app.get("/tickets")
 def tickets():
