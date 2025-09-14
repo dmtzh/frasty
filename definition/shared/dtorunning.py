@@ -9,7 +9,7 @@ from expression.extra.result.traversable import traverse
 
 from .domainrunning import RunningDefinitionState
 from shared.completedresult import CompletedResultAdapter
-from shared.customtypes import IdValue, Error
+from shared.customtypes import IdValue, Error, StepIdValue
 import shared.dtodefinition as shdtodef
 from shared.utils.string import strip_and_lowercase
 
@@ -60,7 +60,7 @@ class RunningDefinitionStateEventAdapter:
                 )
             case RunningDefinitionStateEventDtoTypes.STEP_RUNNING:
                 raw_step_id = yield from Result.Ok(raw_event_dict["step_id"]) if "step_id" in raw_event_dict else Result.Error("step_id is missing")
-                step_id = IdValue(raw_step_id)
+                step_id = StepIdValue(raw_step_id)
                 raw_step_definition = yield from Result.Ok(raw_event_dict["step_definition"]) if "step_definition" in raw_event_dict else Result.Error("step_definition is missing")
                 step_definition = yield from shdtodef.StepDefinitionAdapter.from_dict(raw_step_definition).map_error(str)
                 return RunningDefinitionState.Events.StepRunning(

@@ -2,7 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from shared.customtypes import Error, IdValue
+from shared.customtypes import Error, IdValue, StepIdValue
 import shared.domaindefinition as shdomaindef
 from shared.completedresult import CompletedWith, CompletedResult
 
@@ -35,7 +35,7 @@ class RunningDefinitionState:
             definition: shdomaindef.Definition
         @dataclass(frozen=True)
         class StepRunning:
-            step_id: IdValue
+            step_id: StepIdValue
             step_definition: shdomaindef.StepDefinition
             input_data: Any
         @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class RunningDefinitionState:
                     return None
                 if self.recent_completed_step_id() is not None:
                     return None
-                step_id = IdValue.new_id()
+                step_id = StepIdValue.new_id()
                 apply_evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], None)
                 RunningDefinitionState.apply(self, apply_evt)
                 evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], definition.input_data)
@@ -127,7 +127,7 @@ class RunningDefinitionState:
                 recent_step_completed_output = next((e.result for e in reversed(self._events) if type(e) is RunningDefinitionState.Events.StepCompleted))
                 is_recent_step_completed_with_data = type(recent_step_completed_output) is CompletedWith.Data
                 if has_more_steps and is_recent_step_completed_with_data:
-                    step_id = IdValue.new_id()
+                    step_id = StepIdValue.new_id()
                     step_def = definition.steps[num_of_completed_steps]
                     apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
                     RunningDefinitionState.apply(self, apply_evt)

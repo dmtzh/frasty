@@ -11,7 +11,7 @@ from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
-from shared.customtypes import Error, IdValue
+from shared.customtypes import Error, IdValue, StepIdValue
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.completedresult import CompletedWith, CompletedResult
@@ -31,7 +31,7 @@ P = ParamSpec("P")
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: IdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict) -> PythonPickleMessage:
+    def data_to_message(opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict) -> PythonPickleMessage:
         step_definition_dict = shdtodef.StepDefinitionAdapter.to_dict(definition)
         is_metadata_valid = isinstance(metadata, dict)
         if not is_metadata_valid:
@@ -39,14 +39,15 @@ class _python_pickle:
         task_id_dict = {"task_id": opt_task_id.to_value_with_checksum()} if opt_task_id is not None else {}
         run_id_with_checksum = run_id.to_value_with_checksum()
         metadata_dict = metadata | task_id_dict |\
-            {"run_id": run_id_with_checksum, "definition_id": definition_id.to_value_with_checksum(), "step_id": step_id.to_value_with_checksum()}
-        command_data = {"config": step_definition_dict, "definition": step_definition_dict, "data": data, "metadata": metadata_dict}
+            {"run_id": run_id_with_checksum, "definition_id": definition_id.to_value_with_checksum()}
+        step_id_dict = {"step_id": step_id.to_value_with_checksum()}
+        command_data = step_id_dict | {"config": step_definition_dict, "definition": step_definition_dict, "data": data, "metadata": metadata_dict}
         correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, IdValue, TCfg, D, dict, LoggerAdapter], R]):
+        def __init__(self, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, StepIdValue, TCfg, D, dict, LoggerAdapter], R]):
             self._command = command
             self._data_validator = data_validator
             self._input_adapter = input_adapter
@@ -100,9 +101,9 @@ class _python_pickle:
             if not isinstance(definition_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' should be string value, got {type(definition_id_unvalidated).__name__}"))
             
-            if "step_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'step_id' key not found in {metadata_unvalidated}"))
-            step_id_unvalidated = metadata_unvalidated["step_id"]
+            if "step_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'step_id' key not found in {decoded}"))
+            step_id_unvalidated = decoded["step_id"]
             if not isinstance(step_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'step_id' should be string value, got {type(step_id_unvalidated).__name__}"))
 
@@ -110,10 +111,15 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, IdValue, TCfg, D, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str | None, str, str, str, dict, Any, dict]):
-            Res = Result[R, RabbitMessageError]
-            opt_task_id_unvalidated, run_id_unvalidated, definition_id_unvalidated, step_id_unvalidated, step_definition_unvalidated, data_unvalidated, metadata_unvalidated = parsed_data
-            def validate_task_id() -> Result[IdValue | None, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, StepIdValue, TCfg, D, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str | None, str, str, str, dict, Any, dict]) -> Result[R, RabbitMessageError]:
+            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
+                opt_id = id_parser(id_unvalidated)
+                match opt_id:
+                    case None:
+                        return Result.Error(f"Invalid '{id_name}' value {id_unvalidated}")
+                    case valid_id:
+                        return Result.Ok(valid_id)
+            def validate_task_id() -> Result[IdValue | None, str]:
                 match opt_task_id_unvalidated:
                     case None:
                         return Result.Ok(None)
@@ -121,49 +127,31 @@ class _python_pickle:
                         opt_task_id  = IdValue.from_value_with_checksum(task_id_unvalidated)
                         match opt_task_id:
                             case None:
-                                return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'task_id' value {task_id_unvalidated}"))
+                                return Result.Error(f"Invalid 'task_id' value {task_id_unvalidated}")
                             case task_id:
                                 return Result.Ok(task_id)
-            def validate_run_id() -> Result[IdValue, RabbitMessageError]:
-                opt_run_id = IdValue.from_value_with_checksum(run_id_unvalidated)
-                match opt_run_id:
-                    case None:
-                        return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'run_id' value {run_id_unvalidated}"))
-                    case run_id:
-                        return Result.Ok(run_id)
-            def validate_definition_id() -> Result[IdValue, RabbitMessageError]:
-                opt_definition_id = IdValue.from_value_with_checksum(definition_id_unvalidated)
-                match opt_definition_id:
-                    case None:
-                        return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'definition_id' value {definition_id_unvalidated}"))
-                    case definition_id:
-                        return Result.Ok(definition_id)
-            def validate_step_id() -> Result[IdValue, RabbitMessageError]:
-                opt_step_id = IdValue.from_value_with_checksum(step_id_unvalidated)
-                match opt_step_id:
-                    case None:
-                        return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'step_id' value {step_id_unvalidated}"))
-                    case step_id:
-                        return Result.Ok(step_id)
             
+            opt_task_id_unvalidated, run_id_unvalidated, definition_id_unvalidated, step_id_unvalidated, step_definition_unvalidated, data_unvalidated, metadata_unvalidated = parsed_data
             opt_task_id_res = validate_task_id()
-            run_id_res = validate_run_id()
-            definition_id_res = validate_definition_id()
-            step_id_res = validate_step_id()
+            run_id_res = validate_id(IdValue.from_value_with_checksum, run_id_unvalidated, "run_id")
+            definition_id_res = validate_id(IdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
+            step_id_res = validate_id(StepIdValue.from_value_with_checksum, step_id_unvalidated, "step_id")
             cfg_res = shdtodef.StepDefinitionAdapter.from_dict(step_definition_unvalidated)\
                 .filter(lambda step_def: get_step_definition_name(type(step_def)) == command, [ValueInvalid("step")])\
                 .map(lambda definition: definition.config)\
-                .map_error(lambda _: rabbit_msg_err(ValidationError, f"Invalid 'definition' data: {step_definition_unvalidated}"))
+                .map_error(lambda _: f"Invalid 'definition' data: {step_definition_unvalidated}")
             data_res = data_validator(data_unvalidated)\
-                .map_error(lambda _: rabbit_msg_err(ValidationError, f"Invalid 'data' value {data_unvalidated}"))
+                .map_error(lambda _: f"Invalid 'data' value {data_unvalidated}")
             match opt_task_id_res, run_id_res, definition_id_res, step_id_res, cfg_res, data_res:
                 case Result(tag=ResultTag.OK, ok=opt_task_id), Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id), Result(tag=ResultTag.OK, ok=step_id), Result(tag=ResultTag.OK, ok=cfg), Result(tag=ResultTag.OK, ok=data):
                     logger = logger_creator.create(opt_task_id, run_id, step_id)
                     res = input_adapter(opt_task_id, run_id, definition_id, step_id, cfg, data, metadata_unvalidated, logger)
-                    return Res.Ok(res)
+                    return Result.Ok(res)
                 case _:
-                    error = opt_task_id_res.swap().default_value(None) or run_id_res.swap().default_value(None) or definition_id_res.swap().default_value(None) or step_id_res.swap().default_value(None) or cfg_res.swap().default_value(None) or data_res.error
-                    return Res.Error(error)
+                    errors_with_none = [opt_task_id_res.swap().default_value(None), run_id_res.swap().default_value(None), definition_id_res.swap().default_value(None), step_id_res.swap().default_value(None), cfg_res.swap().default_value(None), data_res.swap().default_value(None)]
+                    errors = [err for err in errors_with_none if err is not None]
+                    err = rabbit_msg_err(ValidationError, ", ".join(errors))
+                    return Result.Error(err)
         
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):
@@ -175,13 +163,13 @@ class _python_pickle:
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
 
-def run(rabbit_client: RabbitMQClient, opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: IdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict):
+def run(rabbit_client: RabbitMQClient, opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict):
     command = get_step_definition_name(type(definition))
     message = _python_pickle.data_to_message(opt_task_id, run_id, definition_id, step_id, definition, data, metadata)
     return rabbit_client.send_command(command, message)
 
 class handler:
-    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, IdValue, TCfg, D], R] | Callable[[IdValue | None, IdValue, IdValue, IdValue, TCfg, D, dict], R]):
+    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[IdValue | None, IdValue, IdValue, StepIdValue, TCfg, D], R] | Callable[[IdValue | None, IdValue, IdValue, IdValue, TCfg, D, dict], R]):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
@@ -191,7 +179,7 @@ class handler:
         self._data_validator = data_validator
         self._input_adapter = validate_input_adapter()
     
-    def _consume_input(self, opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: IdValue, cfg: TCfg, data: D, metadata: dict, logger: LoggerAdapter):
+    def _consume_input(self, opt_task_id: IdValue | None, run_id: IdValue, definition_id: IdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict, logger: LoggerAdapter):
         logger.info(f"{self._step_name} RECEIVED metadata {metadata}")
         self._opt_task_id = opt_task_id
         self._run_id = run_id

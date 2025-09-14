@@ -42,7 +42,7 @@ async def handle_run_definition_command(input, logger: Logger):
 @rabbit_complete_step.handler(rabbit_client, completestephandler.CompleteStepCommand)
 async def handle_complete_step_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def event_handler(cmd: completestephandler.CompleteStepCommand, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
+    def rabbit_event_handler(cmd: completestephandler.CompleteStepCommand, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
         match evt:
             case RunningDefinitionState.Events.DefinitionCompleted():
                 return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, evt.result, cmd.metadata)
@@ -58,7 +58,7 @@ async def handle_complete_step_command(input):
         return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, result, cmd.metadata)
     match input:
         case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is completestephandler.CompleteStepCommand:
-            res = await completestephandler.handle(event_handler, cmd)
+            res = await completestephandler.handle(rabbit_event_handler, cmd)
             match res:
                 case Result(tag=ResultTag.ERROR, error=error):
                     res = await completestep_failure_handler(cmd, error)

@@ -32,8 +32,9 @@ class _python_pickle:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
         run_id_with_checksum = run_id.to_value_with_checksum()
         metadata_dict = metadata |\
-            {"run_id": run_id_with_checksum, "definition_id": definition_id.to_value_with_checksum(), "step_id": step_id.to_value_with_checksum()}
-        command_data = {"result": result_dto, "metadata": metadata_dict}
+            {"run_id": run_id_with_checksum, "definition_id": definition_id.to_value_with_checksum()}
+        step_id_dict = {"step_id": step_id.to_value_with_checksum()}
+        command_data = step_id_dict | {"result": result_dto, "metadata": metadata_dict}
         correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
@@ -83,9 +84,9 @@ class _python_pickle:
             if not isinstance(definition_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' should be string value, got {type(definition_id_unvalidated).__name__}"))
             
-            if "step_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'step_id' key not found in {metadata_unvalidated}"))
-            step_id_unvalidated = metadata_unvalidated["step_id"]
+            if "step_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'step_id' key not found in {decoded}"))
+            step_id_unvalidated = decoded["step_id"]
             if not isinstance(step_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'step_id' should be string value, got {type(step_id_unvalidated).__name__}"))
 
