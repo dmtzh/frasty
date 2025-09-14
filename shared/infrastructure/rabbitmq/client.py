@@ -39,6 +39,20 @@ class Error:
     class UnexpectedError(CustomError):
         '''Unexpected error when send command/event'''
 
+class ExistingQueueName(str):
+    def __new__(cls, value):
+        instance = super().__new__(cls, value)
+        return instance
+class NotExistingQueueName(str):
+    def __new__(cls, value):
+        instance = super().__new__(cls, value)
+        return instance
+    @staticmethod
+    def new_name():
+        name = CrockfordId.new_id(4)
+        return NotExistingQueueName(name)
+type QueueName = ExistingQueueName | NotExistingQueueName
+
 class RabbitMQClient:
     def __init__(self, broker: RabbitMQBroker):
         self._broker = broker
@@ -82,13 +96,13 @@ class RabbitMQClient:
             publish_task.cancel()
             return Result.Error(Error.SendEventTimeout(f"{event} ({event_group})"))
     
-    def event_handler(self, event: str, event_group: str, queue_name: str | None, message_decoder: Callable):
-        if queue_name is not None:
-            queue = RabbitQueue(name=queue_name, passive=True)
-        else:
-            name = CrockfordId.new_id(4)
-            self._broker.create_auto_delete_queue(name)
-            queue = RabbitQueue(name=name, passive=True)
+    def event_handler(self, event: str, event_group: str, queue_name: QueueName, message_decoder: Callable):
+        match queue_name:
+            case ExistingQueueName():
+                queue = RabbitQueue(name=queue_name, passive=True)
+            case NotExistingQueueName():
+                self._broker.create_auto_delete_queue(queue_name)
+                queue = RabbitQueue(name=queue_name, passive=True)        
         self._broker.bind_queue_to_exchange(queue.name, event_group, event)
         return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False)
     

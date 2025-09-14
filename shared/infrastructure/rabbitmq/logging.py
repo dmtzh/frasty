@@ -41,8 +41,8 @@ class RabbitMessageLoggingFormatter(logging.Formatter):
                 return formatter.format(record)
 
 class RabbitMessageLoggerCreator():
-    def __init__(self, rabbit_msg: AbstractIncomingMessage):
-        self._extra = {"exchange": rabbit_msg.exchange, "queue": rabbit_msg.routing_key}
+    def __init__(self, rabbit_msg: AbstractIncomingMessage, queue_name: str | None = None):
+        self._extra = {"exchange": rabbit_msg.exchange, "queue": queue_name or rabbit_msg.routing_key}
     
     def create(self, opt_task_id: IdValue | None, run_id: IdValue, step_id: IdValue):
         logger = logging.getLogger("rabbit_message_logger")

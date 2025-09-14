@@ -14,7 +14,7 @@ from faststream.rabbit import RabbitMessage
 
 from shared.customtypes import Error, IdValue, RunIdValue, TaskIdValue
 from shared.completedresult import CompletedResult, CompletedResultAdapter
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
+from shared.infrastructure.rabbitmq.client import ExistingQueueName, NotExistingQueueName, QueueName, RabbitMQClient
 from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
 from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
@@ -44,7 +44,8 @@ class _python_pickle:
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, input_adapter: Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R]):
+        def __init__(self, queue_name: QueueName, input_adapter: Callable[[IdValue | None, RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R]):
+            self._queue_name = queue_name
             self._input_adapter = input_adapter
         
         @staticmethod
@@ -135,7 +136,7 @@ class _python_pickle:
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):
             msg: RabbitMessage = message
-            logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
+            logger_creator = RabbitMessageLoggerCreator(msg.raw_message, self._queue_name)
             rabbit_msg_err = rabbit_message_error_creator(f"Decoding {DEFINITION_COMPLETED_EVENT}", msg.correlation_id)
             parsed_data_res = self._parse_rabbitmq_msg_python_pickle(rabbit_msg_err, msg)
             validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, logger_creator, self._input_adapter, rabbit_msg_err)
@@ -162,7 +163,7 @@ class subscriber:
             return input_adapter
         self._rabbit_client = rabbit_client
         self._input_adapter = validate_input_adapter()
-        self._queue_name = queue_name
+        self._queue_name = ExistingQueueName(queue_name) if queue_name is not None else NotExistingQueueName.new_name()
     
     def _consume_input(self, opt_task_id: IdValue | None, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
         self._definition_id = definition_id
@@ -190,7 +191,7 @@ class subscriber:
                     self._logger.error(f"{self._definition_id} data failed to process with error {error}")
             return process_completed_definition_res
         
-        decoder = _python_pickle.decoder(self._consume_input)
+        decoder = _python_pickle.decoder(self._queue_name, self._consume_input)
         return self._rabbit_client.event_handler(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, self._queue_name, decoder)(wrapper)
 
 class Severity(StrEnum):
