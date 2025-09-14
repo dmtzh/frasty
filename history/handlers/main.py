@@ -1,7 +1,6 @@
 # import asyncio
 
 from expression import Result
-from faststream.rabbit.annotations import Logger
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from shared.customtypes import TaskIdValue
@@ -33,8 +32,7 @@ def definition_to_completed_task(data: rabbit_definition_completed.DefinitionCom
             return Result.Ok(res)
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name="pending_task_history_results")
-async def add_task_result_to_history(input, logger: Logger):
-    logger.info(f"Add task result to history received input: {input}")
+async def add_task_result_to_history(input):
     completed_task_data_res = input.bind(definition_to_completed_task)
     match completed_task_data_res:
         case Result(tag=ResultTag.OK, ok=data) if type(data) is addtaskresulttohistoryhandler.CompletedTaskData:
@@ -42,7 +40,6 @@ async def add_task_result_to_history(input, logger: Logger):
             match res:
                 case Result(tag=ResultTag.ERROR, error=_):
                     rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.HIGH)
-            logger.info(f"Add task result to history completed with output {res}")
             return res
 
 # if __name__ == "__main__":

@@ -165,19 +165,33 @@ class subscriber:
         self._queue_name = queue_name
     
     def _consume_input(self, opt_task_id: IdValue | None, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
-            logger.info(f"RECEIVED metadata {metadata}")
-            params = inspect.signature(self._input_adapter).parameters
-            include_metadata_param = len(params) > 4
-            if include_metadata_param:
-                params_array = [opt_task_id, run_id, definition_id, result, metadata]
-                return self._input_adapter(*params_array)
-            else:
-                params_array = [opt_task_id, run_id, definition_id, result]
-                return self._input_adapter(*params_array)
+        self._definition_id = definition_id
+        self._logger = logger
+        params = inspect.signature(self._input_adapter).parameters
+        include_metadata_param = len(params) > 4
+        if include_metadata_param:
+            params_array = [opt_task_id, run_id, definition_id, result, metadata]
+            return self._input_adapter(*params_array)
+        else:
+            params_array = [opt_task_id, run_id, definition_id, result]
+            return self._input_adapter(*params_array)
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Any]]):
+        @functools.wraps(func)
+        async def wrapper(*args: P.args, **kwargs: P.kwargs):
+            match kwargs.get("input"):
+                case Result(tag=ResultTag.OK, ok=input):
+                    self._logger.info(f"{self._definition_id} COMPLETED with {input}")
+            process_completed_definition_res = await func(*args, **kwargs)
+            match process_completed_definition_res:
+                case Result(tag=ResultTag.OK, ok=result):
+                    self._logger.info(f"{self._definition_id} data processed with output {result}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    self._logger.error(f"{self._definition_id} data failed to process with error {error}")
+            return process_completed_definition_res
+        
         decoder = _python_pickle.decoder(self._consume_input)
-        return self._rabbit_client.event_handler(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, self._queue_name, decoder)(func)
+        return self._rabbit_client.event_handler(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, self._queue_name, decoder)(wrapper)
 
 class Severity(StrEnum):
     LOW = "low"

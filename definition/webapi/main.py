@@ -1,7 +1,6 @@
 from expression import Result
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
-from faststream import Logger
 
 from config import lifespan, rabbit_client
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
@@ -63,7 +62,7 @@ async def get_status(id: str):
             raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
-async def complete_manual_run_definition_with_result(input, logger: Logger):
+async def complete_manual_run_definition_with_result(input):
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
     @manual_run_storage.with_storage
@@ -73,13 +72,11 @@ async def complete_manual_run_definition_with_result(input, logger: Logger):
         new_state = state.complete(result)
         return (None, new_state)
     
-    logger.info(f"complete manual run definition with result received input: {input}")
     match input:
         case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_definition_completed.DefinitionCompletedData:
             res = await apply_complete(data.definition_id, data.result)
             match res:
                 case Result(tag=ResultTag.ERROR, error=error) if type(error) is not NotFoundError:
                     rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.LOW)
-            logger.info(f"manual run definition completed with result {res}")
             return res
                     

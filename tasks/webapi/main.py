@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from expression import Result
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
-from faststream import Logger
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from shared.completedresult import CompletedResult
@@ -64,7 +63,7 @@ class WebApiTaskRunCompletedData:
                 return Result.Ok(res)
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
-async def complete_web_api_task_run_state_with_result(input, logger: Logger):
+async def complete_web_api_task_run_state_with_result(input):
     @async_result
     @async_ex_to_error_result(UnexpectedError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
@@ -81,7 +80,6 @@ async def complete_web_api_task_run_state_with_result(input, logger: Logger):
         await apply_complete_with_result(webapi_task_run_completed_data.task_id, webapi_task_run_completed_data.run_id, webapi_task_run_completed_data.result)
         return webapi_task_run_completed_data
     
-    logger.info(f"Complete webapi task run state with result received input: {input}")
     match input:
         case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_definition_completed.DefinitionCompletedData:
             res = await complete_with_result_workflow(data)
@@ -90,5 +88,4 @@ async def complete_web_api_task_run_state_with_result(input, logger: Logger):
                     rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.LOW)
                 case Result(tag=ResultTag.ERROR, error=NotFoundError(message=message)):
                     res = message
-            logger.info(f"Complete webapi task run with result finished with output {res}")
             return res
