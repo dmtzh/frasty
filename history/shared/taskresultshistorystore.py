@@ -35,5 +35,14 @@ class TaskResultsHistoryStore:
             item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
             return item_action(func)(run_id, *args, **kwargs)
         return wrapper
+    
+    async def get(self, task_id: TaskIdValue, run_id: RunIdValue):
+        file_repo_with_ver = self._get_task_id_file_repo_with_ver(task_id)
+        opt_ver_with_data = await file_repo_with_ver.get(run_id)
+        match opt_ver_with_data:
+            case (_, data):
+                return data
+            case None:
+                return None
 
 taskresultshistory_storage = TaskResultsHistoryStore()
