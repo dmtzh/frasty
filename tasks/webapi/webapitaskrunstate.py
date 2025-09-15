@@ -4,6 +4,7 @@ from enum import StrEnum
 from typing import Any
 
 from expression import Result, effect
+
 from shared.completedresult import CompletedResult, CompletedResultAdapter
 from shared.utils.string import strip_and_lowercase
 

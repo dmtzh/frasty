@@ -29,8 +29,8 @@ class _python_pickle:
         task_id_with_checksum = task_id.to_value_with_checksum()
         run_id_with_checksum = run_id.to_value_with_checksum()
         metadata_dict = metadata |\
-            {"task_id": task_id_with_checksum, "run_id": run_id_with_checksum, "from": from_}
-        command_data = {"metadata": metadata_dict}
+            {"from": from_}
+        command_data = {"task_id": task_id_with_checksum, "run_id": run_id_with_checksum, "metadata": metadata_dict}
         correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
@@ -60,15 +60,15 @@ class _python_pickle:
             if not isinstance(metadata_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
             
-            if "task_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'task_id' key not found in {metadata_unvalidated}"))
-            task_id_unvalidated = metadata_unvalidated["task_id"]
+            if "task_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'task_id' key not found in {decoded}"))
+            task_id_unvalidated = decoded["task_id"]
             if not isinstance(task_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'task_id' should be string value, got {type(task_id_unvalidated).__name__}"))
 
-            if "run_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {metadata_unvalidated}"))
-            run_id_unvalidated = metadata_unvalidated["run_id"]
+            if "run_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {decoded}"))
+            run_id_unvalidated = decoded["run_id"]
             if not isinstance(run_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'run_id' should be string value, got {type(run_id_unvalidated).__name__}"))
             if run_id_unvalidated != msg.correlation_id:

@@ -23,8 +23,8 @@ class WebApiTaskRunStorageError(StorageError):
 # ==================================
 @async_result
 @make_async
-def parse_id_from_value_with_checksum[T](id_parser: Callable[[str], T | None], raw_id_with_checksum: str) -> Result[T, InvalidId]:
-    opt_id = id_parser(raw_id_with_checksum)
+def parse_id[T](id_parser: Callable[[str], T | None], raw_id: str) -> Result[T, InvalidId]:
+    opt_id = id_parser(raw_id)
     match opt_id:
         case None:
             return Result.Error(InvalidId())
@@ -43,8 +43,8 @@ async def get_state(task_id: TaskIdValue, run_id: RunIdValue) -> Result[WebApiTa
 
 @coroutine_result()
 async def get_run_state_workflow(raw_id_with_checksum: str, raw_run_id_with_checksum: str):
-    task_id = await parse_id_from_value_with_checksum(TaskIdValue.from_value_with_checksum, raw_id_with_checksum)
-    run_id = await parse_id_from_value_with_checksum(RunIdValue.from_value_with_checksum, raw_run_id_with_checksum)
+    task_id = await parse_id(TaskIdValue.from_value_with_checksum, raw_id_with_checksum)
+    run_id = await parse_id(RunIdValue.from_value_with_checksum, raw_run_id_with_checksum)
     state = await get_state(task_id, run_id)
     return state
 

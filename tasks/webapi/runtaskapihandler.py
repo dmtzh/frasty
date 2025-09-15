@@ -5,9 +5,7 @@ from typing import Any
 from expression import Result
 from fastapi import HTTPException
 
-from infrastructure import rabbitruntask as rabbit_task
 from shared.customtypes import RunIdValue, TaskIdValue
-from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.task import Task
 from shared.tasksstore import tasks_storage
@@ -15,9 +13,8 @@ from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId
-from webapi.webapitaskrunstate import WebApiTaskRunState
 
-from config import rabbit_client
+from webapitaskrunstate import WebApiTaskRunState
 from webapitaskrunstore import web_api_task_run_storage
 
 # ---------------------------
@@ -87,12 +84,8 @@ async def clean_up_failed_run(error: WorkflowError):
 # ==================================
 # API endpoint handler
 # ==================================
-@async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-def _rabbit_run_task_handler(cmd: RunTaskCommand):
-    return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "tasks_webapi", {})
-
-async def handle(raw_id_with_checksum: str):
-    res = await run_task_workflow(_rabbit_run_task_handler, raw_id_with_checksum)
+async def handle(run_task_handler: Callable[[RunTaskCommand], Coroutine[Any, Any, Result]], raw_id_with_checksum: str):
+    res = await run_task_workflow(run_task_handler, raw_id_with_checksum)
     if res.is_error():
         await clean_up_failed_run(res.error)
     match res:
