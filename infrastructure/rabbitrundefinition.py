@@ -1,4 +1,5 @@
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
 import pickle
@@ -28,9 +29,7 @@ class _python_pickle:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
         definition_id_with_checksum = definition_id.to_value_with_checksum()
         run_id_with_checksum = run_id.to_value_with_checksum()
-        metadata_dict = metadata |\
-            {"definition_id": definition_id_with_checksum, "run_id": run_id_with_checksum}
-        command_data = {"metadata": metadata_dict}
+        command_data = {"definition_id": definition_id_with_checksum, "run_id": run_id_with_checksum, "metadata": metadata}
         correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
@@ -60,15 +59,15 @@ class _python_pickle:
             if not isinstance(metadata_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
             
-            if "definition_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' key not found in {metadata_unvalidated}"))
-            definition_id_unvalidated = metadata_unvalidated["definition_id"]
+            if "definition_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' key not found in {decoded}"))
+            definition_id_unvalidated = decoded["definition_id"]
             if not isinstance(definition_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' should be string value, got {type(definition_id_unvalidated).__name__}"))
             
-            if "run_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {metadata_unvalidated}"))
-            run_id_unvalidated = metadata_unvalidated["run_id"]
+            if "run_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {decoded}"))
+            run_id_unvalidated = decoded["run_id"]
             if not isinstance(run_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'run_id' should be string value, got {type(run_id_unvalidated).__name__}"))
             
@@ -112,6 +111,12 @@ class _python_pickle:
             validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, logger_creator, self._input_adapter, rabbit_msg_err)
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
+
+@dataclass(frozen=True)
+class RunDefinitionData:
+    definition_id: DefinitionIdValue
+    run_id: RunIdValue
+    metadata: dict
 
 def run(rabbit_client: RabbitMQClient, definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict):
     command = RUN_DEFINITION_COMMAND

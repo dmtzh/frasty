@@ -1,4 +1,5 @@
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
 import pickle
@@ -110,6 +111,12 @@ class _python_pickle:
             validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, logger_creator, self._input_adapter, rabbit_msg_err)
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
+
+@dataclass(frozen=True)
+class RunTaskData:
+    task_id: TaskIdValue
+    run_id: RunIdValue
+    metadata: dict
 
 def run(rabbit_client: RabbitMQClient, task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict):
     command = RUN_TASK_COMMAND

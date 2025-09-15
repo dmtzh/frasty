@@ -1,6 +1,5 @@
 # import asyncio
-
-from dataclasses import dataclass
+import functools
 
 from expression import Result
 from faststream.rabbit.annotations import Logger
@@ -9,60 +8,35 @@ from infrastructure import rabbitdefinitioncompleted as rabbit_definition_comple
 from infrastructure import rabbitrundefinition as rabbit_definition
 from infrastructure import rabbitruntask as rabbit_run_task
 from shared.completedresult import CompletedWith
-from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
-from shared.infrastructure.storage.repository import NotFoundError, StorageError
-from shared.task import Task
-from shared.tasksstore import tasks_storage
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.infrastructure.storage.repository import NotFoundError
+from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 from config import app, rabbit_client
+import runtaskdefinitionhandler
 
-@dataclass(frozen=True)
-class RunTaskCommand:
-    task_id: TaskIdValue
-    run_id: RunIdValue
-    metadata: dict
-
-@dataclass(frozen=True)
-class RunDefinitionCommand:
-    definition_id: DefinitionIdValue
-    run_id: RunIdValue
-    metadata: dict
-
-class TasksStorageError(StorageError):
-    '''Unexpected tasks storage error'''
-
-@rabbit_run_task.handler(rabbit_client, RunTaskCommand)
-async def handle_run_task_command(input, logger: Logger):
-    @async_result
-    @async_ex_to_error_result(TasksStorageError.from_exception)
-    async def get_task(task_id: TaskIdValue) -> Result[Task, NotFoundError]:
-        opt_task = await tasks_storage.get(task_id)
-        match opt_task:
-            case None:
-                return Result.Error(NotFoundError(f"Task {task_id} not found"))
-            case task:
-                return Result.Ok(task)
-    @async_result
+@rabbit_run_task.handler(rabbit_client, rabbit_run_task.RunTaskData)
+async def handle_run_task_definition_command(input, logger: Logger):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_definition_handler(cmd: RunDefinitionCommand):
-        return rabbit_definition.run(rabbit_client, cmd.definition_id, cmd.run_id, cmd.metadata)
-    @coroutine_result()
-    async def run_task_workflow(cmd: RunTaskCommand):
-        task = await get_task(cmd.task_id)
-        run_def_cmd = RunDefinitionCommand(task.definition_id, cmd.run_id, cmd.metadata)
-        await rabbit_run_definition_handler(run_def_cmd)
-        return run_def_cmd
+    def rabbit_run_definition_handler(data: rabbit_run_task.RunTaskData, definition_id: DefinitionIdValue):
+        task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}
+        metadata = data.metadata | task_id_dict
+        return rabbit_definition.run(rabbit_client, definition_id, data.run_id, metadata)
+    
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    async def rabbit_runtask_failure_handler(cmd: RunTaskCommand, error):
+    async def rabbit_runtask_failure_handler(data: rabbit_run_task.RunTaskData, error):
+        definition_id = DefinitionIdValue(data.run_id)
         result = CompletedWith.Error(str(error))
-        res = await rabbit_definition_completed.publish(rabbit_client, cmd.task_id, cmd.run_id, cmd.run_id, result, cmd.metadata)
+        res = await rabbit_definition_completed.publish(rabbit_client, None, data.run_id, definition_id, result, data.metadata)
         return res.map(lambda _: result)
+    
     match input:
-        case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is RunTaskCommand:
-            res = await run_task_workflow(cmd)
+        case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_run_task.RunTaskData:
+            cmd = runtaskdefinitionhandler.RunTaskDefinitionCommand(data.task_id, data.run_id)
+            run_definition_handler = functools.partial(rabbit_run_definition_handler, data)
+            res = await runtaskdefinitionhandler.handle(run_definition_handler, cmd)
             match res:
                 case Result(tag=ResultTag.ERROR, error=NotFoundError()):
                     return None
