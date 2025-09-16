@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from expression import Result
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
@@ -8,7 +9,7 @@ from infrastructure import rabbitrunstep as rabbit_step
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, IdValue
+from shared.customtypes import DefinitionIdValue, RunIdValue
 from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.dtodefinition import DefinitionAdapter
@@ -28,30 +29,37 @@ def tickets():
 
 @app.post("/definitions")
 async def add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
-    return await adddefinitionapihandler.handle(request)
+    await adddefinitionapihandler.handle(request)
 
 @app.get("/definitions/{id}")
 async def get_definition(id: str):
     opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
     if opt_def_id is None:
         raise HTTPException(status_code=404)
-    opt_definition_with_ver = await definitions_storage.get_with_ver(opt_def_id)
-    if opt_definition_with_ver is None:
-        raise HTTPException(status_code=404)
-    definition, _ = opt_definition_with_ver
-    definition_dto = DefinitionAdapter.to_list(definition)
-    return definition_dto
+    opt_definition_with_ver_res = await async_catch_ex(definitions_storage.get_with_ver)(opt_def_id)
+    match opt_definition_with_ver_res:
+        case Result(ResultTag.OK, ok=None):
+            raise HTTPException(status_code=404)
+        case Result(ResultTag.OK, ok=(definition, _)):
+            definition_dto = DefinitionAdapter.to_list(definition)
+            return definition_dto
+        case _:
+            raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
 
 @app.post("/definition/manual-run", status_code=201)
 async def manual_run(request: manualrunapihandler.ManualRunRequest):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_first_step_handler(manual_run_id: IdValue, manual_definition_id: IdValue, evt: RunningDefinitionState.Events.StepRunning):
-        return rabbit_step.run(rabbit_client, None, manual_run_id, manual_definition_id, evt.step_id, evt.step_definition, evt.input_data, {})
+    def rabbit_run_first_step_handler(manual_run_id: RunIdValue, manual_definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning):
+        metadata = {"from": "definition_webapi", "definition_id": manual_definition_id.to_value_with_checksum()}
+        return rabbit_step.run(rabbit_client, manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
     return await manualrunapihandler.handle(rabbit_run_first_step_handler, request)
 
 @app.get("/definition/manual-run/{id}")
 async def get_status(id: str):
-    opt_state_res = await async_catch_ex(manual_run_storage.get)(IdValue(id[:-1]))
+    opt_run_id = RunIdValue.from_value_with_checksum(id)
+    if opt_run_id is None:
+        raise HTTPException(status_code=404)
+    opt_state_res = await async_catch_ex(manual_run_storage.get)(opt_run_id)
     match opt_state_res:
         case Result(ResultTag.OK, ok=None):
             raise HTTPException(status_code=404)
@@ -60,6 +68,11 @@ async def get_status(id: str):
             return state_dto
         case _:
             raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
+
+@dataclass(frozen=True)
+class CompleteManualRunCommand:
+    run_id: RunIdValue
+    result: CompletedResult
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
 async def complete_manual_run_definition_with_result(input):
@@ -70,13 +83,23 @@ async def complete_manual_run_definition_with_result(input):
         if state is None:
             raise NotFoundException()
         new_state = state.complete(result)
-        return (None, new_state)
+        return (result, new_state)
+    def from_definition_completed_data(data: rabbit_definition_completed.DefinitionCompletedData) -> Result[CompleteManualRunCommand, str]:
+        raw_from = data.metadata.get("from")
+        if raw_from != "definition_webapi":
+            return Result.Error("from is not definition_webapi")
+        return Result.Ok(CompleteManualRunCommand(data.run_id, data.result))
     
-    match input:
-        case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_definition_completed.DefinitionCompletedData:
-            res = await apply_complete(data.definition_id, data.result)
+    complete_manual_run_cmd_res = input.bind(from_definition_completed_data)
+    match complete_manual_run_cmd_res:
+        case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is CompleteManualRunCommand:
+            res = await apply_complete(cmd.run_id, cmd.result)
             match res:
-                case Result(tag=ResultTag.ERROR, error=error) if type(error) is not NotFoundError:
+                case Result(tag=ResultTag.ERROR, error=NotFoundError()):
+                    return None
+                case Result(tag=ResultTag.ERROR, error=_):
                     rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.LOW)
-            return res
+                    return res
+                case _:
+                    return res
                     

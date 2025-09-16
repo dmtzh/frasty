@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from manualrunstate import ManualRunState
 from manualrunstore import manual_run_storage
-from shared.customtypes import IdValue
+from shared.customtypes import DefinitionIdValue, RunIdValue
 import shared.domaindefinition as shdomaindef
 from shared.domainrunning import RunningDefinitionState
 import shared.dtodefinition as shdtodef
@@ -74,15 +74,15 @@ def apply_run_first_step(state: RunningDefinitionState | None, definition: shdom
     return (evt, state)
 
 @coroutine_result[WorkflowError]()
-async def run_definition_workflow(run_first_step_handler: Callable[[IdValue, IdValue, RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]], manual_run_id: IdValue, raw_definition: list[dict[str, Any]]):
+async def run_definition_workflow(run_first_step_handler: Callable[[RunIdValue, DefinitionIdValue, RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]], manual_run_id: RunIdValue, raw_definition: list[dict[str, Any]]):
     definition = await request_to_definition(raw_definition)
     await apply_add_manual_run(manual_run_id, definition)
-    definition_id = manual_run_id
+    definition_id = DefinitionIdValue.new_id()
     step_running_evt = await apply_run_first_step(manual_run_id, definition_id, definition)
     await async_result(run_first_step_handler)(manual_run_id, definition_id, step_running_evt).map_error(RunDefinitionError)
     return manual_run_id
 
-async def clean_up_failed_manual_run(manual_run_id, error: WorkflowError):
+async def clean_up_failed_manual_run(manual_run_id: RunIdValue, error: WorkflowError):
     match error:
         case RunningDefinitionsStorageError():
             await async_catch_ex(manual_run_storage.delete)(manual_run_id)
@@ -93,11 +93,7 @@ async def clean_up_failed_manual_run(manual_run_id, error: WorkflowError):
 # ==================================
 # API endpoint handler
 # ==================================
-async def handle(run_first_step_handler: Callable[[IdValue, IdValue, RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]], request: ManualRunRequest):
-    manual_run_id = IdValue.new_id()
-    res = await run_definition_workflow(run_first_step_handler, manual_run_id, request.resource)
-    if res.is_error():
-        await clean_up_failed_manual_run(manual_run_id, res.error)
+async def handle(run_first_step_handler: Callable[[RunIdValue, DefinitionIdValue, RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]], request: ManualRunRequest):
     def step_validation_error_to_string(err: shdtodef.StepValidationError) -> str:
         match err:
             case shdtodef.UnsupportedStep(step):
@@ -106,8 +102,13 @@ async def handle(run_first_step_handler: Callable[[IdValue, IdValue, RunningDefi
                 return f"'{name}' is missing"
             case validation.ValueInvalid(name):
                 return f"'{name}' value is invalid"
+    
+    manual_run_id = RunIdValue.new_id()
+    res = await run_definition_workflow(run_first_step_handler, manual_run_id, request.resource)
+    if res.is_error():
+        await clean_up_failed_manual_run(manual_run_id, res.error)
     match res:
-        case Result(tag=ResultTag.OK, ok=id) if type(id) is IdValue:
+        case Result(tag=ResultTag.OK, ok=id) if type(id) is RunIdValue:
             id_with_checksum = id.to_value_with_checksum()
             return {"id": id_with_checksum}
         case Result(tag=ResultTag.ERROR, error=error):
