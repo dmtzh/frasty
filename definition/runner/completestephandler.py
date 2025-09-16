@@ -5,7 +5,7 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Error, IdValue, RunIdValue, StepIdValue
+from shared.customtypes import Error, IdValue, RunIdValue, DefinitionIdValue, StepIdValue
 from shared.infrastructure.storage.repository import StorageError, NotFoundException, NotFoundError
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import ResultTag
@@ -19,7 +19,6 @@ class CompleteStepCommand:
     definition_id: DefinitionIdValue
     step_id: StepIdValue
     result: CompletedResult
-    metadata: dict
 
 def state_not_found_ex_to_err(ex: NotFoundException, run_id: IdValue, definition_id: IdValue, *args) -> NotFoundError:
     return NotFoundError(f"step1_apply_run_next_step state not found for run_id {run_id} and definition_id {definition_id}")
@@ -81,34 +80,36 @@ def step3_apply_fail_running_step(state: RunningDefinitionState | None, running_
         return (evt, state)
     return fail_current_running_step() or (None, state)
 
+@dataclass(frozen=True)
+class EventHandlerError:
+    event: RunningDefinitionState.Events.DefinitionCompleted | RunningDefinitionState.Events.StepRunning
+    error: Any
+
 @coroutine_result()
-async def complete_step_workflow(event_handler: Callable[[CompleteStepCommand, RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]], cmd: CompleteStepCommand):
-    @async_result
-    async def handle_definition_completed(evt: RunningDefinitionState.Events.DefinitionCompleted):
-        handle_res = await event_handler(cmd, evt)
-        match handle_res:
-            case Result(tag=ResultTag.ERROR, error=error):
-                await step3_apply_fail(cmd.run_id, cmd.definition_id, error)
-        return handle_res
-    @async_result
-    async def handle_step_running(evt: RunningDefinitionState.Events.StepRunning):
-        handle_res = await event_handler(cmd, evt)
-        match handle_res:
-            case Result(tag=ResultTag.ERROR, error=error):
-                await step3_apply_fail_running_step(cmd.run_id, cmd.definition_id, evt.step_id, error)
-        return handle_res
+async def complete_step_workflow(event_handler: Callable[[RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]], cmd: CompleteStepCommand):
     evt = await step1_apply_run_next_step(cmd.run_id, cmd.definition_id, cmd.step_id, cmd.result)
     match evt:
-        case RunningDefinitionState.Events.DefinitionCompleted():
-            await handle_definition_completed(evt)
-        case RunningDefinitionState.Events.StepRunning():
-            await handle_step_running(evt)
+        case RunningDefinitionState.Events.DefinitionCompleted() | RunningDefinitionState.Events.StepRunning():
+            await async_result(event_handler)(evt).map_error(lambda err: EventHandlerError(evt, err))
     return evt
 
-async def handle(event_handler: Callable[[CompleteStepCommand, RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]], cmd: CompleteStepCommand) -> None | Result[RunningDefinitionState.Events.Event | None, Any]:
+async def clean_up_failed_complete(cmd: CompleteStepCommand, error: Any):
+    match error:
+        case EventHandlerError(event=RunningDefinitionState.Events.DefinitionCompleted(), error=evt_error):
+            await step3_apply_fail(cmd.run_id, cmd.definition_id, evt_error)
+        case EventHandlerError(event=evt, error=evt_error) if type(evt) is RunningDefinitionState.Events.StepRunning:
+            await step3_apply_fail_running_step(cmd.run_id, cmd.definition_id, evt.step_id, evt_error)
+
+def map_errors(error: Any):
+    match error:
+        case EventHandlerError(event=_, error=evt_error):
+            return evt_error
+        case _:
+            return error
+
+async def handle(event_handler: Callable[[RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]], cmd: CompleteStepCommand) -> Result[RunningDefinitionState.Events.Event | None, Any]:
     complete_step_res = await complete_step_workflow(event_handler, cmd)
     match complete_step_res:
-        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
-            return None
-        case _:
-            return complete_step_res
+        case Result(tag=ResultTag.ERROR, error=error) if type(error) is not NotFoundError:
+            await clean_up_failed_complete(cmd, error)
+    return complete_step_res.map_error(map_errors)

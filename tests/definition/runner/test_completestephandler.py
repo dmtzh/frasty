@@ -5,6 +5,7 @@ import pytest
 
 from runner import completestephandler
 from shared.domainrunning import RunningDefinitionState
+from shared.infrastructure.storage.repository import NotFoundError
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
@@ -15,14 +16,14 @@ from stepdefinitions.shared import HttpResponseData
 
 @pytest.fixture(scope="session")
 def step_running_event_handler():
-    async def handler(cmd, evt):
+    async def handler(evt):
         assert type(evt) is RunningDefinitionState.Events.StepRunning
         return Result.Ok(None)
     return handler
 
 @pytest.fixture(scope="session")
 def definition_completed_event_handler():
-    async def handler(cmd, evt):
+    async def handler(evt):
         assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
         return Result.Ok(None)
     return handler
@@ -60,7 +61,7 @@ async def create_complete_step_cmd(storage_setup_func: Callable[[RunningDefiniti
         "metadata": {"command": "cmd1"}
     }
     evt = await running_definitions_storage.with_storage(storage_setup_func)(run_id, definition_id, cmd_dict)
-    cmd = completestephandler.CompleteStepCommand(cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"], cmd_dict["metadata"])
+    cmd = completestephandler.CompleteStepCommand(cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"])
     return (evt, cmd)
 
 
@@ -342,7 +343,7 @@ async def test_handle_returns_no_event_when_step_running_but_step_id_different(r
 
 
 
-async def test_handle_returns_None_when_state_not_found(runtime_error_event_handler, two_step_definition):
+async def test_handle_returns_NotFoundError_when_state_not_found(runtime_error_event_handler, two_step_definition):
     def apply_set_first_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
@@ -351,19 +352,20 @@ async def test_handle_returns_None_when_state_not_found(runtime_error_event_hand
         return (evt, state)
     _, cmd = await create_complete_step_cmd(apply_set_first_step_running)
     wrong_definition_id = DefinitionIdValue.new_id()
-    cmd_with_wrong_definition_id = completestephandler.CompleteStepCommand(cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result, cmd.metadata)
+    cmd_with_wrong_definition_id = completestephandler.CompleteStepCommand(cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result)
 
     handle_res = await completestephandler.handle(runtime_error_event_handler, cmd_with_wrong_definition_id)
 
-    assert handle_res is None
+    assert type(handle_res) is Result
+    assert handle_res.is_error()
+    assert type(handle_res.error) is NotFoundError
 
 
 
 async def test_handle_passes_correct_data_to_next_step_running_event_handler(two_step_definition):
     passed_data = {}
-    async def step_running_event_handler(cmd: completestephandler.CompleteStepCommand, evt):
+    async def step_running_event_handler(evt):
         assert type(evt) is RunningDefinitionState.Events.StepRunning
-        passed_data["cmd"] = cmd
         passed_data["input_data"] = evt.input_data
         return Result.Ok(None)
     def apply_set_first_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
@@ -376,7 +378,6 @@ async def test_handle_passes_correct_data_to_next_step_running_event_handler(two
 
     await completestephandler.handle(step_running_event_handler, cmd)
 
-    assert cmd == passed_data["cmd"]
     assert type(cmd.result) is CompletedWith.Data
     assert cmd.result.data == passed_data["input_data"]
 
@@ -384,9 +385,8 @@ async def test_handle_passes_correct_data_to_next_step_running_event_handler(two
 
 async def test_handle_passes_correct_data_to_definition_completed_event_handler(two_step_definition, html_response_result):
     passed_data = {}
-    async def definition_completed_event_handler(cmd: completestephandler.CompleteStepCommand, evt):
+    async def definition_completed_event_handler(evt):
         assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
-        passed_data["cmd"] = cmd
         passed_data["result"] = evt.result
         return Result.Ok(None)
     def apply_set_second_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
@@ -402,14 +402,13 @@ async def test_handle_passes_correct_data_to_definition_completed_event_handler(
 
     await completestephandler.handle(definition_completed_event_handler, cmd)
 
-    assert cmd == passed_data["cmd"]
     assert cmd.result == passed_data["result"]
 
 
 
 async def test_handle_does_not_invoke_event_handler_when_no_event(two_step_definition):
     event_handler_calls = []
-    async def run_first_step_handler(cmd, evt):
+    async def run_first_step_handler(evt):
         event_handler_calls.append(evt)
         return Result.Ok(None)
     def apply_set_first_step_failed(state: RunningDefinitionState | None, cmd_dict: dict):
@@ -447,7 +446,7 @@ async def test_handle_returns_error_when_running_definitions_storage_exception(s
 
 async def test_handle_returns_error_when_event_handler_error(two_step_definition):
     event_handler_error = Error("Event handler error")
-    async def error_event_handler(cmd, evt):
+    async def error_event_handler(evt):
         return Result.Error(event_handler_error)
     def apply_set_first_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
         state = RunningDefinitionState()
@@ -467,7 +466,7 @@ async def test_handle_returns_error_when_event_handler_error(two_step_definition
 
 async def test_handle_raises_exception_when_event_handler_exception(two_step_definition):
     expected_ex = RuntimeError("expected exception")
-    async def event_handler_with_ex(cmd, evt):
+    async def event_handler_with_ex(evt):
         raise expected_ex
     def apply_set_first_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
         state = RunningDefinitionState()

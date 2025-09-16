@@ -4,6 +4,7 @@ import pytest_asyncio
 
 from shared.domainrunning import RunningDefinitionState
 from shared.definitionsstore import definitions_storage
+from shared.infrastructure.storage.repository import NotFoundError
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
 from runner import rundefinitionhandler
@@ -57,14 +58,12 @@ def run_id():
 
 @pytest.fixture
 def cmd1(existing_definition_id1, run_id):
-    metadata = {"command": "cmd1"}
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id1, run_id=run_id, metadata=metadata)
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id1, run_id=run_id)
     return cmd
 
 @pytest.fixture
 def cmd2(existing_definition_id2, run_id):
-    metadata = {"command": "cmd2"}
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id2, run_id=run_id, metadata=metadata)
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id2, run_id=run_id)
     return cmd
 
 FIRST_STEP_INPUT_DATA = {"url": "http://localhost", "http_method": "GET"}
@@ -170,34 +169,32 @@ async def test_handle_returns_no_event_when_first_step_already_completed(cmd1, d
 
 
 
-async def test_handle_returns_None_when_definition_id_does_not_exist(run_first_step_handler):
+async def test_handle_returns_NotFoundError_when_definition_id_does_not_exist(run_first_step_handler):
     def_id = DefinitionIdValue.new_id()
     run_id = RunIdValue.new_id()
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=def_id, run_id=run_id, metadata={})
+    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=def_id, run_id=run_id)
     
     handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
 
-    assert handle_res is None
+    assert type(handle_res) is Result
+    assert handle_res.is_error()
+    assert type(handle_res.error) is NotFoundError
 
 
 
 async def test_handle_passes_correct_data_to_run_first_step_handler(cmd1):
     passed_data = {}
-    async def run_first_step_handler(cmd: rundefinitionhandler.RunDefinitionCommand, evt: RunningDefinitionState.Events.StepRunning):
-        passed_data["run_id"] = cmd.run_id
-        passed_data["definition_id"] = cmd.definition_id
-        passed_data["metadata"] = cmd.metadata
+    async def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, def_ver):
         passed_data["input_data"] = evt.input_data
         passed_data["step_definition"] = evt.step_definition
+        passed_data["def_ver"] = def_ver
         return Result.Ok(None)
     
     await rundefinitionhandler.handle(run_first_step_handler, cmd1)
 
-    assert cmd1.run_id == passed_data["run_id"]
-    assert cmd1.definition_id == passed_data["definition_id"]
-    assert cmd1.metadata | {"definition_version": 1} == passed_data["metadata"]
     assert FIRST_STEP_INPUT_DATA == passed_data["input_data"]
     assert type(FIRST_STEP_DEFINITION) is type(passed_data["step_definition"])
+    assert 1 == passed_data["def_ver"]
 
 
 
@@ -216,7 +213,7 @@ async def test_handle_returns_error_when_run_first_step_handler_error(cmd1):
 
 async def test_handle_raises_exception_when_run_first_step_handler_exception(cmd1):
     expected_ex = RuntimeError("expected exception")
-    async def run_first_step_handler_with_ex(cmd, evt):
+    async def run_first_step_handler_with_ex(evt, def_ver):
         raise expected_ex
     
     try:
