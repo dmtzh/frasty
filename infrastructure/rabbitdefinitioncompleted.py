@@ -12,7 +12,7 @@ from expression import Result
 from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.customtypes import Error, IdValue, RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Error, RunIdValue, TaskIdValue
 from shared.completedresult import CompletedResult, CompletedResultAdapter
 from shared.infrastructure.rabbitmq.client import ExistingQueueName, NotExistingQueueName, QueueName, RabbitMQClient
 from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
@@ -29,28 +29,27 @@ T = TypeVar("T")
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict) -> PythonPickleMessage:
+    def data_to_message(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict) -> PythonPickleMessage:
         result_dto = CompletedResultAdapter.to_dict(result)
         is_metadata_valid = isinstance(metadata, dict)
         if not is_metadata_valid:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
-        metadata_dict = metadata |\
-            {"definition_id": definition_id.to_value_with_checksum()}
         run_id_dict = {"run_id": run_id.to_value_with_checksum()}
-        event_data = run_id_dict | {"result": result_dto, "metadata": metadata_dict}
+        definition_id_dict = {"definition_id": definition_id.to_value_with_checksum()}
+        event_data = run_id_dict | definition_id_dict | {"result": result_dto, "metadata": metadata}
         correlation_id = run_id_dict["run_id"]
         data_with_correlation_id = DataWithCorrelationId(event_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, queue_name: QueueName, input_adapter: Callable[[RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R]):
+        def __init__(self, queue_name: QueueName, input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict, LoggerAdapter], R]):
             self._queue_name = queue_name
             self._input_adapter = input_adapter
         
         @staticmethod
         def _parse_rabbitmq_msg_python_pickle(rabbit_msg_err: RabbitMessageErrorCreator, msg: RabbitMessage) -> Result[tuple[str, str, dict, dict], RabbitMessageError]:
-            correlation_id = IdValue.from_value_with_checksum(msg.correlation_id)
-            if correlation_id is None:
+            opt_correlation_id = RunIdValue.from_value_with_checksum(msg.correlation_id)
+            if opt_correlation_id is None:
                 return Result.Error(rabbit_msg_err(ValidationError, "Invalid 'correlation_id'"))
             if not isinstance(msg.body, bytes):
                 return Result.Error(rabbit_msg_err(ParseError, f"Expected body of bytes type, got {type(msg.body).__name__}"))
@@ -82,9 +81,9 @@ class _python_pickle:
             if run_id_unvalidated != msg.correlation_id:
                 return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'run_id' value {run_id_unvalidated}"))
             
-            if "definition_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' key not found in {metadata_unvalidated}"))
-            definition_id_unvalidated = metadata_unvalidated["definition_id"]
+            if "definition_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' key not found in {decoded}"))
+            definition_id_unvalidated = decoded["definition_id"]
             if not isinstance(definition_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'definition_id' should be string value, got {type(definition_id_unvalidated).__name__}"))
             
@@ -92,7 +91,7 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[RunIdValue, IdValue, CompletedResult, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict, dict]) -> Result[R, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict, dict]) -> Result[R, RabbitMessageError]:
             def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
                 opt_id = id_parser(id_unvalidated)
                 match opt_id:
@@ -103,7 +102,7 @@ class _python_pickle:
             
             run_id_unvalidated, definition_id_unvalidated, result_unvalidated, metadata_unvalidated = parsed_data
             run_id_res = validate_id(RunIdValue.from_value_with_checksum, run_id_unvalidated, "run_id")
-            definition_id_res = validate_id(IdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
+            definition_id_res = validate_id(DefinitionIdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
             result_res = CompletedResultAdapter.from_dict(result_unvalidated).map_error(lambda _: rabbit_msg_err(ValidationError, f"Invalid 'result' value {result_unvalidated}"))
             match run_id_res, definition_id_res, result_res:
                 case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id), Result(tag=ResultTag.OK, ok=result):
@@ -130,16 +129,16 @@ class _python_pickle:
 @dataclass(frozen=True)
 class DefinitionCompletedData:
     run_id: RunIdValue
-    definition_id: IdValue
+    definition_id: DefinitionIdValue
     result: CompletedResult
     metadata: dict
 
-def publish(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict):
+def publish(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict):
     message = _python_pickle.data_to_message(run_id, definition_id, result, metadata)
     return rabbit_client.send_event(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, message)
 
 class subscriber:
-    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, IdValue, CompletedResult], R] | Callable[[RunIdValue, IdValue, CompletedResult, dict], R], queue_name: str | None):
+    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult], R] | Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], R], queue_name: str | None):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
@@ -148,7 +147,7 @@ class subscriber:
         self._input_adapter = validate_input_adapter()
         self._queue_name = ExistingQueueName(queue_name) if queue_name is not None else NotExistingQueueName.new_name()
     
-    def _consume_input(self, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
+    def _consume_input(self, run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict, logger: LoggerAdapter):
         self._definition_id = definition_id
         self._logger = logger
         params = inspect.signature(self._input_adapter).parameters
