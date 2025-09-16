@@ -23,7 +23,7 @@ async def handle_run_task_definition_command(input, logger: Logger):
     def rabbit_run_definition_handler(data: rabbit_run_task.RunTaskData, definition_id: DefinitionIdValue):
         task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}
         metadata = data.metadata | task_id_dict
-        return rabbit_definition.run(rabbit_client, definition_id, data.run_id, metadata)
+        return rabbit_definition.run(rabbit_client, data.run_id, definition_id, metadata)
     
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     async def rabbit_runtask_failure_handler(data: rabbit_run_task.RunTaskData, error):

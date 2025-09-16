@@ -36,7 +36,7 @@ async def handle_run_definition_command(input, logger: Logger):
     match input:
         case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbit_run_definition.RunDefinitionData:
             run_first_step_handler = functools.partial(rabbit_run_first_step_handler, data)
-            cmd = rundefinitionhandler.RunDefinitionCommand(data.definition_id, data.run_id)
+            cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
             res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
             match res:
                 case Result(tag=ResultTag.ERROR, error=NotFoundError()):

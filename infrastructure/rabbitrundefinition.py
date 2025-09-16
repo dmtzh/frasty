@@ -23,19 +23,19 @@ RUN_DEFINITION_COMMAND = "run_definition"
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict) -> PythonPickleMessage:
+    def data_to_message(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict) -> PythonPickleMessage:
         is_metadata_valid = isinstance(metadata, dict)
         if not is_metadata_valid:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
-        definition_id_with_checksum = definition_id.to_value_with_checksum()
         run_id_with_checksum = run_id.to_value_with_checksum()
-        command_data = {"definition_id": definition_id_with_checksum, "run_id": run_id_with_checksum, "metadata": metadata}
+        definition_id_with_checksum = definition_id.to_value_with_checksum()
+        command_data = {"run_id": run_id_with_checksum, "definition_id": definition_id_with_checksum, "metadata": metadata}
         correlation_id = run_id_with_checksum
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
 
     class decoder():
-        def __init__(self, input_adapter: Callable[[DefinitionIdValue, RunIdValue, dict, LoggerAdapter], R]):
+        def __init__(self, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict, LoggerAdapter], R]):
             self._input_adapter = input_adapter
         
         @staticmethod
@@ -74,11 +74,11 @@ class _python_pickle:
             if run_id_unvalidated != msg.correlation_id:
                 return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'run_id' value {run_id_unvalidated}"))
 
-            parsed_data = definition_id_unvalidated, run_id_unvalidated, metadata_unvalidated
+            parsed_data = run_id_unvalidated, definition_id_unvalidated, metadata_unvalidated
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[DefinitionIdValue, RunIdValue, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
             def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
                 opt_id = id_parser(id_unvalidated)
                 match opt_id:
@@ -87,17 +87,17 @@ class _python_pickle:
                     case valid_id:
                         return Result.Ok(valid_id)
             
-            definition_id_unvalidated, run_id_unvalidated, metadata_unvalidated = parsed_data
-            definition_id_res = validate_id(DefinitionIdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
+            run_id_unvalidated, definition_id_unvalidated, metadata_unvalidated = parsed_data
             run_id_res = validate_id(RunIdValue.from_value_with_checksum,run_id_unvalidated, "run_id")
-            match definition_id_res, run_id_res:
-                case Result(tag=ResultTag.OK, ok=definition_id), Result(tag=ResultTag.OK, ok=run_id):
+            definition_id_res = validate_id(DefinitionIdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
+            match run_id_res, definition_id_res:
+                case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id):
                     opt_task_id = TaskIdValue.from_value_with_checksum(metadata_unvalidated.get("task_id"))
                     logger = logger_creator.create(opt_task_id, run_id, None)
-                    res = input_adapter(definition_id, run_id, metadata_unvalidated, logger)
+                    res = input_adapter(run_id, definition_id, metadata_unvalidated, logger)
                     return Result.Ok(res)
                 case _:
-                    errors_with_none = [definition_id_res.swap().default_value(None), run_id_res.swap().default_value(None)]
+                    errors_with_none = [run_id_res.swap().default_value(None), definition_id_res.swap().default_value(None)]
                     errors = [err for err in errors_with_none if err is not None]
                     err = rabbit_msg_err(ValidationError, ", ".join(errors))
                     return Result.Error(err)
@@ -114,17 +114,17 @@ class _python_pickle:
 
 @dataclass(frozen=True)
 class RunDefinitionData:
-    definition_id: DefinitionIdValue
     run_id: RunIdValue
+    definition_id: DefinitionIdValue
     metadata: dict
 
-def run(rabbit_client: RabbitMQClient, definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict):
+def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):
     command = RUN_DEFINITION_COMMAND
-    message = _python_pickle.data_to_message(definition_id, run_id, metadata)
+    message = _python_pickle.data_to_message(run_id, definition_id, metadata)
     return rabbit_client.send_command(command, message)
 
 class handler:
-    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[DefinitionIdValue, RunIdValue, dict], R]):
+    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
@@ -132,13 +132,13 @@ class handler:
         self._rabbit_client = rabbit_client
         self._input_adapter = validate_input_adapter()
     
-    def _consume_input(self, definition_id: DefinitionIdValue, run_id: RunIdValue, metadata: dict, logger: LoggerAdapter):
+    def _consume_input(self, run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict, logger: LoggerAdapter):
         logger.info(f"{RUN_DEFINITION_COMMAND} RECEIVED metadata {metadata}")
-        self._definition_id = definition_id
         self._run_id = run_id
+        self._definition_id = definition_id
         self._metadata = metadata
         self._logger = logger
-        return self._input_adapter(definition_id, run_id, metadata)
+        return self._input_adapter(run_id, definition_id, metadata)
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
         @functools.wraps(func)

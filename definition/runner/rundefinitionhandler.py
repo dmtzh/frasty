@@ -15,8 +15,8 @@ from shared.utils.result import ResultTag
 
 @dataclass(frozen=True)
 class RunDefinitionCommand:
-    definition_id: DefinitionIdValue
     run_id: RunIdValue
+    definition_id: DefinitionIdValue
 
 class DefinitionVersion(int):
     def __new__(cls, value):
