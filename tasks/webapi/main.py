@@ -42,7 +42,7 @@ async def complete_web_api_task_run_state_with_result(input):
     def from_definition_completed_data(data: rabbit_definition_completed.DefinitionCompletedData) -> Result[completerunstatehandler.CompleteRunStateCommand, str]:
         raw_from = data.metadata.get("from")
         if raw_from != "tasks_webapi":
-            return Result.Error("from is not webapi")
+            return Result.Error("from is not tasks_webapi")
         raw_task_id = data.metadata.get("task_id")
         if raw_task_id is None:
             return Result.Error("task_id not found in metadata")

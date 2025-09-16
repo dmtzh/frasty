@@ -30,7 +30,7 @@ async def handle_run_definition_command(input, logger: Logger):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     async def rabbit_rundefinition_failure_handler(data: rabbit_run_definition.RunDefinitionData, error):
         result = CompletedWith.Error(str(error))
-        res = await rabbit_definition_completed.publish(rabbit_client, None, data.run_id, data.definition_id, result, data.metadata)
+        res = await rabbit_definition_completed.publish(rabbit_client, data.run_id, data.definition_id, result, data.metadata)
         return res.map(lambda _: result)
     
     match input:
@@ -64,7 +64,7 @@ async def handle_complete_step_command(input):
     def rabbit_event_handler(cmd: completestephandler.CompleteStepCommand, metadata: dict, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
         match evt:
             case RunningDefinitionState.Events.DefinitionCompleted():
-                return rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, evt.result, metadata)
+                return rabbit_definition_completed.publish(rabbit_client, cmd.run_id, cmd.definition_id, evt.result, metadata)
             case RunningDefinitionState.Events.StepRunning():
                 return rabbit_step.run(rabbit_client, cmd.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
             case _:
@@ -74,7 +74,7 @@ async def handle_complete_step_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     async def completestep_failure_handler(cmd: completestephandler.CompleteStepCommand, metadata: dict, error):
         result = CompletedWith.Error(str(error))
-        res = await rabbit_definition_completed.publish(rabbit_client, None, cmd.run_id, cmd.definition_id, result, metadata)
+        res = await rabbit_definition_completed.publish(rabbit_client, cmd.run_id, cmd.definition_id, result, metadata)
         return res.map(lambda _: result)
 
     complete_step_cmd_with_metadata_res = input.bind(from_complete_step_data)

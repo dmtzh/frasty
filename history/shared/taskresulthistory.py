@@ -10,6 +10,13 @@ class DefinitionVersion(int):
     def __new__(cls, value):
         instance = super().__new__(cls, value)
         return instance
+    
+    @staticmethod
+    def parse(value):
+        try:
+            return DefinitionVersion(value)
+        except (ValueError, TypeError):
+            return None
 
 @dataclass(frozen=True)
 class TaskResultHistoryItem:

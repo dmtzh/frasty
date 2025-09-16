@@ -29,7 +29,7 @@ async def handle_run_task_definition_command(input, logger: Logger):
     async def rabbit_runtask_failure_handler(data: rabbit_run_task.RunTaskData, error):
         definition_id = DefinitionIdValue(data.run_id)
         result = CompletedWith.Error(str(error))
-        res = await rabbit_definition_completed.publish(rabbit_client, None, data.run_id, definition_id, result, data.metadata)
+        res = await rabbit_definition_completed.publish(rabbit_client, data.run_id, definition_id, result, data.metadata)
         return res.map(lambda _: result)
     
     match input:
