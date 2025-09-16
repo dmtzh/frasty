@@ -29,16 +29,16 @@ T = TypeVar("T")
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(run_id: IdValue, definition_id: IdValue, result: CompletedResult, metadata: dict) -> PythonPickleMessage:
+    def data_to_message(run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict) -> PythonPickleMessage:
         result_dto = CompletedResultAdapter.to_dict(result)
         is_metadata_valid = isinstance(metadata, dict)
         if not is_metadata_valid:
             raise ValueError(f"Invalid 'metadata' value {metadata}")
-        run_id_with_checksum = run_id.to_value_with_checksum()
         metadata_dict = metadata |\
-            {"run_id": run_id_with_checksum, "definition_id": definition_id.to_value_with_checksum()}
-        event_data = {"result": result_dto, "metadata": metadata_dict}
-        correlation_id = run_id_with_checksum
+            {"definition_id": definition_id.to_value_with_checksum()}
+        run_id_dict = {"run_id": run_id.to_value_with_checksum()}
+        event_data = run_id_dict | {"result": result_dto, "metadata": metadata_dict}
+        correlation_id = run_id_dict["run_id"]
         data_with_correlation_id = DataWithCorrelationId(event_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
     
@@ -74,9 +74,9 @@ class _python_pickle:
             if not isinstance(metadata_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
             
-            if "run_id" not in metadata_unvalidated:
-                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {metadata_unvalidated}"))
-            run_id_unvalidated = metadata_unvalidated["run_id"]
+            if "run_id" not in decoded:
+                return Result.Error(rabbit_msg_err(ParseError, f"'run_id' key not found in {decoded}"))
+            run_id_unvalidated = decoded["run_id"]
             if not isinstance(run_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'run_id' should be string value, got {type(run_id_unvalidated).__name__}"))
             if run_id_unvalidated != msg.correlation_id:
@@ -134,7 +134,7 @@ class DefinitionCompletedData:
     result: CompletedResult
     metadata: dict
 
-def publish(rabbit_client: RabbitMQClient, run_id: IdValue, definition_id: IdValue, result: CompletedResult, metadata: dict):
+def publish(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: IdValue, result: CompletedResult, metadata: dict):
     message = _python_pickle.data_to_message(run_id, definition_id, result, metadata)
     return rabbit_client.send_event(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, message)
 
