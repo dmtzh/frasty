@@ -25,7 +25,7 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/tickets")
 def tickets():
-    return FileResponse("../../../html_sources/get_ticket.html")
+    return FileResponse("./html_sources/get_ticket.html")
 
 @app.post("/definitions")
 async def add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
