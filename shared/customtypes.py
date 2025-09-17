@@ -58,3 +58,6 @@ class DefinitionIdValue(IdValue):
 
 class StepIdValue(IdValue):
     '''Step id'''
+
+class ScheduleIdValue(IdValue):
+    '''Schedule id'''
