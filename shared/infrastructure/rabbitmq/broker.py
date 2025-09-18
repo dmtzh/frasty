@@ -62,6 +62,7 @@ class RabbitMQBroker:
             await self._rabbit_connection.close()
         self._rabbit_connection = None
         self._rabbit_channel = None
+        print("RabbitMQBroker disconnected")
 
     def _add_async_startup_task(self, func):
         self._async_startup_tasks.append(func)

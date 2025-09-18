@@ -4,10 +4,9 @@ from expression import Result
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
-from shared.domainschedule import CronSchedule
+from shared.domainschedule import CronSchedule, TaskSchedule
 from shared.customtypes import TaskIdValue, ScheduleIdValue
 from shared.infrastructure.storage.repository import StorageError
-from shared.schedulesstore import schedules_storage
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import ResultTag
@@ -52,21 +51,16 @@ def parse_cron_schedule(raw_cron: str) -> Result[CronSchedule, InvalidSchedule]:
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
-def apply_add_schedule(id: ScheduleIdValue, schedule: CronSchedule):
-    return schedules_storage.add(id, schedule)
-
-@async_result
-@async_ex_to_error_result(StorageError.from_exception)
-def apply_set_task_schedule(task_id: TaskIdValue, schedule_id: ScheduleIdValue):
-    return tasks_schedules_storage.set_task_schedule(task_id, schedule_id)
+def apply_set_task_schedule(task_id: TaskIdValue, schedule: TaskSchedule):
+    return tasks_schedules_storage.set_task_schedule(task_id, schedule)
 
 @coroutine_result()
 async def set_schedule_workflow(resource: SetScheduleResource):
     task_id = await AsyncResult.from_result(parse_task_id(resource.task_id))
     cron_schedule = await AsyncResult.from_result(parse_cron_schedule(resource.cron))
     schedule_id = ScheduleIdValue.new_id()
-    await apply_add_schedule(schedule_id, cron_schedule)
-    await apply_set_task_schedule(task_id, schedule_id)
+    task_schedule = TaskSchedule(schedule_id, cron_schedule)
+    await apply_set_task_schedule(task_id, task_schedule)
     return schedule_id
 
 # ==================================
