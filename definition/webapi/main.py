@@ -29,7 +29,7 @@ def tickets():
 
 @app.post("/definitions")
 async def add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
-    await adddefinitionapihandler.handle(request)
+    return await adddefinitionapihandler.handle(request)
 
 @app.get("/definitions/{id}")
 async def get_definition(id: str):
