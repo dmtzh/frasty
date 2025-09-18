@@ -1,4 +1,6 @@
+from collections.abc import Callable
 import os
+from typing import Concatenate, ParamSpec, TypeVar
 
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
@@ -7,6 +9,9 @@ from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsync
 from shared.task import Task, TaskAdapter
 
 import config
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 class TasksStore:
     def __init__(self):
@@ -38,5 +43,8 @@ class TasksStore:
                 return value
             case None:
                 return None
-
+    
+    def with_storage(self, func: Callable[Concatenate[Task | None, P], tuple[R, Task]]):
+        return self._item_action(func)
+    
 tasks_storage = TasksStore()

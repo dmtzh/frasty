@@ -59,6 +59,6 @@ async def add_task_workflow(add_definition_handler: Callable[[list[dict[str, str
     task_name = await validate_task_name(resource.name).map_error(InputValidationError)
     definition_id = await async_result(add_definition_handler)(resource.definition)
     id = TaskIdValue.new_id()
-    task = Task(name=task_name, definition_id=definition_id)
+    task = Task(name=task_name, definition_id=definition_id, schedule_id=None)
     await apply_add_task(id, task)
     return id

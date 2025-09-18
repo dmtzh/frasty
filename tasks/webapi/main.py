@@ -1,6 +1,5 @@
 from expression import Result
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitruntask as rabbit_task
@@ -15,6 +14,7 @@ import completerunstatehandler
 from config import lifespan, rabbit_client
 import getrunstateapihandler
 import runtaskapihandler
+import settaskscheduleapihandler
 
 app = FastAPI(lifespan=lifespan)
 
@@ -33,9 +33,9 @@ async def run_task(id: str):
 async def get_run_state(id: str, run_id: str):
     return await getrunstateapihandler.handle(id, run_id)
 
-@app.get("/tickets")
-def tickets():
-    return FileResponse("../../../html_sources/get_ticket.html")
+@app.post("/tasks/{id}/schedule", status_code=201)
+async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
+    return await settaskscheduleapihandler.handle(id, request)
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
 async def complete_web_api_task_run_state_with_result(input):
