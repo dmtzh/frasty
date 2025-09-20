@@ -38,7 +38,7 @@ class TasksSchedulesStore:
         def add_or_update_schedule(tasks_schedules: ItemType | None):
             tasks_schedules = tasks_schedules or {}
             tasks_schedules[task_id] = schedule
-            return None, tasks_schedules
+            return schedule, tasks_schedules
         return self._item_action(add_or_update_schedule)("TASKS_SCHEDULES")
     
     def clear_task_schedule(self, task_id: TaskIdValue, schedule_id: ScheduleIdValue):
