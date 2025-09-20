@@ -1,6 +1,6 @@
 import os
 
-from shared.customtypes import TaskIdValue
+from shared.customtypes import ScheduleIdValue, TaskIdValue
 from shared.domainschedule import TaskSchedule, TaskScheduleAdapter
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
@@ -40,6 +40,18 @@ class TasksSchedulesStore:
             tasks_schedules[task_id] = schedule
             return None, tasks_schedules
         return self._item_action(add_or_update_schedule)("TASKS_SCHEDULES")
+    
+    def clear_task_schedule(self, task_id: TaskIdValue, schedule_id: ScheduleIdValue):
+        def clear_schedule(tasks_schedules: ItemType | None):
+            tasks_schedules = tasks_schedules or {}
+            if task_id not in tasks_schedules:
+                return None, tasks_schedules
+            task_schedule = tasks_schedules[task_id]
+            if task_schedule.schedule_id != schedule_id:
+                return None, tasks_schedules
+            del tasks_schedules[task_id]
+            return task_schedule, tasks_schedules
+        return self._item_action(clear_schedule)("TASKS_SCHEDULES")
     
     async def get_schedules(self) -> ItemType:
         opt_item_with_ver = await self._file_repo_with_ver.get("TASKS_SCHEDULES")

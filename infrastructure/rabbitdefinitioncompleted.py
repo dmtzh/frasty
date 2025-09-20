@@ -103,7 +103,7 @@ class _python_pickle:
             run_id_unvalidated, definition_id_unvalidated, result_unvalidated, metadata_unvalidated = parsed_data
             run_id_res = validate_id(RunIdValue.from_value_with_checksum, run_id_unvalidated, "run_id")
             definition_id_res = validate_id(DefinitionIdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
-            result_res = CompletedResultAdapter.from_dict(result_unvalidated).map_error(lambda _: rabbit_msg_err(ValidationError, f"Invalid 'result' value {result_unvalidated}"))
+            result_res = CompletedResultAdapter.from_dict(result_unvalidated).map_error(lambda _: f"Invalid 'result' value {result_unvalidated}")
             match run_id_res, definition_id_res, result_res:
                 case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id), Result(tag=ResultTag.OK, ok=result):
                     opt_task_id = TaskIdValue.from_value_with_checksum(metadata_unvalidated.get("task_id", ""))

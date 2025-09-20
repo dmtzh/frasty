@@ -1,63 +1,99 @@
-import asyncio
+# import asyncio
 import datetime
 import functools
 
 import aiocron
+from expression import Result
+from faststream.rabbit.annotations import Logger
 
+from infrastructure import rabbitchangetaskschedule
 from infrastructure import rabbitruntask as rabbit_task
 from shared.customtypes import TaskIdValue, ScheduleIdValue, RunIdValue
-from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
+from shared.domainschedule import TaskSchedule
+from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
+from shared.infrastructure.storage.inmemory import InMemory
 from shared.tasksschedulesstore import tasks_schedules_storage
+from shared.utils.asynchronous import make_async
+from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.result import ResultTag
 
-from config import rabbitmqconfig
+import cleartaskschedulehandler
+from config import app, rabbit_client
+from scheduledtasks import ScheduledTasks
 
-def rabbit_run_task(rabbit_client: RabbitMQClient, task_id: TaskIdValue, schedule_id: ScheduleIdValue):
-    print(f"{datetime.datetime.now()}: running task {task_id} with cron schedule {schedule_id}")
+@async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
+def rabbit_run_task(task_id: TaskIdValue, schedule: TaskSchedule):
+    print(f"{datetime.datetime.now()}: running task {task_id} with cron schedule {schedule}")
     run_id = RunIdValue.new_id()
-    schedule_id_with_checksum = schedule_id.to_value_with_checksum()
+    schedule_id_with_checksum = schedule.schedule_id.to_value_with_checksum()
     return rabbit_task.run(rabbit_client, task_id, run_id, f"schedule {schedule_id_with_checksum}", {})
+scheduled_tasks_storage = InMemory[ScheduleIdValue, aiocron.Cron]()
+scheduled_tasks = ScheduledTasks(scheduled_tasks_storage, rabbit_run_task)
 
-async def init_scheduled_tasks(rabbit_client: RabbitMQClient):
+@app.after_startup
+async def init_scheduled_tasks():
     print(f"{datetime.datetime.now()}: initializing schedules...")
     schedules = await tasks_schedules_storage.get_schedules()
-    for task_id, task_schedule in schedules.items():
-        schedule_func = functools.partial(rabbit_run_task, rabbit_client, task_id, task_schedule.schedule_id)
-        aiocron.crontab(task_schedule.cron, func=schedule_func)
-        print(f"{datetime.datetime.now()}: scheduled task {task_id} with cron schedule {task_schedule.cron} initialized")
+    for task_id, schedule in schedules.items():
+        scheduled_tasks.add(task_id, schedule)
+        print(f"{datetime.datetime.now()}: scheduled task {task_id} with cron schedule {schedule} started")
     print(f"{datetime.datetime.now()}: schedules initialized")
 
-def main():
-    """Main function to perform setup and start the loop."""
-    # 1. Get the event loop
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
+@make_async
+def stop_scheduled_task(task_id: TaskIdValue, schedule: TaskSchedule):
     try:
-        # 2. Run the one-time async setup until completion
-        print("Running init step with run_until_complete...")
-        def subscriber():
-            raise ValueError("Not connected")
-        rabbit_broker = RabbitMQBroker(subscriber)
-        rabbit_client = RabbitMQClient(rabbit_broker)
-        loop.run_until_complete(rabbit_broker.connect(rabbitmqconfig))
-        loop.run_until_complete(init_scheduled_tasks(rabbit_client))
+        scheduled_tasks.remove(schedule)
+        print(f"{datetime.datetime.now()}: scheduled task {task_id} with cron schedule {schedule} stopped")
+        return Result.Ok(None)
+    except:  # noqa: E722
+        return Result.Ok(None)
 
-        # 3. Start the event loop and run forever
-        print("Starting the event loop with run_forever... To exit, press CTRL+C")
-        loop.run_forever()
+@rabbitchangetaskschedule.handler(rabbit_client, rabbitchangetaskschedule.ChangeTaskScheduleData)
+async def handle_change_task_schedule_command(input, logger: Logger):
+    match input:
+        case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbitchangetaskschedule.ChangeTaskScheduleData:
+            match data.command:
+                case rabbitchangetaskschedule.ClearCommand():
+                    cmd = cleartaskschedulehandler.ClearTaskScheduleCommand(data.task_id, data.schedule_id)
+                    clear_task_schedule_handler = functools.partial(stop_scheduled_task, data.task_id)
+                    res = await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
+                    return res
+        case Result(tag=ResultTag.ERROR, error=error):
+            # TODO: Handle error case
+            logger.warning(f">>>> Received invalid change task schedule command data: {error}")
 
-    except KeyboardInterrupt:
-        print("Received shutdown signal. Stopping the loop...")
+# if __name__ == "__main__":
+#     asyncio.run(app.run())
 
-    finally:
-        # Graceful shutdown process
-        tasks = asyncio.all_tasks(loop=loop)
-        for task in tasks:
-            task.cancel()
-        loop.run_until_complete(asyncio.gather(rabbit_broker.disconnect(), *tasks, return_exceptions=True))
-        loop.close()
-        print("Event loop closed.")
+# def main():
+#     """Main function to perform setup and start the loop."""
+#     # 1. Get the event loop
+#     loop = asyncio.new_event_loop()
+#     asyncio.set_event_loop(loop)
 
-if __name__ == "__main__":
-    main()
+#     try:
+#         # 2. Run the one-time async setup until completion
+#         print("Running init step with run_until_complete...")
+#         setup = lifespan.__aenter__()
+#         loop.run_until_complete(setup)
+#         loop.run_until_complete(init_scheduled_tasks())
+
+#         # 3. Start the event loop and run forever
+#         print("Starting the event loop with run_forever... To exit, press CTRL+C")
+#         loop.run_forever()
+
+#     except KeyboardInterrupt:
+#         print("Received shutdown signal. Stopping the loop...")
+
+#     finally:
+#         # Graceful shutdown process
+#         tasks = asyncio.all_tasks(loop=loop)
+#         for task in tasks:
+#             task.cancel()
+#         teardown = lifespan.__aexit__(None, None, None)
+#         loop.run_until_complete(asyncio.gather(teardown, *tasks, return_exceptions=True))
+#         loop.close()
+#         print("Event loop closed.")
+
+# if __name__ == "__main__":
+#     main()
