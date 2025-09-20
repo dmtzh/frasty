@@ -2,6 +2,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import urljoin
 
 import aiohttp
 from expression import Result
@@ -82,15 +83,15 @@ async def set_schedule_workflow(set_schedule_handler: Callable[[TaskIdValue, Set
 # ==================================
 @async_ex_to_error_result(SetScheduleUnexpectedError.from_exception)
 async def http_request_set_schedule_handler(id: TaskIdValue, resource: SetScheduleResource) -> Result[ScheduleIdValue, ScheduleValidationError | SetScheduleUnexpectedError]:
-    set_schedule_url = config.SET_SCHEDULE_URL
+    task_id_url_part = id.to_value_with_checksum()
+    set_schedule_url = urljoin(config.CHANGE_SCHEDULE_URL + "/", task_id_url_part)
     timeout_15_seconds = aiohttp.ClientTimeout(total=15)
-    task_id_with_checksum = id.to_value_with_checksum()
-    json_data = {"resource": {"task_id": task_id_with_checksum, "cron": resource.cron}}
+    json_data = {"resource": {"cron": resource.cron}}
     async with aiohttp.ClientSession() as session:
         try:
             async with session.post(set_schedule_url, json=json_data, timeout=timeout_15_seconds) as response:
                 match response.status:
-                    case 201:
+                    case 202:
                         json_response = await response.json()
                         schedule_id_with_checksum = json_response.get("id")
                         opt_schedule_id = ScheduleIdValue.from_value_with_checksum(schedule_id_with_checksum)

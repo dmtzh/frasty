@@ -34,7 +34,7 @@ async def run_task(id: str):
 async def get_run_state(id: str, run_id: str):
     return await getrunstateapihandler.handle(id, run_id)
 
-@app.post("/tasks/{id}/schedule", status_code=201)
+@app.post("/tasks/{id}/schedule", status_code=202)
 async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
     return await settaskscheduleapihandler.handle(id, request)
 
