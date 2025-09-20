@@ -15,7 +15,7 @@ _raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]
 _rabbitmqconfig = RabbitMQConfig.parse(_raw_rabbitmq_url, _raw_rabbitmq_publisher_confirms)
 if _rabbitmqconfig is None:
     raise ValueError("Invalid RabbitMQ configuration")
-_log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(message_id)-10s - %(message)s'
+_log_fmt = '%(asctime)s %(levelname)-8s - %(message)s'
 _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 rabbit_client = RabbitMQClient(_rabbit_broker)
