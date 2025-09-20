@@ -10,6 +10,7 @@ from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 import addtaskapihandler
+import cleartaskscheduleapihandler
 import completerunstatehandler
 from config import lifespan, rabbit_client
 import getrunstateapihandler
@@ -36,6 +37,10 @@ async def get_run_state(id: str, run_id: str):
 @app.post("/tasks/{id}/schedule", status_code=201)
 async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
     return await settaskscheduleapihandler.handle(id, request)
+
+@app.delete("/tasks/{id}/schedule/{schedule_id}", status_code=202)
+async def clear_schedule(id: str, schedule_id: str):
+    return await cleartaskscheduleapihandler.handle(id, schedule_id)
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
 async def complete_web_api_task_run_state_with_result(input):
