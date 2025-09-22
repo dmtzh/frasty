@@ -21,7 +21,7 @@ class InMemory[TId, TItem](Repository[TId, TItem]):
     
     def delete(self, id: TId):
         with self._lock:
-            del self._items[id]
+            self._items.pop(id, None)
     
     def get_all(self):
         with self._lock:

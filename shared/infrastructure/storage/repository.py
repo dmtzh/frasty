@@ -78,3 +78,9 @@ class NotFoundError(Error):
 
 class NotFoundException(ValueError):
     '''Item not found exception'''
+
+class AlreadyExistsError(Error):
+    '''Item already exists error'''
+
+class AlreadyExistsException(ValueError):
+    '''Item already exists exception'''

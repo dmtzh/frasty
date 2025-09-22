@@ -1,5 +1,6 @@
 from collections.abc import Callable, Coroutine
 from functools import wraps
+import threading
 from typing import Any, Concatenate, Generic, ParamSpec, TypeVar
 
 from shared.infrastructure.storage.repository import AsyncRepositoryWithVersion, Repository
@@ -35,18 +36,20 @@ class ItemActionInAsyncRepositoryWithVersion(Generic[TId, T]):
 class ItemActionInRepository(Generic[TId, T]):
     def __init__(self, repository: Repository[TId, T]):
         self._repository = repository
+        self._lock = threading.Lock()
     
     def __call__(self, func: Callable[Concatenate[T | None, P], tuple[R, T]]) -> Callable[Concatenate[TId, P], R]:
         @wraps(func)
         def wrapper(id: TId, *args: P.args, **kwargs: P.kwargs) -> R:
-            item = self._repository.get(id)
-            exists = item is not None
-            if exists:
-                res, updated_item = func(item, *args, **kwargs)
-                self._repository.update(id, updated_item)
-                return res
-            else:
-                res, new_item = func(None, *args, **kwargs)
-                self._repository.add(id, new_item)
-                return res
+            with self._lock:
+                item = self._repository.get(id)
+                exists = item is not None
+                if exists:
+                    res, updated_item = func(item, *args, **kwargs)
+                    self._repository.update(id, updated_item)
+                    return res
+                else:
+                    res, new_item = func(None, *args, **kwargs)
+                    self._repository.add(id, new_item)
+                    return res
         return wrapper

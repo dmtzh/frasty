@@ -50,7 +50,7 @@ class TasksSchedulesStore:
             if task_schedule.schedule_id != schedule_id:
                 return None, tasks_schedules
             del tasks_schedules[task_id]
-            return task_schedule, tasks_schedules
+            return task_schedule.cron, tasks_schedules
         return self._item_action(clear_schedule)("TASKS_SCHEDULES")
     
     async def get_schedules(self) -> ItemType:
