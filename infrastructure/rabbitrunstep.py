@@ -1,4 +1,5 @@
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 import functools
 import inspect
 from logging import LoggerAdapter
@@ -112,7 +113,7 @@ class _python_pickle:
             cfg_res = shdtodef.StepDefinitionAdapter.from_dict(step_definition_unvalidated)\
                 .filter(lambda step_def: get_step_definition_name(type(step_def)) == command, [ValueInvalid("step")])\
                 .map(lambda definition: definition.config)\
-                .map_error(lambda _: f"Invalid 'definition' data: {step_definition_unvalidated}")
+                .map_error(lambda error: f"Invalid 'definition' data: {step_definition_unvalidated}; error: {error}")
             data_res = data_validator(data_unvalidated)\
                 .map_error(lambda _: f"Invalid 'data' value {data_unvalidated}")
             match run_id_res, step_id_res, cfg_res, data_res:
@@ -137,12 +138,20 @@ class _python_pickle:
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
 
+@dataclass(frozen=True)
+class RunStepData[TCfg, D]:
+    run_id: RunIdValue
+    step_id: StepIdValue
+    config: TCfg
+    data: D
+    metadata: dict
+
 def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict):
     command = get_step_definition_name(type(definition))
     message = _python_pickle.data_to_message(run_id, step_id, definition, data, metadata)
     return rabbit_client.send_command(command, message)
 
-class handler:
+class handler[TCfg, D, R]:
     def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R]):
         def validate_input_adapter():
             if not callable(input_adapter):
@@ -154,7 +163,6 @@ class handler:
         self._input_adapter = validate_input_adapter()
     
     def _consume_input(self, run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict, logger: LoggerAdapter):
-        logger.info(f"{self._step_name} RECEIVED metadata {metadata}")
         self._run_id = run_id
         self._step_id = step_id
         self._metadata = metadata
@@ -182,6 +190,9 @@ class handler:
                     return str(no_data_or_err)
         @functools.wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs):
+            match kwargs.get("input"):
+                case Result(tag=ResultTag.OK, ok=input):
+                    self._logger.info(f"{self._step_name} received input {input}")
             res = await func(*args, **kwargs)
             # should_send_reponse = isinstance(res, CompletedResult.__value__)
             if type(res) is not CompletedWith.Data and type(res) is not CompletedWith.NoData and type(res) is not CompletedWith.Error:

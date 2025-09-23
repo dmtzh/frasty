@@ -12,10 +12,12 @@ from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_cr
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
+from stepdefinitions.task import FetchNewData
 
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
+    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
+    FetchNewData
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)
