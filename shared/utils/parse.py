@@ -53,3 +53,9 @@ def parse_from_dict[T](d: dict[str, str], key: str, parser: Callable[[str], T | 
         return Result.Error(f"'{key}' key is missing")
     raw_value = d[key]
     return parse_from_str(raw_value, key, parser)
+
+def parse_int(value) -> Result[int, str]:
+    try:
+        return Result.Ok(int(value))
+    except ValueError:
+        return Result.Error(f"invalid int value {value}")
