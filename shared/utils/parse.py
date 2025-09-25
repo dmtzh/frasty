@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from typing import Any
 from expression import Result
 from shared.utils.string import strip_and_lowercase
 
@@ -59,3 +60,11 @@ def parse_int(value) -> Result[int, str]:
         return Result.Ok(int(value))
     except ValueError:
         return Result.Error(f"invalid int value {value}")
+
+def parse_value[T](value, parser: Callable[[Any], T | None]) -> Result[T, str]:
+    opt_parsed_value = parser(value)
+    match opt_parsed_value:
+        case None:
+            return Result.Error(f"invalid value {value}")
+        case parsed_value:
+            return Result.Ok(parsed_value)

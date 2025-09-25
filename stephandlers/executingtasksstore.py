@@ -79,5 +79,13 @@ class ExecutingTasksStore:
             opt_removed_task_data = executing_tasks.pop(fetch_id, None) 
             return opt_removed_task_data, executing_tasks
         return self._item_action(remove_task)("EXECUTING_TASKS")
+    
+    async def get(self, fetch_id: FetchIdValue):
+        opt_items_with_ver = await self._file_repo_with_ver.get("EXECUTING_TASKS")
+        match opt_items_with_ver:
+            case (_, items):
+                return items.get(fetch_id, None)
+            case _:
+                return None
 
 executing_tasks_storage = ExecutingTasksStore()
