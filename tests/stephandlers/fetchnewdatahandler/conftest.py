@@ -4,7 +4,7 @@ from typing import ParamSpec, TypeVar
 
 import pytest
 
-import executingtasksstore as executingtasksstore
+import stephandlers.fetchnewdata.executingtasksstore as executingtasksstore
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -21,6 +21,10 @@ def set_executing_tasks_storage_error():
     yield set_error
     if _EXECUTING_TASKS_STORAGE_ERROR_KEY in _state:
         del _state[_EXECUTING_TASKS_STORAGE_ERROR_KEY]
+
+@pytest.fixture
+def remove_executing_tasks_storage_error():
+    return functools.partial(_state.pop, _EXECUTING_TASKS_STORAGE_ERROR_KEY)
 
 def wrap_func_with_error_condition(func: Callable[P, R], err_key: str) -> Callable[P, R]:
     @functools.wraps(func)

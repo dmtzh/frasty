@@ -5,11 +5,11 @@ import pytest_asyncio
 
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import Error, RunIdValue, TaskIdValue
-
 from shared.validation import ValueInvalid
-from stephandlers.executingtasksstore import executing_tasks_storage, ExecutingTaskData
-from stephandlers.fetchidvalue import FetchIdValue
-from stephandlers.fetchnewdatahandler import CompletedTaskData, RunTaskCommand, handle_completed_task, FetchNewDataCommand
+
+from stephandlers.fetchnewdata.executingtasksstore import executing_tasks_storage, ExecutingTaskData
+from stephandlers.fetchnewdata.fetchidvalue import FetchIdValue
+from stephandlers.fetchnewdata.handler import CompletedTaskData, RunTaskCommand, handle_completed_task, FetchNewDataCommand
 from stephandlers.fetchnewdata.previousdatastore import previous_data_storage
 
 @pytest_asyncio.fixture
@@ -627,9 +627,11 @@ async def test_when_pass_wrong_data_then_fetch_id_remains_in_executing_tasks_sto
 
 
 
-async def test_when_returns_success_result_then_prev_data_is_updated_with_completed_result(executing_task: RunTaskCommand, new_list_data: list, completed_handler):
+async def test_when_returns_success_result_then_prev_data_is_updated_with_completed_result(executing_task: RunTaskCommand, list_without_new_data: list, new_list_data: list, completed_handler):
+    await previous_data_storage.set(executing_task.task_id, CompletedWith.Data(list_without_new_data))
     fetch_id = executing_task.fetch_id
-    completed_result = CompletedWith.Data(new_list_data)
+    list_with_new_data = list_without_new_data + new_list_data
+    completed_result = CompletedWith.Data(list_with_new_data)
     completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
     expected_prev_data = completed_result
     
@@ -724,13 +726,14 @@ async def test_when_executing_tasks_storage_throws_exception_then_returns_error_
 
 
 
-async def test_when_executing_tasks_storage_throws_exception_then_fetch_id_remains_in_executing_tasks_storage(executing_task: RunTaskCommand, new_list_data: list, completed_handler, set_executing_tasks_storage_error):
+async def test_when_executing_tasks_storage_throws_exception_then_fetch_id_remains_in_executing_tasks_storage(executing_task: RunTaskCommand, new_list_data: list, completed_handler, set_executing_tasks_storage_error, remove_executing_tasks_storage_error):
     fetch_id = executing_task.fetch_id
     completed_result = CompletedWith.Data(new_list_data)
     completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
     set_executing_tasks_storage_error(RuntimeError("Executing tasks storage error"))
     
     await handle_completed_task(completed_handler, fetch_id, completed_data)
+    remove_executing_tasks_storage_error()
     actual_fetch_id_data = await executing_tasks_storage.get(fetch_id)
 
     assert type(actual_fetch_id_data) is ExecutingTaskData

@@ -21,8 +21,8 @@ from shared.validation import ValueInvalid
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import app, rabbit_client
-from fetchidvalue import FetchIdValue
-import fetchnewdatahandler
+from fetchnewdata.fetchidvalue import FetchIdValue
+import fetchnewdata.handler as fetchnewdatahandler
 
 class RabbitFetchNewDataCommand(rabbit_run_step.RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''

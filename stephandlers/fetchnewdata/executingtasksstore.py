@@ -12,7 +12,7 @@ from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsync
 from shared.utils.parse import parse_from_dict, parse_int
 
 import config
-from fetchidvalue import FetchIdValue
+from .fetchidvalue import FetchIdValue
 
 type ItemType = dict[FetchIdValue, ExecutingTaskData]
 type DtoItemType = dict[str, dict[str, str]]
