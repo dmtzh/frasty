@@ -1,7 +1,7 @@
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 import functools
-from typing import ParamSpec
+from typing import Any, ParamSpec
 
 from aio_pika import (
     Message,
@@ -11,6 +11,7 @@ from aio_pika.abc import AbstractRobustChannel, AbstractExchange
 from aiormq import ChannelInvalidStateError, ChannelNotFoundEntity, ConnectionChannelError
 from aiormq.abc import DeliveredMessage
 from expression import Result
+from faststream.broker.types import SubscriberMiddleware
 from faststream.rabbit import RabbitQueue
 from faststream.rabbit.subscriber.asyncapi import AsyncAPISubscriber
 from pamqp import commands as spec
@@ -83,8 +84,8 @@ class RabbitMQBroker:
         startup_task = functools.partial(self._create_auto_delete_queue, queue_name)
         self._add_async_startup_task(startup_task)
     
-    def subscriber(self, queue: RabbitQueue, message_decoder: Callable, no_reply: bool, retry: bool | int) -> AsyncAPISubscriber:
-        return self._subscriber(queue=queue, decoder=message_decoder, no_reply=no_reply, retry=retry)
+    def subscriber(self, queue: RabbitQueue, message_decoder: Callable, no_reply: bool, retry: bool | int, middlewares: Sequence[SubscriberMiddleware[Any]] = ()) -> AsyncAPISubscriber:
+        return self._subscriber(queue=queue, decoder=message_decoder, no_reply=no_reply, retry=retry, middlewares=middlewares)
     
     async def _publish_to_exchange(self, exchange: AbstractExchange | str, routing_key: str, message: Message, retry_count: int) -> Result[None, Error.ExchangeNotFound | Error.RouteNotFound]:
         try:

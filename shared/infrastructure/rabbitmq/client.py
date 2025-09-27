@@ -1,10 +1,11 @@
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from typing import ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from aio_pika import Message
 from expression import Result
+from faststream.broker.types import SubscriberMiddleware
 from faststream.rabbit import RabbitQueue
 
 from shared.customtypes import Error as CustomError
@@ -106,7 +107,7 @@ class RabbitMQClient:
         self._broker.bind_queue_to_exchange(queue.name, event_group, event)
         return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False)
     
-    def command_handler(self, command: str, message_decoder: Callable):
+    def command_handler(self, command: str, message_decoder: Callable, middlewares: Sequence[SubscriberMiddleware[Any]] = ()):
         queue = RabbitQueue(name=command, passive=True)
-        return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False)
+        return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False, middlewares=middlewares)
 

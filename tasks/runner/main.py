@@ -41,12 +41,9 @@ async def handle_run_task_definition_command(input, logger: Logger):
                 case Result(tag=ResultTag.ERROR, error=NotFoundError()):
                     return None
                 case Result(tag=ResultTag.ERROR, error=error):
-                    return await rabbit_runtask_failure_handler(cmd, error)
+                    return await rabbit_runtask_failure_handler(data, error)
                 case _:
                     return res
-        case Result(tag=ResultTag.ERROR, error=error):
-            # TODO: Handle error case
-            logger.warning(f">>>> Received invalid RunTask command data: {error}")
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())

@@ -61,10 +61,10 @@ def parse_int(value) -> Result[int, str]:
     except ValueError:
         return Result.Error(f"invalid int value {value}")
 
-def parse_value[T](value, parser: Callable[[Any], T | None]) -> Result[T, str]:
+def parse_value[T](value: Any, value_name: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     opt_parsed_value = parser(value)
     match opt_parsed_value:
         case None:
-            return Result.Error(f"invalid value {value}")
+            return Result.Error(f"invalid '{value_name}' value {value}")
         case parsed_value:
             return Result.Ok(parsed_value)
