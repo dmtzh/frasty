@@ -2,7 +2,6 @@
 import functools
 
 from expression import Result
-from faststream.rabbit.annotations import Logger
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrundefinition as rabbit_definition
@@ -18,7 +17,7 @@ from config import app, rabbit_client
 import runtaskdefinitionhandler
 
 @rabbit_run_task.handler(rabbit_client, rabbit_run_task.RunTaskData)
-async def handle_run_task_definition_command(input, logger: Logger):
+async def handle_run_task_definition_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_definition_handler(data: rabbit_run_task.RunTaskData, definition_id: DefinitionIdValue):
         task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}

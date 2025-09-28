@@ -2,9 +2,7 @@
 import functools
 
 from expression import Result
-from faststream.rabbit.annotations import Logger
 
-from config import app, rabbit_client
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrundefinition as rabbit_run_definition
@@ -17,11 +15,12 @@ from shared.infrastructure.storage.repository import NotFoundError
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
+from config import app, rabbit_client
 import completestephandler
 import rundefinitionhandler
 
 @rabbit_run_definition.handler(rabbit_client, rabbit_run_definition.RunDefinitionData)
-async def handle_run_definition_command(input, logger: Logger):
+async def handle_run_definition_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_first_step_handler(data: rabbit_run_definition.RunDefinitionData, evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
         definition_dict = {"definition_id": data.definition_id.to_value_with_checksum(), "definition_version": str(definition_version)}
@@ -45,10 +44,6 @@ async def handle_run_definition_command(input, logger: Logger):
                     return await rabbit_rundefinition_failure_handler(data, error)
                 case _:
                     return res
-        case Result(tag=ResultTag.ERROR, error=error):
-            # TODO: Handle error case
-            cmd_name = rundefinitionhandler.RunDefinitionCommand.__name__
-            logger.warning(f">>>> Received invalid {cmd_name} command data: {error}")
 
 @rabbit_complete_step.handler(rabbit_client, rabbit_complete_step.CompleteStepData)
 async def handle_complete_step_command(input): 

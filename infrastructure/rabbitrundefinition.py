@@ -1,4 +1,4 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine
 from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
@@ -7,14 +7,16 @@ import secrets
 from typing import Any, ParamSpec, TypeVar
 
 from expression import Result
+from faststream.broker.message import StreamMessage
 from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.customtypes import DefinitionIdValue, Error, RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Error, RunIdValue, TaskIdValue, StepIdValue
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
+from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 
 R = TypeVar("R")
@@ -35,7 +37,7 @@ class _python_pickle:
         return PythonPickleMessage(data_with_correlation_id)
 
     class decoder():
-        def __init__(self, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict, LoggerAdapter], R]):
+        def __init__(self, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
             self._input_adapter = input_adapter
         
         @staticmethod
@@ -78,23 +80,13 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
-            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
-                opt_id = id_parser(id_unvalidated)
-                match opt_id:
-                    case None:
-                        return Result.Error(f"Invalid '{id_name}' value {id_unvalidated}")
-                    case valid_id:
-                        return Result.Ok(valid_id)
-            
+        def _validate_rabbitmq_parsed_data(input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
             run_id_unvalidated, definition_id_unvalidated, metadata_unvalidated = parsed_data
-            run_id_res = validate_id(RunIdValue.from_value_with_checksum,run_id_unvalidated, "run_id")
-            definition_id_res = validate_id(DefinitionIdValue.from_value_with_checksum, definition_id_unvalidated, "definition_id")
+            run_id_res = parse_value(run_id_unvalidated, "run_id", RunIdValue.from_value_with_checksum)
+            definition_id_res = parse_value(definition_id_unvalidated, "definition_id", DefinitionIdValue.from_value_with_checksum)
             match run_id_res, definition_id_res:
                 case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=definition_id):
-                    opt_task_id = TaskIdValue.from_value_with_checksum(metadata_unvalidated.get("task_id"))
-                    logger = logger_creator.create(opt_task_id, run_id, None)
-                    res = input_adapter(run_id, definition_id, metadata_unvalidated, logger)
+                    res = input_adapter(run_id, definition_id, metadata_unvalidated)
                     return Result.Ok(res)
                 case _:
                     errors_with_none = [run_id_res.swap().default_value(None), definition_id_res.swap().default_value(None)]
@@ -105,12 +97,30 @@ class _python_pickle:
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):
             msg: RabbitMessage = message
-            logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
             rabbit_msg_err = rabbit_message_error_creator(f"Decoding {RUN_DEFINITION_COMMAND}", msg.correlation_id)
             parsed_data_res = self._parse_rabbitmq_msg_python_pickle(rabbit_msg_err, msg)
-            validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, logger_creator, self._input_adapter, rabbit_msg_err)
+            validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, self._input_adapter, rabbit_msg_err)
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
+
+    @staticmethod
+    def create_logger(msg: StreamMessage[Any]) -> LoggerAdapter:
+        logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
+        if not isinstance(msg.body, bytes):
+            return logger_creator.create(TaskIdValue(None), RunIdValue(None), StepIdValue(None))
+        try:
+            decoded = pickle.loads(msg.body)
+        except Exception:
+            return logger_creator.create(TaskIdValue(None), RunIdValue(None), StepIdValue(None))
+        if not isinstance(decoded, dict):
+            return logger_creator.create(TaskIdValue(None), RunIdValue(None), StepIdValue(None))
+        
+        metadata_res = parse_value(decoded.get("metadata", None), "metadata", lambda m: m if isinstance(m, dict) else None)
+        task_id_res = metadata_res.bind(lambda m: parse_value(m.get("task_id", None), "task_id", TaskIdValue.from_value_with_checksum))
+        run_id_res = parse_value(decoded.get("run_id", None), "run_id", RunIdValue.from_value_with_checksum)
+        task_id = task_id_res.default_value(TaskIdValue(None))
+        run_id = run_id_res.default_value(RunIdValue(None))
+        return logger_creator.create(task_id, run_id, StepIdValue(None))
 
 @dataclass(frozen=True)
 class RunDefinitionData:
@@ -123,6 +133,44 @@ def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: Defini
     message = _python_pickle.data_to_message(run_id, definition_id, metadata)
     return rabbit_client.send_command(command, message)
 
+async def _handler_error_result_to_negative_acknowledge_middleware(
+        call_next: Callable[[Any], Awaitable[Any]],
+        msg: StreamMessage[Any],
+    ) -> Any:
+        res = await call_next(msg)
+        match res:
+            case Result(tag=ResultTag.ERROR, error=_):
+                bits = secrets.randbits(1)
+                requeue = bits == 1
+                raise NackMessage(requeue=requeue)
+        return res
+
+async def _handler_logging_middleware(
+        call_next: Callable[[Any], Awaitable[Any]],
+        msg: StreamMessage[Any],
+    ) -> Any:
+        PREFIX = RUN_DEFINITION_COMMAND
+        logger = _python_pickle.create_logger(msg)
+        decoded_data = await msg.decode()
+        match decoded_data:
+            case Result(tag=ResultTag.OK, ok=data):
+                logger.info(f"{PREFIX} RECEIVED {data}")
+            case Result(tag=ResultTag.ERROR, error=error):
+                logger.error(f"{PREFIX} RECEIVED {error}")
+            case unsupported_decoded_data:
+                logger.warning(f"{PREFIX} RECEIVED UNSUPPORTED {unsupported_decoded_data}")
+        res = await call_next(msg)
+        match res:
+            case Result(tag=ResultTag.OK, ok=result):
+                first_100_chars = str(result)[:100]
+                output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                logger.info(f"{PREFIX} successfully completed with output {output}")
+            case Result(tag=ResultTag.ERROR, error=error):
+                logger.error(f"{PREFIX} failed with error {error}")
+            case None:
+                logger.warning(f"{PREFIX} PROCESSING SKIPPED")
+        return res
+
 class handler:
     def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
         def validate_input_adapter():
@@ -132,30 +180,7 @@ class handler:
         self._rabbit_client = rabbit_client
         self._input_adapter = validate_input_adapter()
     
-    def _consume_input(self, run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict, logger: LoggerAdapter):
-        logger.info(f"{RUN_DEFINITION_COMMAND} RECEIVED metadata {metadata}")
-        self._run_id = run_id
-        self._definition_id = definition_id
-        self._metadata = metadata
-        self._logger = logger
-        return self._input_adapter(run_id, definition_id, metadata)
-    
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
-        @functools.wraps(func)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs):
-            run_definition_res = await func(*args, **kwargs)
-            match run_definition_res:
-                case Result(tag=ResultTag.OK, ok=result):
-                    first_100_chars = str(result)[:100]
-                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
-                    self._logger.info(f"{RUN_DEFINITION_COMMAND} successfully completed with output {output}")
-                case Result(tag=ResultTag.ERROR, error=error):
-                    bits = secrets.randbits(1)
-                    requeue = bits == 1
-                    self._logger.error(f"{RUN_DEFINITION_COMMAND} failed with error {error}")
-                    self._logger.error(f"requeue={requeue}")
-                    raise NackMessage(requeue=requeue)
-            return run_definition_res
-        
-        decoder = _python_pickle.decoder(self._consume_input)
-        return self._rabbit_client.command_handler(RUN_DEFINITION_COMMAND, decoder)(wrapper)
+        decoder = _python_pickle.decoder(self._input_adapter)
+        middlewares = (_handler_error_result_to_negative_acknowledge_middleware, _handler_logging_middleware)
+        return self._rabbit_client.command_handler(RUN_DEFINITION_COMMAND, decoder, middlewares)(func)
