@@ -14,7 +14,7 @@ from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
-from shared.utils.parse import parse_value
+from shared.utils.parse import parse_from_dict, parse_value
 from shared.utils.result import ResultTag
 
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, command_handler_logging_middleware, RequeueChance
@@ -115,9 +115,9 @@ class _python_pickle:
         if not isinstance(decoded, dict):
             return logger_creator.create(TaskIdValue(None), RunIdValue(None), StepIdValue(None))
         
-        metadata_res = parse_value(decoded.get("metadata", None), "metadata", lambda m: m if isinstance(m, dict) else None)
-        task_id_res = metadata_res.bind(lambda m: parse_value(m.get("task_id", None), "task_id", TaskIdValue.from_value_with_checksum))
-        run_id_res = parse_value(decoded.get("run_id", None), "run_id", RunIdValue.from_value_with_checksum)
+        metadata_res = parse_from_dict(decoded, "metadata", lambda m: m if isinstance(m, dict) else None)
+        task_id_res = metadata_res.bind(lambda m: parse_from_dict(m, "task_id", TaskIdValue.from_value_with_checksum))
+        run_id_res = parse_from_dict(decoded, "run_id", RunIdValue.from_value_with_checksum)
         task_id = task_id_res.default_value(TaskIdValue(None))
         run_id = run_id_res.default_value(RunIdValue(None))
         return logger_creator.create(task_id, run_id, StepIdValue(None))

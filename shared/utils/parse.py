@@ -49,11 +49,11 @@ def parse_from_str[T](value: str, value_name: str, parser: Callable[[str], T | N
         case parsed_value:
             return Result.Ok(parsed_value)
 
-def parse_from_dict[T](d: dict[str, str], key: str, parser: Callable[[str], T | None]) -> Result[T, str]:
+def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     if key not in d:
         return Result.Error(f"'{key}' key is missing")
     raw_value = d[key]
-    return parse_from_str(raw_value, key, parser)
+    return parse_value(raw_value, key, parser)
 
 def parse_int(value) -> Result[int, str]:
     try:
