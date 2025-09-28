@@ -1,14 +1,12 @@
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
 import pickle
-import secrets
 from typing import Any, ParamSpec, TypeVar
 
 from expression import Result
 from faststream.broker.message import StreamMessage
-from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, TaskIdValue, StepIdValue
@@ -18,6 +16,8 @@ from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
+
+from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, command_handler_logging_middleware, RequeueChance
 
 R = TypeVar("R")
 P = ParamSpec("P")
@@ -133,44 +133,6 @@ def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: Defini
     message = _python_pickle.data_to_message(run_id, definition_id, metadata)
     return rabbit_client.send_command(command, message)
 
-async def _handler_error_result_to_negative_acknowledge_middleware(
-        call_next: Callable[[Any], Awaitable[Any]],
-        msg: StreamMessage[Any],
-    ) -> Any:
-        res = await call_next(msg)
-        match res:
-            case Result(tag=ResultTag.ERROR, error=_):
-                bits = secrets.randbits(1)
-                requeue = bits == 1
-                raise NackMessage(requeue=requeue)
-        return res
-
-async def _handler_logging_middleware(
-        call_next: Callable[[Any], Awaitable[Any]],
-        msg: StreamMessage[Any],
-    ) -> Any:
-        PREFIX = RUN_DEFINITION_COMMAND
-        logger = _python_pickle.create_logger(msg)
-        decoded_data = await msg.decode()
-        match decoded_data:
-            case Result(tag=ResultTag.OK, ok=data):
-                logger.info(f"{PREFIX} RECEIVED {data}")
-            case Result(tag=ResultTag.ERROR, error=error):
-                logger.error(f"{PREFIX} RECEIVED {error}")
-            case unsupported_decoded_data:
-                logger.warning(f"{PREFIX} RECEIVED UNSUPPORTED {unsupported_decoded_data}")
-        res = await call_next(msg)
-        match res:
-            case Result(tag=ResultTag.OK, ok=result):
-                first_100_chars = str(result)[:100]
-                output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
-                logger.info(f"{PREFIX} successfully completed with output {output}")
-            case Result(tag=ResultTag.ERROR, error=error):
-                logger.error(f"{PREFIX} failed with error {error}")
-            case None:
-                logger.warning(f"{PREFIX} PROCESSING SKIPPED")
-        return res
-
 class handler:
     def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
         def validate_input_adapter():
@@ -182,5 +144,8 @@ class handler:
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
         decoder = _python_pickle.decoder(self._input_adapter)
-        middlewares = (_handler_error_result_to_negative_acknowledge_middleware, _handler_logging_middleware)
+        middlewares = (
+            error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
+            command_handler_logging_middleware(RUN_DEFINITION_COMMAND, _python_pickle.create_logger)
+        )
         return self._rabbit_client.command_handler(RUN_DEFINITION_COMMAND, decoder, middlewares)(func)
