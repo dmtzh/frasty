@@ -9,14 +9,14 @@ from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.config import RabbitMQConfig
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml
+    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)

@@ -18,7 +18,7 @@ from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, asyn
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml, GetLinksFromHtmlConfig, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData
@@ -30,7 +30,28 @@ import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
+import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
+
+class RabbitGetLinksFromHtmlCommand(rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
+    '''Input data for get content from html command'''
+
+@dataclass(frozen=True)
+class GetLinksFromHtmlCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
+@make_async
+def handle_get_links_from_html_command(input):
+    @effect.result[CompletedResult, GetLinksFromHtmlCommandValidationError]()
+    def get_links_from_html(input: Result[RabbitGetLinksFromHtmlCommand, Any]) -> Generator[Any, Any, CompletedResult]:
+        step_data = yield from input.map_error(GetLinksFromHtmlCommandValidationError)
+        cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
+        res = getlinksfromhtmlhandler.handle(cmd)
+        return res
+    
+    get_links_from_html_res = get_links_from_html(input)
+    return get_links_from_html_res.default_value(None)
 
 class RabbitGetContentFromHtmlCommand(rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
