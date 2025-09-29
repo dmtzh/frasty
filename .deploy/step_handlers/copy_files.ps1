@@ -32,6 +32,7 @@ Copy-Item -Path ./infrastructure/rabbitrunstep.py -Destination $publish_infrastr
 Copy-Item -Path ./infrastructure/rabbitruntask.py -Destination $publish_infrastructure_folder
 New-Item -Path $publish_stepdefinitions_folder -ItemType Directory
 Copy-Item -Path ./stepdefinitions/shared.py -Destination $publish_stepdefinitions_folder
+Copy-Item -Path ./stepdefinitions/requesturl.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path ./stepdefinitions/task.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path $publish_folder/../Dockerfile -Destination $publish_folder
 

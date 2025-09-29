@@ -5,7 +5,6 @@ import functools
 from typing import Any
 
 from expression import Result, effect
-from faststream.rabbit.annotations import Logger
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
@@ -18,20 +17,39 @@ from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, asyn
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
+from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import app, rabbit_client
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
+import requesturl.handler as requesturlhandler
+
+class RabbitRequestUrlCommand(rabbit_run_step.RunStepData[None, RequestUrlInputData]):
+    '''Input data for request url command'''
+
+@dataclass(frozen=True)
+class RequestUrlCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
+async def handle_request_url_command(input):
+    @coroutine_result[RequestUrlCommandValidationError]()
+    async def process_request_url(input: Result[RabbitRequestUrlCommand, Any]):
+        step_data = await AsyncResult.from_result(input).map_error(RequestUrlCommandValidationError)
+        cmd = requesturlhandler.RequestUrlCommand(step_data.data)
+        res = await requesturlhandler.handle(cmd)
+        return res
+    process_request_url_res = await process_request_url(input)
+    return process_request_url_res.default_value(None)
 
 class RabbitFetchNewDataCommand(rabbit_run_step.RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
 
 @rabbit_run_step.handler(rabbit_client, FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
-async def handle_fetch_new_data_command(input, logger: Logger):
+async def handle_fetch_new_data_command(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_task_handler(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
-        # raise RuntimeError("rabbit_run_task_handler test runtime error")
         metadata = {
             "fetch_id": cmd.fetch_id.to_value_with_checksum(),
             "parent_metadata": parent_metadata
@@ -47,10 +65,6 @@ async def handle_fetch_new_data_command(input, logger: Logger):
                     return CompletedWith.Error(str(error))
                 case _:
                     return None
-        case Result(tag=ResultTag.ERROR, error=error):
-            # TODO: Handle error case
-            cmd_name = FetchNewData.__name__
-            logger.warning(f">>>> Received invalid {cmd_name} command data: {error}")
 
 @effect.result[tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict], str]()
 def definition_to_fetched_task(data: rabbit_definition_completed.DefinitionCompletedData) -> Generator[Any, Any, tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict]]:
