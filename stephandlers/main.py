@@ -18,7 +18,7 @@ from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, asyn
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
-from stepdefinitions.html import FilterHtmlResponse
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData
@@ -29,7 +29,28 @@ import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
+import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import requesturl.handler as requesturlhandler
+
+class RabbitGetContentFromHtmlCommand(rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
+    '''Input data for get content from html command'''
+
+@dataclass(frozen=True)
+class GetContentFromHtmlCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
+@make_async
+def handle_get_content_from_html_command(input):
+    @effect.result[CompletedResult, GetContentFromHtmlCommandValidationError]()
+    def get_content_from_html(input: Result[RabbitGetContentFromHtmlCommand, Any]) -> Generator[Any, Any, CompletedResult]:
+        step_data = yield from input.map_error(GetContentFromHtmlCommandValidationError)
+        cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
+        res = getcontentfromhtmlhandler.handle(cmd)
+        return res
+    
+    get_content_from_html_res = get_content_from_html(input)
+    return get_content_from_html_res.default_value(None)
 
 class RabbitFilterHtmlResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
