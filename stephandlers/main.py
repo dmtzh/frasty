@@ -18,16 +18,38 @@ from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, asyn
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
+from stepdefinitions.html import FilterHtmlResponse
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import app, rabbit_client
+import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
 import requesturl.handler as requesturlhandler
+
+class RabbitFilterHtmlResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
+    '''Input data for filter html response command'''
+
+@dataclass(frozen=True)
+class FilterHtmlResponseCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
+@make_async
+def handle_filter_html_response_command(input):
+    @effect.result[CompletedResult, FilterHtmlResponseCommandValidationError]()
+    def filter_html_response(input: Result[RabbitFilterHtmlResponseCommand, Any]) -> Generator[Any, Any, CompletedResult]:
+        step_data = yield from input.map_error(FilterHtmlResponseCommandValidationError)
+        cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
+        res = filterhtmlresponsehandler.handle(cmd)
+        return res
+    
+    filter_html_response_res = filter_html_response(input)
+    return filter_html_response_res.default_value(None)
 
 class RabbitFilterSuccessResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
