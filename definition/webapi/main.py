@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from config import lifespan, rabbit_client
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrunstep as rabbit_step
+from infrastructure.rabbitmiddlewares import RequeueChance
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
@@ -74,7 +75,7 @@ class CompleteManualRunCommand:
     run_id: RunIdValue
     result: CompletedResult
 
-@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
+@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
 async def complete_manual_run_definition_with_result(input):
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
@@ -97,9 +98,6 @@ async def complete_manual_run_definition_with_result(input):
             match res:
                 case Result(tag=ResultTag.ERROR, error=NotFoundError()):
                     return None
-                case Result(tag=ResultTag.ERROR, error=_):
-                    rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.LOW)
-                    return res
                 case _:
                     return res
                     

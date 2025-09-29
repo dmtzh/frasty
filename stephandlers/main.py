@@ -10,6 +10,7 @@ from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrunstep as rabbit_run_step
 from infrastructure import rabbitruntask as rabbit_task
+from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
@@ -40,6 +41,7 @@ async def handle_request_url_command(input):
         cmd = requesturlhandler.RequestUrlCommand(step_data.data)
         res = await requesturlhandler.handle(cmd)
         return res
+    
     process_request_url_res = await process_request_url(input)
     return process_request_url_res.default_value(None)
 
@@ -80,7 +82,7 @@ def definition_to_fetched_task(data: rabbit_definition_completed.DefinitionCompl
 class FetchedTaskValidationError:
     error: Any
 
-@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks")
+@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)
 async def handle_fetched_task(input):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_fetch_new_data_completed_handler(metadata: dict, fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
@@ -99,8 +101,6 @@ async def handle_fetched_task(input):
             return None
         case Result(tag=ResultTag.ERROR, error=ValueInvalid()):
             return None
-        case Result(tag=ResultTag.ERROR, error=_):
-            rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.HIGH)
         case _:
             return process_fetched_task_res
 

@@ -97,7 +97,7 @@ class RabbitMQClient:
             publish_task.cancel()
             return Result.Error(Error.SendEventTimeout(f"{event} ({event_group})"))
     
-    def event_handler(self, event: str, event_group: str, queue_name: QueueName, message_decoder: Callable):
+    def event_handler(self, event: str, event_group: str, queue_name: QueueName, message_decoder: Callable, middlewares: Sequence[SubscriberMiddleware[Any]] = ()):
         match queue_name:
             case ExistingQueueName():
                 queue = RabbitQueue(name=queue_name, passive=True)
@@ -105,7 +105,7 @@ class RabbitMQClient:
                 self._broker.create_auto_delete_queue(queue_name)
                 queue = RabbitQueue(name=queue_name, passive=True)        
         self._broker.bind_queue_to_exchange(queue.name, event_group, event)
-        return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False)
+        return self._broker.subscriber(queue=queue, message_decoder=message_decoder, no_reply=True, retry=False, middlewares=middlewares)
     
     def command_handler(self, command: str, message_decoder: Callable, middlewares: Sequence[SubscriberMiddleware[Any]] = ()):
         queue = RabbitQueue(name=command, passive=True)

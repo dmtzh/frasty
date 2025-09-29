@@ -3,6 +3,7 @@ from fastapi import FastAPI
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitruntask as rabbit_task
+from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.infrastructure.storage.repository import NotFoundError
@@ -42,7 +43,7 @@ async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRe
 async def clear_schedule(id: str, schedule_id: str):
     return await cleartaskscheduleapihandler.handle(id, schedule_id)
 
-@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None)
+@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
 async def complete_web_api_task_run_state_with_result(input):
     def from_definition_completed_data(data: rabbit_definition_completed.DefinitionCompletedData) -> Result[completerunstatehandler.CompleteRunStateCommand, str]:
         raw_from = data.metadata.get("from")
@@ -66,6 +67,7 @@ async def complete_web_api_task_run_state_with_result(input):
         case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is completerunstatehandler.CompleteRunStateCommand:
             res = await completerunstatehandler.handle(cmd)
             match res:
-                case Result(tag=ResultTag.ERROR, error=error) if type(error) is not NotFoundError:
-                    rabbit_definition_completed.handle_processing_failure(rabbit_definition_completed.Severity.LOW)
-            return res
+                case Result(tag=ResultTag.ERROR, error=NotFoundError()):
+                    return None
+                case _:
+                    return res

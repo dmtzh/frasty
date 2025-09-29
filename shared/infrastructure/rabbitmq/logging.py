@@ -41,18 +41,21 @@ class RabbitMessageLoggingFormatter(logging.Formatter):
                 return formatter.format(record)
 
 class RabbitMessageLoggerCreator():
-    def __init__(self, rabbit_msg: AbstractIncomingMessage, queue_name: str | None = None):
+    def __init__(self, rabbit_msg: AbstractIncomingMessage, queue_name: str | None = None, message_prefix: str | None = None):
         self._extra = {"exchange": rabbit_msg.exchange, "queue": queue_name or rabbit_msg.routing_key}
+        self._message_prefix = message_prefix
     
     def create(self, opt_task_id: IdValue | None, run_id: IdValue, step_id: IdValue):
         logger = logging.getLogger("rabbit_message_logger")
         logger.setLevel(logging.INFO)
         if not logger.hasHandlers():
-            log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(message_id)-30s: %(message)s'
+            log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(message_id)-30s: %(message_prefix)s%(message)s'
             formatter = RabbitMessageLoggingFormatter(log_fmt)
             handler = logging.StreamHandler()
             handler.setFormatter(formatter)
             logger.addHandler(handler)
         message_id = f"{opt_task_id}-->>{run_id}->{step_id}"
-        extra = self._extra | {"message_id": message_id}
+        message_prefix = f"{self._message_prefix} " if self._message_prefix is not None else ""
+        message_prefix_dict = {"message_prefix": message_prefix}
+        extra = self._extra | {"message_id": message_id} | message_prefix_dict
         return logging.LoggerAdapter(logger, extra=extra)
