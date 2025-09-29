@@ -14,17 +14,40 @@ from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
-from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result, make_async
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
+from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
+from stepdefinitions.shared import HttpResponseData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import app, rabbit_client
+import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
 import requesturl.handler as requesturlhandler
+
+class RabbitFilterSuccessResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
+    '''Input data for filter success response command'''
+
+@dataclass(frozen=True)
+class FilterSuccessResponseCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
+@make_async
+def handle_filter_success_response_command(input):
+    @effect.result[CompletedResult, FilterSuccessResponseCommandValidationError]()
+    def filter_success_response(input: Result[RabbitFilterSuccessResponseCommand, Any]) -> Generator[Any, Any, CompletedResult]:
+        step_data = yield from input.map_error(FilterSuccessResponseCommandValidationError)
+        cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
+        res = filtersuccessresponsehandler.handle(cmd)
+        return res
+    
+    filter_success_response_res = filter_success_response(input)
+    return filter_success_response_res.default_value(None)
 
 class RabbitRequestUrlCommand(rabbit_run_step.RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
