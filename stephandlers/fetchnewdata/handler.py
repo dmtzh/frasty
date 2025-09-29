@@ -9,7 +9,7 @@ from shared.completedresult import CompletedWith, CompletedResult
 from shared.customtypes import Error, RunIdValue, TaskIdValue, StepIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.utils.asyncresult import AsyncResult, coroutine_result, async_result, async_ex_to_error_result, async_catch_ex
-from shared.utils.parse import parse_from_str
+from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
 from stepdefinitions.shared import DictData, ListOfDictData
@@ -42,7 +42,7 @@ class CompletedTaskData:
     result: CompletedWith.Data | CompletedWith.NoData
 
 def step_id_to_fetch_id(step_id: StepIdValue):
-    return parse_from_str(step_id, "fetch_id", FetchIdValue.from_value).map_error(lambda _: ValueInvalid("fetch_id"))
+    return parse_value(step_id, "fetch_id", FetchIdValue.from_value).map_error(lambda _: ValueInvalid("fetch_id"))
 
 @dataclass(frozen=True)
 class HistoryItem:

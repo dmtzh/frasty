@@ -25,6 +25,7 @@ $publish_stepdefinitions_folder = Join-Path -Path $publish_folder -ChildPath "st
 python $copy_folder_script ./stephandlers $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 New-Item -Path $publish_infrastructure_folder -ItemType Directory
+Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitcompletestep.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitdefinitioncompleted.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitrunstep.py -Destination $publish_infrastructure_folder
