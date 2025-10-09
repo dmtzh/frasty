@@ -23,8 +23,11 @@ class CompleteStepCommand:
 def state_not_found_ex_to_err(ex: NotFoundException, run_id: IdValue, definition_id: IdValue, *args) -> NotFoundError:
     return NotFoundError(f"step1_apply_run_next_step state not found for run_id {run_id} and definition_id {definition_id}")
 
+class CompleteStepHandlerStorageError(StorageError):
+    '''Unexpected complete step handler storage error'''
+
 @async_result
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
 @async_ex_to_error_result(state_not_found_ex_to_err, NotFoundException)
 @running_definitions_storage.with_storage
 def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_step_id: StepIdValue, completed_step_result: CompletedResult):
@@ -59,7 +62,7 @@ def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_st
             return None
     return complete_current_step_and_run_next() or run_next_step_from_current() or rerun_next_step_from_current() or (None, state)
 
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
 @running_definitions_storage.with_storage
 def step3_apply_fail(state: RunningDefinitionState | None, error: Any):
     if state is None:
@@ -67,7 +70,7 @@ def step3_apply_fail(state: RunningDefinitionState | None, error: Any):
     evt = state.apply_command(RunningDefinitionState.Commands.Fail(Error.from_error(error)))
     return (evt, state)
 
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
 @running_definitions_storage.with_storage
 def step3_apply_fail_running_step(state: RunningDefinitionState | None, running_step_id: IdValue, error: Any):
     if state is None:

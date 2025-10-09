@@ -77,6 +77,7 @@ class Url:
 
 class HttpMethod(StrEnum):
     GET = "GET"
+    POST = "POST"
 
     @staticmethod
     def parse(http_method: str) -> HttpMethod | None:
@@ -85,6 +86,8 @@ class HttpMethod(StrEnum):
         match strip_and_lowercase(http_method):
             case "get":
                 return HttpMethod.GET
+            case "post":
+                return HttpMethod.POST
             case _:
                 return None
 

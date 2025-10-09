@@ -48,7 +48,14 @@ class StepDefinitionAdapter:
     @staticmethod   
     def to_dict(step_def: shdomaindef.StepDefinition) -> dict[str, Any]:
         step = get_step_definition_name(type(step_def))
-        config = {k: v for k, v in vars(step_def.config).items() if v is not None} if step_def.config is not None else {}
+        match step_def.config:
+            case None:
+                config = {}
+            case step_def_config:
+                if callable(getattr(step_def_config, "to_dict", None)):
+                    config = step_def_config.to_dict()
+                else:
+                    config = {k: v for k, v in vars(step_def_config).items() if v is not None}
         return {"step": step, **config}
 
 class DefinitionAdapter:

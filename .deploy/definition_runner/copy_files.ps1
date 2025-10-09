@@ -20,12 +20,16 @@ if (Test-Path $publish_folder) {
 
 $publish_shared_folder = Join-Path -Path $publish_folder -ChildPath "shared"
 $publish_stepdefinitions_folder = Join-Path -Path $publish_folder -ChildPath "stepdefinitions"
+$publish_stephandlers_folder = Join-Path -Path $publish_folder -ChildPath "stephandlers"
+$publish_stephandlers_sendtoviberchannel_folder = Join-Path -Path $publish_stephandlers_folder -ChildPath "sendtoviberchannel"
 $publish_infrastructure_folder = Join-Path -Path $publish_folder -ChildPath "infrastructure"
 
 python $copy_folder_script ./definition/runner $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./definition/shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./stepdefinitions $publish_stepdefinitions_folder -e $exclude_folders
+New-Item -Path $publish_stephandlers_sendtoviberchannel_folder -ItemType Directory
+Copy-Item -Path ./stephandlers/sendtoviberchannel/definition.py -Destination $publish_stephandlers_sendtoviberchannel_folder
 New-Item -Path $publish_infrastructure_folder -ItemType Directory
 Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitcompletestep.py -Destination $publish_infrastructure_folder

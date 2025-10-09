@@ -68,3 +68,20 @@ def parse_value[T](value: Any, value_name: str, parser: Callable[[Any], T | None
             return Result.Error(f"invalid '{value_name}' value {value}")
         case parsed_value:
             return Result.Ok(parsed_value)
+
+def parse_non_empty_str(value: Any, value_name: str, strip: bool = True) -> Result[str, str]:
+    """
+    Parse a string value. If the value is not a string, return an error.
+    If the value is empty string, return an error.
+    If strip is True, strip whitespace from the string and if it is empty, return an error.
+    
+    Returns:
+        Result[str, str]: a success result containing non empty string value, or an error.
+    """
+    if not isinstance(value, str):
+        return Result.Error(f"invalid '{value_name}' value {value}")
+    match value.strip() if strip else value:
+        case "":
+            return Result.Error(f"invalid '{value_name}' value {value}")
+        case non_empty_value:
+            return Result.Ok(non_empty_value)

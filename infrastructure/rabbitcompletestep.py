@@ -157,7 +157,7 @@ class handler:
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
         decoder = _python_pickle.decoder(self._input_adapter)
         middlewares = (
-            error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
+            error_result_to_negative_acknowledge_middleware(RequeueChance.HIGH),
             command_handler_logging_middleware(COMPLETE_STEP_COMMAND, _python_pickle.create_logger)
         )
         return self._rabbit_client.command_handler(COMPLETE_STEP_COMMAND, decoder, middlewares)(func)

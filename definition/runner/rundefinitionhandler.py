@@ -23,8 +23,11 @@ class DefinitionVersion(int):
         instance = super().__new__(cls, value)
         return instance
 
+class RunDefinitionHandlerStorageError(StorageError):
+    '''Unexpected run definition handler storage error'''
+
 @async_result
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(RunDefinitionHandlerStorageError.from_exception)
 async def get_definition_with_ver(id: DefinitionIdValue) -> Result[tuple[Definition, int], NotFoundError]:
     opt_definition_with_ver = await definitions_storage.get_with_ver(id)
     match opt_definition_with_ver:
@@ -34,7 +37,7 @@ async def get_definition_with_ver(id: DefinitionIdValue) -> Result[tuple[Definit
             return Result.Ok(definition_with_ver)
 
 @async_result
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(RunDefinitionHandlerStorageError.from_exception)
 @running_definitions_storage.with_storage
 def apply_run_first_step(state: RunningDefinitionState | None, definition: Definition):
     def set_definition_and_run_first_step():
@@ -67,7 +70,7 @@ def apply_run_first_step(state: RunningDefinitionState | None, definition: Defin
         case _:
             return run_first_step(state) or rerun_first_step(state) or (None, state)
 
-@async_ex_to_error_result(StorageError.from_exception)
+@async_ex_to_error_result(RunDefinitionHandlerStorageError.from_exception)
 @running_definitions_storage.with_storage
 def apply_fail_run_first_step(state: RunningDefinitionState | None, running_step_id: IdValue, error: Any):
     if state is None:

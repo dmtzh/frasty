@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Callable, Coroutine
 from functools import wraps
+import functools
 from inspect import signature
 from typing import Any, Concatenate, ParamSpec, Type
 
@@ -198,20 +199,28 @@ class AsyncResult[T, TErr]:
             return res.map_error(mapper)
         return AsyncResult[T, TErrOut](map_error_value(self._value, mapper))
     
-    async def get_or_else[TOut](self, error_getter: Callable[[TErr], Coroutine[Any, Any, TOut]]) -> T | TOut:
+    def bind[TOut](self, mapper: Callable[[T], AsyncResult[TOut, TErr]]):
+        async def error_func(err):
+            return Result[TOut, TErr].Error(err)
+        async def get_result(t_result_coro: Coroutine[Any, Any, Result[T, TErr]], mapper: Callable[[T], AsyncResult[TOut, TErr]]) -> Result[TOut, TErr]:
+            t_res = await t_result_coro
+            async_func = t_res\
+                .map(lambda t_val: mapper(t_val).to_coroutine_result)\
+                .default_with(lambda err: functools.partial(error_func, err))
+            tout_res = await async_func()
+            return tout_res
+        return AsyncResult[TOut, TErr](get_result(self._value, mapper))
+    
+    async def get_or_else[TOut](self, error_getter: Callable[[TErr], TOut]) -> T | TOut:
         res = await self._value
-        match res:
-            case Result(tag=ResultTag.OK, ok=value):
-                return value
-            case Result(tag=ResultTag.ERROR, error=error):
-                return await error_getter(error)
+        return res.default_with(error_getter)
     
     def or_else(self, func: Callable[[TErr], AsyncResult[T, TErr]]):
-        async def get_result(get_first_result: Coroutine[Any, Any, Result[T, TErr]], get_second_result_func: Callable[[TErr], Coroutine[Any, Any, Result[T, TErr]]]):            
+        async def get_result(get_first_result: Coroutine[Any, Any, Result[T, TErr]], get_second_result_func: Callable[[TErr], AsyncResult[T, TErr]]):            
             first_res = await get_first_result
             match first_res:
                 case Result(tag=ResultTag.ERROR, error=error):
-                    second_result = await get_second_result_func(error)
+                    second_result = await get_second_result_func(error).to_coroutine_result()
                     return second_result
                 case _:
                     return first_res
@@ -221,7 +230,7 @@ class AsyncResult[T, TErr]:
         return self._value
     
     @staticmethod
-    def from_result[T, TErr](res: Result[T, TErr]):
+    def from_result(res: Result[T, TErr]):
         get_res_async = make_async(lambda: res)
         res_coro = get_res_async()
         return AsyncResult[T, TErr](res_coro)

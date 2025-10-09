@@ -13,15 +13,23 @@ from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLink
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
+from sendtoviberchannel.config import ViberApiConfig
+from sendtoviberchannel.definition import SendToViberChannel
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
+    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
+    SendToViberChannel
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
+
+_viber_api_config = ViberApiConfig.parse(os.environ["VIBER_API_URL"], os.environ["VIBER_API_HTTP_METHOD"])
+if _viber_api_config is None:
+    raise ValueError("Invalid Viber API configuration")
+viber_api_config = _viber_api_config
 
 _raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
 _raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]

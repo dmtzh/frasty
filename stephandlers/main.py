@@ -24,7 +24,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, rabbit_client
+from config import app, rabbit_client, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -32,6 +32,27 @@ import fetchnewdata.handler as fetchnewdatahandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
+from sendtoviberchannel.definition import SendToViberChannel, SendToViberChannelConfig
+import sendtoviberchannel.handler as sendtoviberchannelhandler
+
+class SendToViberChannelCommand(rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
+    '''Input data for send to viber channel command'''
+
+@dataclass(frozen=True)
+class SendToViberChannelCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
+async def handle_send_to_viber_channel_command(input):
+    @async_result
+    async def process_send_to_viber_channel(step_data: SendToViberChannelCommand):
+        cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
+        res = await sendtoviberchannelhandler.handle(viber_api_config, cmd)
+        return Result.Ok(res)
+    
+    return await AsyncResult.from_result(input)\
+        .bind(process_send_to_viber_channel)\
+        .get_or_else(lambda _: None)
 
 class RabbitGetLinksFromHtmlCommand(rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
