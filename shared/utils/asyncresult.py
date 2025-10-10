@@ -3,7 +3,7 @@ from collections.abc import Callable, Coroutine
 from functools import wraps
 import functools
 from inspect import signature
-from typing import Any, Concatenate, ParamSpec, Type
+from typing import Any, Concatenate, ParamSpec, Type, TypeVar
 
 from expression import Result
 
@@ -12,6 +12,8 @@ from shared.utils.result import ResultTag
 from shared.utils.asynchronous import make_async
 
 P = ParamSpec("P")
+T = TypeVar("T")
+TErr = TypeVar("TErr")
 
 def ex_to_error_result[TExErr](ex_to_err: Callable[[Exception], TExErr] | Callable[Concatenate[Exception, P], TExErr], exception: Type[Exception] = Exception):
     """
@@ -234,8 +236,8 @@ class AsyncResult[T, TErr]:
         get_res_async = make_async(lambda: res)
         res_coro = get_res_async()
         return AsyncResult[T, TErr](res_coro)
-   
-def async_result[T, TErr](func: Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, AsyncResult[T, TErr]]:
+
+def async_result(func: Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, AsyncResult[T, TErr]]:
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs):
         async_res = func(*args, **kwargs)
@@ -243,7 +245,7 @@ def async_result[T, TErr](func: Callable[P, Coroutine[Any, Any, Result[T, TErr]]
     return wrapper
 
 class coroutine_result[TErr]():
-    def __call__[T](self, func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Coroutine[Any, Any, Result[T, TErr]]]:
+    def __call__(self, func: Callable[P, Coroutine[Any, Any, T]]) -> Callable[P, Coroutine[Any, Any, Result[T, TErr]]]:
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> Result[T, TErr]:
             try:
