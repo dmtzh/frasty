@@ -56,15 +56,20 @@ class FileWithVersion[TId, TItem, TItemDto](
             if file_content == "" and ver > 1:
                 return await get_existing_item(ver - 1)
             dto_item = self._serializer.deserialize(file_content)
-            item = self._dto_to_item(dto_item)
-            match item:
-                case Result(tag=ResultTag.OK, ok=ok):
-                    return ver, ok
-                case Result(tag=ResultTag.ERROR, error=err):
-                    raise ValueError(str(err))
+            item_or_res = self._dto_to_item(dto_item)
+            match item_or_res:
+                case Result():
+                    match item_or_res:
+                        case Result(tag=ResultTag.OK, ok=item):
+                            return ver, item
+                        case Result(tag=ResultTag.ERROR, error=err):
+                            raise ValueError(str(err))
+                        case _:
+                            raise ValueError("Item is invalid")
                 case None:
                     raise ValueError("Item is None")
-            return ver, item
+                case item:
+                    return ver, item
         
         try:
             max_ver = await self._get_max_version(id)
