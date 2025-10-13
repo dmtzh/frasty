@@ -5,6 +5,8 @@ from typing import Any
 from expression import Result, effect
 
 from shared.completedresult import CompletedResult, CompletedResultAdapter
+from shared.customtypes import RunIdValue
+from shared.utils.parse import parse_value
 
 class DefinitionVersion(int):
     def __new__(cls, value):
@@ -22,7 +24,8 @@ class DefinitionVersion(int):
 class TaskResultHistoryItem:
     result: CompletedResult
     timestamp: int
-    opt_definition_version: DefinitionVersion | None
+    definition_version: DefinitionVersion | None
+    prev_run_id: RunIdValue | None
 
 class TaskResultHistoryItemAdapter:
     @effect.result[TaskResultHistoryItem, str]()
@@ -36,14 +39,21 @@ class TaskResultHistoryItemAdapter:
         opt_raw_definition_version = raw_data.get("definition_version")
         match opt_raw_definition_version:
             case None:
-                opt_definition_version = None
+                definition_version = None
             case raw_definition_version:
-                opt_definition_version = yield from Result.Ok(DefinitionVersion(raw_definition_version)) if isinstance(raw_definition_version, int) else Result.Error("definition_version is invalid")
-        return TaskResultHistoryItem(result=result, timestamp=timestamp, opt_definition_version=opt_definition_version)
+                definition_version = yield from parse_value(raw_definition_version, "definition_version", DefinitionVersion.parse)
+        opt_raw_prev_run_id = raw_data.get("prev_run_id")
+        match opt_raw_prev_run_id:
+            case None:
+                prev_run_id = None
+            case raw_prev_run_id:
+                prev_run_id = yield from parse_value(raw_prev_run_id, "prev_run_id", RunIdValue.from_value_with_checksum)
+        return TaskResultHistoryItem(result=result, timestamp=timestamp, definition_version=definition_version, prev_run_id=prev_run_id)
         
     
     @staticmethod
     def to_dict(item: TaskResultHistoryItem) -> dict[str, Any]:
         result_dict = {"result": CompletedResultAdapter.to_dict(item.result)}
-        definition_version_dict = {"definition_version": item.opt_definition_version} if item.opt_definition_version is not None else {}
-        return result_dict | {"timestamp": item.timestamp} | definition_version_dict
+        definition_version_dict = {"definition_version": item.definition_version} if item.definition_version is not None else {}
+        prev_run_id_dict = {"prev_run_id": item.prev_run_id.to_value_with_checksum()} if item.prev_run_id is not None else {}
+        return result_dict | {"timestamp": item.timestamp} | definition_version_dict | prev_run_id_dict
