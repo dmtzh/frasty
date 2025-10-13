@@ -166,7 +166,7 @@ def test_peek_when_has_removed_items_then_prev_run_id_same_as_recent_removed_run
 
     assert actual_item is not None
     assert actual_item.prev_run_id is not None
-    assert actual_item.prev_run_id == queue.recent_removed_run_id
+    assert actual_item.prev_run_id == queue.recent_dequeued_run_id
 
 
 
@@ -210,7 +210,7 @@ def test_get_change_recent_removed_run_id_to_first_item_run_id(first_item: Compl
     expected_recent_removed_run_id = first_item.run_id
 
     queue.dequeue()
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
 
     assert actual_recent_removed_run_id == expected_recent_removed_run_id
 
@@ -219,7 +219,7 @@ def test_get_change_recent_removed_run_id_to_first_item_run_id(first_item: Compl
 def test_when_not_put_then_recent_removed_run_id_none():
     queue = TaskPendingResultsQueue()
 
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
 
     assert actual_recent_removed_run_id is None
 
@@ -240,8 +240,8 @@ def test_when_put_one_item_and_get_one_item_then_recent_removed_run_id_same_as_r
     queue.enqueue(first_item)
     queue.dequeue()
 
-    assert queue.recent_removed_run_id is not None
-    assert queue.recent_removed_run_id == queue.recent_run_id
+    assert queue.recent_dequeued_run_id is not None
+    assert queue.recent_dequeued_run_id == queue.recent_run_id
 
 
 
@@ -253,8 +253,8 @@ def test_when_put_two_items_and_get_two_items_then_recent_removed_run_id_same_as
     queue.dequeue()
     queue.dequeue()
 
-    assert queue.recent_removed_run_id is not None
-    assert queue.recent_removed_run_id == queue.recent_run_id
+    assert queue.recent_dequeued_run_id is not None
+    assert queue.recent_dequeued_run_id == queue.recent_run_id
 
 
 
@@ -263,7 +263,7 @@ def test_when_put_one_item_and_get_one_item_then_recent_removed_run_id_same_as_d
 
     queue.enqueue(first_item)
     actual_item = queue.dequeue()
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
 
     assert actual_item is not None
     expected_recent_removed_run_id = actual_item.data.run_id
@@ -288,7 +288,7 @@ def test_when_put_one_item_then_recent_removed_run_id_none(first_item: Completed
     queue = TaskPendingResultsQueue()
 
     queue.enqueue(first_item)
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
 
     assert actual_recent_removed_run_id is None
 
@@ -310,7 +310,7 @@ def test_when_put_two_items_and_get_one_item_then_recent_removed_run_id_not_same
     queue.enqueue(first_item)
     queue.enqueue(second_item)
     queue.dequeue()
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
     actual_recent_run_id = queue.recent_run_id
 
     assert actual_recent_removed_run_id is not None
@@ -324,7 +324,7 @@ def test_when_put_two_items_and_get_one_item_then_recent_removed_run_id_same_as_
     queue.enqueue(first_item)
     queue.enqueue(second_item)
     actual_item = queue.dequeue()
-    actual_recent_removed_run_id = queue.recent_removed_run_id
+    actual_recent_removed_run_id = queue.recent_dequeued_run_id
 
     assert actual_item is not None
     expected_recent_removed_run_id = actual_item.data.run_id
