@@ -23,7 +23,7 @@ class TaskPendingResultsQueueStore:
             JsonSerializer[dict[str, Any]](),
             "json",
             folder_path,
-            5
+            10
         )
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
