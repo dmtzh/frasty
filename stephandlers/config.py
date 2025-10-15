@@ -4,6 +4,7 @@ import os
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from getcontentfromjson.definition import GetContentFromJson
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
@@ -19,7 +20,8 @@ from sendtoviberchannel.definition import SendToViberChannel
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
-    SendToViberChannel
+    SendToViberChannel,
+    GetContentFromJson
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)

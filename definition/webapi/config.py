@@ -14,11 +14,13 @@ from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
 from stepdefinitions.viber import SendToViberChannel
+from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
-    FetchNewData, SendToViberChannel
+    FetchNewData, SendToViberChannel,
+    GetContentFromJson
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)

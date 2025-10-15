@@ -18,18 +18,20 @@ if (Test-Path $publish_folder) {
     Remove-Item -Path $publish_folder -Recurse
 }
 
-$publish_shared_folder = Join-Path -Path $publish_folder -ChildPath "shared"
-$publish_stepdefinitions_folder = Join-Path -Path $publish_folder -ChildPath "stepdefinitions"
-$publish_stephandlers_folder = Join-Path -Path $publish_folder -ChildPath "stephandlers"
-$publish_stephandlers_sendtoviberchannel_folder = Join-Path -Path $publish_stephandlers_folder -ChildPath "sendtoviberchannel"
-$publish_infrastructure_folder = Join-Path -Path $publish_folder -ChildPath "infrastructure"
+$publish_shared_folder = $publish_folder + "/shared"
+$publish_stepdefinitions_folder = $publish_folder + "/stepdefinitions"
+$publish_stephandlers_folder = $publish_folder + "/stephandlers"
+$publish_infrastructure_folder = $publish_folder + "/infrastructure"
 
 python $copy_folder_script ./definition/webapi $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./definition/shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./stepdefinitions $publish_stepdefinitions_folder -e $exclude_folders
-New-Item -Path $publish_stephandlers_sendtoviberchannel_folder -ItemType Directory
-Copy-Item -Path ./stephandlers/sendtoviberchannel/definition.py -Destination $publish_stephandlers_sendtoviberchannel_folder
+$step_handlers_with_definitions = @("sendtoviberchannel", "getcontentfromjson")
+foreach ($step_child_folder in $step_handlers_with_definitions) {
+    New-Item -Path $publish_stephandlers_folder/$step_child_folder -ItemType Directory
+    Copy-Item -Path ./stephandlers/$step_child_folder/definition.py -Destination $publish_stephandlers_folder/$step_child_folder
+}
 New-Item -Path $publish_infrastructure_folder -ItemType Directory
 Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitcompletestep.py -Destination $publish_infrastructure_folder

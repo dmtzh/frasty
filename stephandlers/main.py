@@ -21,7 +21,7 @@ from shared.validation import ValueInvalid
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml, GetLinksFromHtmlConfig, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
-from stepdefinitions.shared import HttpResponseData
+from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import app, rabbit_client, viber_api_config
@@ -29,11 +29,32 @@ import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
+from getcontentfromjson.definition import GetContentFromJson, GetContentFromJsonConfig
+import getcontentfromjson.handler as getcontentfromjsonhandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
 from sendtoviberchannel.definition import SendToViberChannel, SendToViberChannelConfig
 import sendtoviberchannel.handler as sendtoviberchannelhandler
+
+class RabbitGetContentFromJsonCommand(rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+    '''Input data for get content from json command'''
+
+@dataclass(frozen=True)
+class GetContentFromJsonCommandValidationError:
+    error: Any
+
+@rabbit_run_step.handler(rabbit_client, GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
+@make_async
+def handle_get_content_from_json_command(input):
+    def process_get_content_from_json(step_data: RabbitGetContentFromJsonCommand):
+        cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
+        res = getcontentfromjsonhandler.handle(cmd)
+        return res
+    
+    return input\
+        .map(process_get_content_from_json)\
+        .default_value(None)
 
 class SendToViberChannelCommand(rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
     '''Input data for send to viber channel command'''
