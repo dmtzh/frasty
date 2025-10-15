@@ -22,12 +22,12 @@ def apply_put_to_pending_results_queue(queue: TaskPendingResultsQueue | None, da
 @async_result
 @async_ex_to_error_result(AddTaskResultToHistoryHandlerStorageError.from_exception)
 @taskpendingresultsqueue_storage.with_storage
-def apply_get_next_from_pending_results_queue(queue: TaskPendingResultsQueue | None, run_id: RunIdValue):
+def apply_remove_from_pending_results_queue(queue: TaskPendingResultsQueue | None, run_id_to_remove: RunIdValue):
     queue = queue or TaskPendingResultsQueue()
     match queue.peek():
         case None:
             return None, queue
-        case pending_result if pending_result.data.run_id == run_id:
+        case pending_result if pending_result.data.run_id == run_id_to_remove:
             queue.dequeue()
             return queue.peek(), queue
         case _:
@@ -50,5 +50,5 @@ async def handle(data: CompletedTaskData) -> list[TaskResultHistoryItem]:
     while next_pending_result is not None:
         history_item = await apply_add_result_to_history(next_pending_result.data.task_id, next_pending_result.data.run_id, next_pending_result)
         added_history_items.append(history_item)
-        next_pending_result = await apply_get_next_from_pending_results_queue(next_pending_result.data.task_id, next_pending_result.data.run_id)
+        next_pending_result = await apply_remove_from_pending_results_queue(next_pending_result.data.task_id, next_pending_result.data.run_id)
     return added_history_items
