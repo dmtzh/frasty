@@ -220,3 +220,33 @@ class handler[TCfg, D, R]:
             _send_response_middleware(self._rabbit_client, _python_pickle.parse_message)
         )
         return self._rabbit_client.command_handler(self._step_name, decoder, middlewares)(func)
+
+class wrapped_handler[TCfg, D, R]:
+    @staticmethod
+    def _consume_input(input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R], run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict):
+        params = inspect.signature(input_adapter).parameters
+        include_metadata_param = len(params) > 4
+        if include_metadata_param:
+            params_array = [run_id, step_id, cfg, data, metadata]
+            return input_adapter(*params_array)
+        else:
+            params_array = [run_id, step_id, cfg, data]
+            return input_adapter(*params_array)
+
+    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R]):
+        def validate_input_adapter():
+            if not callable(input_adapter):
+               raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
+            return functools.partial(self._consume_input, input_adapter)
+        self._rabbit_client = rabbit_client
+        self._step_name = get_step_definition_name(step_definition_type)
+        self._data_validator = data_validator
+        self._input_adapter = validate_input_adapter()
+    
+    def __call__(self, func: Callable[[Result[R, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]):
+        decoder = _python_pickle.decoder(self._step_name, self._data_validator, self._input_adapter)
+        middlewares = (
+            error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
+            command_handler_logging_middleware(self._step_name, _python_pickle.create_logger)
+        )
+        return self._rabbit_client.command_handler(self._step_name, decoder, middlewares)(func)

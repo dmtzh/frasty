@@ -1,5 +1,5 @@
 # import asyncio
-from collections.abc import Generator
+from collections.abc import Callable, Coroutine, Generator
 from dataclasses import dataclass
 import functools
 from typing import Any
@@ -12,7 +12,8 @@ from infrastructure import rabbitrunstep as rabbit_run_step
 from infrastructure import rabbitruntask as rabbit_task
 from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import TaskIdValue
+from shared.customtypes import RunIdValue, StepIdValue, TaskIdValue
+from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result, make_async
 from shared.utils.parse import parse_from_dict
@@ -36,6 +37,22 @@ import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
 from sendtoviberchannel.definition import SendToViberChannel, SendToViberChannelConfig
 import sendtoviberchannel.handler as sendtoviberchannelhandler
+from wrapper import wrap_step_handler as step_handler_wrapper
+
+class rabbit_run_step_handler[TCfg, D]:
+    def __init__(self, step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], rabbit_run_step.RunStepData[TCfg, D]]):
+        self._step_definition_type = step_definition_type
+        self._data_validator = data_validator
+        self._input_adapter = input_adapter
+    
+    def __call__(self, handler: Callable[[rabbit_run_step.RunStepData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
+        @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
+        def rabbit_send_response_handler(run_step_data: rabbit_run_step.RunStepData[TCfg, D], result: CompletedResult):
+            return rabbit_complete_step.run(rabbit_client, run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
+        handler_wrapper = functools.partial(step_handler_wrapper(handler), rabbit_send_response_handler)
+        return rabbit_run_step.wrapped_handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
+
+# ------------------------------------------------------------------------------------------------------------
 
 class RabbitGetContentFromJsonCommand(rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     '''Input data for get content from json command'''
@@ -44,17 +61,14 @@ class RabbitGetContentFromJsonCommand(rabbit_run_step.RunStepData[GetContentFrom
 class GetContentFromJsonCommandValidationError:
     error: Any
 
-@rabbit_run_step.handler(rabbit_client, GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
+@rabbit_run_step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
 @make_async
-def handle_get_content_from_json_command(input):
-    def process_get_content_from_json(step_data: RabbitGetContentFromJsonCommand):
-        cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
-        res = getcontentfromjsonhandler.handle(cmd)
-        return res
-    
-    return input\
-        .map(process_get_content_from_json)\
-        .default_value(None)
+def handle_get_content_from_json_command(input: rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(input.config, input.data)
+    res = getcontentfromjsonhandler.handle(cmd)
+    return res
+
+# ------------------------------------------------------------------------------------------------------------
 
 class SendToViberChannelCommand(rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
     '''Input data for send to viber channel command'''
@@ -74,6 +88,8 @@ async def handle_send_to_viber_channel_command(input):
     return await AsyncResult.from_result(input)\
         .bind(process_send_to_viber_channel)\
         .get_or_else(lambda _: None)
+
+# ------------------------------------------------------------------------------------------------------------
 
 class RabbitGetLinksFromHtmlCommand(rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
@@ -95,6 +111,8 @@ def handle_get_links_from_html_command(input):
     get_links_from_html_res = get_links_from_html(input)
     return get_links_from_html_res.default_value(None)
 
+# ------------------------------------------------------------------------------------------------------------
+
 class RabbitGetContentFromHtmlCommand(rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
@@ -114,6 +132,8 @@ def handle_get_content_from_html_command(input):
     
     get_content_from_html_res = get_content_from_html(input)
     return get_content_from_html_res.default_value(None)
+
+# ------------------------------------------------------------------------------------------------------------
 
 class RabbitFilterHtmlResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
@@ -135,6 +155,8 @@ def handle_filter_html_response_command(input):
     filter_html_response_res = filter_html_response(input)
     return filter_html_response_res.default_value(None)
 
+# ------------------------------------------------------------------------------------------------------------
+
 class RabbitFilterSuccessResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
 
@@ -155,6 +177,8 @@ def handle_filter_success_response_command(input):
     filter_success_response_res = filter_success_response(input)
     return filter_success_response_res.default_value(None)
 
+# ------------------------------------------------------------------------------------------------------------
+
 class RabbitRequestUrlCommand(rabbit_run_step.RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
 
@@ -173,6 +197,8 @@ async def handle_request_url_command(input):
     
     process_request_url_res = await process_request_url(input)
     return process_request_url_res.default_value(None)
+
+# ------------------------------------------------------------------------------------------------------------
 
 class RabbitFetchNewDataCommand(rabbit_run_step.RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
@@ -196,6 +222,8 @@ async def handle_fetch_new_data_command(input):
                     return CompletedWith.Error(str(error))
                 case _:
                     return None
+
+# ------------------------------------------------------------------------------------------------------------
 
 @effect.result[tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict], str]()
 def definition_to_fetched_task(data: rabbit_definition_completed.DefinitionCompletedData) -> Generator[Any, Any, tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict]]:
