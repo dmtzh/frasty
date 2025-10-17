@@ -57,14 +57,10 @@ class rabbit_run_step_handler[TCfg, D]:
 class RabbitGetContentFromJsonCommand(rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     '''Input data for get content from json command'''
 
-@dataclass(frozen=True)
-class GetContentFromJsonCommandValidationError:
-    error: Any
-
 @rabbit_run_step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
 @make_async
-def handle_get_content_from_json_command(input: rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
-    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(input.config, input.data)
+def handle_get_content_from_json_command(step_data: rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
     res = getcontentfromjsonhandler.handle(cmd)
     return res
 
@@ -73,130 +69,68 @@ def handle_get_content_from_json_command(input: rabbit_run_step.RunStepData[GetC
 class SendToViberChannelCommand(rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
     '''Input data for send to viber channel command'''
 
-@dataclass(frozen=True)
-class SendToViberChannelCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
-async def handle_send_to_viber_channel_command(input):
-    @async_result
-    async def process_send_to_viber_channel(step_data: SendToViberChannelCommand):
-        cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
-        res = await sendtoviberchannelhandler.handle(viber_api_config, cmd)
-        return Result.Ok(res)
-    
-    return await AsyncResult.from_result(input)\
-        .bind(process_send_to_viber_channel)\
-        .get_or_else(lambda _: None)
+@rabbit_run_step_handler(SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
+def handle_send_to_viber_channel_command(step_data: rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
+    cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
+    return sendtoviberchannelhandler.handle(viber_api_config, cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
 class RabbitGetLinksFromHtmlCommand(rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@dataclass(frozen=True)
-class GetLinksFromHtmlCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
+@rabbit_run_step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
 @make_async
-def handle_get_links_from_html_command(input):
-    @effect.result[CompletedResult, GetLinksFromHtmlCommandValidationError]()
-    def get_links_from_html(input: Result[RabbitGetLinksFromHtmlCommand, Any]) -> Generator[Any, Any, CompletedResult]:
-        step_data = yield from input.map_error(GetLinksFromHtmlCommandValidationError)
-        cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
-        res = getlinksfromhtmlhandler.handle(cmd)
-        return res
-    
-    get_links_from_html_res = get_links_from_html(input)
-    return get_links_from_html_res.default_value(None)
+def handle_get_links_from_html_command(step_data: rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
+    cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
+    res = getlinksfromhtmlhandler.handle(cmd)
+    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
 class RabbitGetContentFromHtmlCommand(rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@dataclass(frozen=True)
-class GetContentFromHtmlCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
+@rabbit_run_step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
 @make_async
-def handle_get_content_from_html_command(input):
-    @effect.result[CompletedResult, GetContentFromHtmlCommandValidationError]()
-    def get_content_from_html(input: Result[RabbitGetContentFromHtmlCommand, Any]) -> Generator[Any, Any, CompletedResult]:
-        step_data = yield from input.map_error(GetContentFromHtmlCommandValidationError)
-        cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
-        res = getcontentfromhtmlhandler.handle(cmd)
-        return res
-    
-    get_content_from_html_res = get_content_from_html(input)
-    return get_content_from_html_res.default_value(None)
+def handle_get_content_from_html_command(step_data: rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
+    cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
+    res = getcontentfromhtmlhandler.handle(cmd)
+    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
 class RabbitFilterHtmlResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
 
-@dataclass(frozen=True)
-class FilterHtmlResponseCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
+@rabbit_run_step_handler(FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
 @make_async
-def handle_filter_html_response_command(input):
-    @effect.result[CompletedResult, FilterHtmlResponseCommandValidationError]()
-    def filter_html_response(input: Result[RabbitFilterHtmlResponseCommand, Any]) -> Generator[Any, Any, CompletedResult]:
-        step_data = yield from input.map_error(FilterHtmlResponseCommandValidationError)
-        cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
-        res = filterhtmlresponsehandler.handle(cmd)
-        return res
-    
-    filter_html_response_res = filter_html_response(input)
-    return filter_html_response_res.default_value(None)
+def handle_filter_html_response_command(step_data: rabbit_run_step.RunStepData[None, HttpResponseData]):
+    cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
+    res = filterhtmlresponsehandler.handle(cmd)
+    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
 class RabbitFilterSuccessResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
 
-@dataclass(frozen=True)
-class FilterSuccessResponseCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
+@rabbit_run_step_handler(FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
 @make_async
-def handle_filter_success_response_command(input):
-    @effect.result[CompletedResult, FilterSuccessResponseCommandValidationError]()
-    def filter_success_response(input: Result[RabbitFilterSuccessResponseCommand, Any]) -> Generator[Any, Any, CompletedResult]:
-        step_data = yield from input.map_error(FilterSuccessResponseCommandValidationError)
-        cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
-        res = filtersuccessresponsehandler.handle(cmd)
-        return res
-    
-    filter_success_response_res = filter_success_response(input)
-    return filter_success_response_res.default_value(None)
+def handle_filter_success_response_command(step_data: rabbit_run_step.RunStepData[None, HttpResponseData]):
+    cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
+    res = filtersuccessresponsehandler.handle(cmd)
+    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
 class RabbitRequestUrlCommand(rabbit_run_step.RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
 
-@dataclass(frozen=True)
-class RequestUrlCommandValidationError:
-    error: Any
-
-@rabbit_run_step.handler(rabbit_client, RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
-async def handle_request_url_command(input):
-    @coroutine_result[RequestUrlCommandValidationError]()
-    async def process_request_url(input: Result[RabbitRequestUrlCommand, Any]):
-        step_data = await AsyncResult.from_result(input).map_error(RequestUrlCommandValidationError)
-        cmd = requesturlhandler.RequestUrlCommand(step_data.data)
-        res = await requesturlhandler.handle(cmd)
-        return res
-    
-    process_request_url_res = await process_request_url(input)
-    return process_request_url_res.default_value(None)
+@rabbit_run_step_handler(RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
+def handle_request_url_command(step_data: rabbit_run_step.RunStepData[None, RequestUrlInputData]):
+    cmd = requesturlhandler.RequestUrlCommand(step_data.data)
+    return requesturlhandler.handle(cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
