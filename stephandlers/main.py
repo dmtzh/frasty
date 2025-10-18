@@ -50,7 +50,7 @@ class rabbit_run_step_handler[TCfg, D]:
         def rabbit_send_response_handler(run_step_data: rabbit_run_step.RunStepData[TCfg, D], result: CompletedResult):
             return rabbit_complete_step.run(rabbit_client, run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
         handler_wrapper = functools.partial(step_handler_wrapper(handler), rabbit_send_response_handler)
-        return rabbit_run_step.wrapped_handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
+        return rabbit_run_step.handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
 
 # ------------------------------------------------------------------------------------------------------------
 

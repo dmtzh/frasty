@@ -1,4 +1,4 @@
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import functools
 import inspect
@@ -10,17 +10,15 @@ from expression import Result
 from faststream.broker.message import StreamMessage
 from faststream.rabbit import RabbitMessage
 
-from infrastructure import rabbitcompletestep as rabbit_complete_step
 from shared.customtypes import Error, IdValue, StepIdValue, RunIdValue, TaskIdValue
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
-from shared.completedresult import CompletedWith, CompletedResult
-from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
+from shared.completedresult import CompletedResult
+from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
-from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.parse import parse_from_dict, parse_value
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
@@ -168,60 +166,7 @@ def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue,
     message = _python_pickle.data_to_message(run_id, step_id, definition, data, metadata)
     return rabbit_client.send_command(command, message)
 
-class _send_response_middleware:
-    def __init__(self, rabbit_client: RabbitMQClient, message_to_data: Callable[[StreamMessage[Any]], tuple[TaskIdValue, RunIdValue, StepIdValue, dict]]):
-        self._rabbit_client = rabbit_client
-        self._message_to_data = message_to_data
-
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def _send_response(self, run_id: RunIdValue, step_id: StepIdValue, metadata: dict, result: CompletedResult):
-        return rabbit_complete_step.run(self._rabbit_client, run_id, step_id, result, metadata)
-    
-    async def __call__(
-        self,
-        call_next: Callable[[Any], Awaitable[Any]],
-        msg: StreamMessage[Any],
-    ) -> Any:
-        res = await call_next(msg)
-        # should_send_reponse = isinstance(res, CompletedResult.__value__)
-        if type(res) is not CompletedWith.Data and type(res) is not CompletedWith.NoData and type(res) is not CompletedWith.Error:
-            return res
-        _, run_id, step_id, metadata = self._message_to_data(msg)
-        send_response_res = await self._send_response(run_id, step_id, metadata, res)
-        return send_response_res.map(lambda _: res)
-
 class handler[TCfg, D, R]:
-    @staticmethod
-    def _consume_input(input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R], run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict):
-        params = inspect.signature(input_adapter).parameters
-        include_metadata_param = len(params) > 4
-        if include_metadata_param:
-            params_array = [run_id, step_id, cfg, data, metadata]
-            return input_adapter(*params_array)
-        else:
-            params_array = [run_id, step_id, cfg, data]
-            return input_adapter(*params_array)
-
-    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R]):
-        def validate_input_adapter():
-            if not callable(input_adapter):
-               raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
-            return functools.partial(self._consume_input, input_adapter)
-        self._rabbit_client = rabbit_client
-        self._step_name = get_step_definition_name(step_definition_type)
-        self._data_validator = data_validator
-        self._input_adapter = validate_input_adapter()
-    
-    def __call__(self, func: Callable[P, Coroutine[Any, Any, CompletedResult | None]]):
-        decoder = _python_pickle.decoder(self._step_name, self._data_validator, self._input_adapter)
-        middlewares = (
-            error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
-            command_handler_logging_middleware(self._step_name, _python_pickle.create_logger),
-            _send_response_middleware(self._rabbit_client, _python_pickle.parse_message)
-        )
-        return self._rabbit_client.command_handler(self._step_name, decoder, middlewares)(func)
-
-class wrapped_handler[TCfg, D, R]:
     @staticmethod
     def _consume_input(input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R], run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict):
         params = inspect.signature(input_adapter).parameters
