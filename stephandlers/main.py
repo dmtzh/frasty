@@ -137,8 +137,8 @@ def handle_request_url_command(step_data: rabbit_run_step.RunStepData[None, Requ
 class RabbitFetchNewDataCommand(rabbit_run_step.RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
 
-@rabbit_run_step.handler(rabbit_client, FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
-async def handle_fetch_new_data_command(input):
+@rabbit_run_step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
+async def handle_fetch_new_data_command(step_data: rabbit_run_step.RunStepData[None, FetchNewDataInput]):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_task_handler(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
         metadata = {
@@ -146,16 +146,15 @@ async def handle_fetch_new_data_command(input):
             "parent_metadata": parent_metadata
         }
         return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "fetch_new_data_handler", metadata)
-    match input:
-        case Result(tag=ResultTag.OK, ok=data) if type(data) is RabbitFetchNewDataCommand:
-            fetch_new_data_cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=data.data.task_id, run_id=data.run_id, step_id=data.step_id)
-            run_task_handler = functools.partial(rabbit_run_task_handler, data.metadata)
-            fetch_new_data_res = await fetchnewdatahandler.handle(run_task_handler, fetch_new_data_cmd)
-            match fetch_new_data_res:
-                case Result(tag=ResultTag.ERROR, error=error):
-                    return CompletedWith.Error(str(error))
-                case _:
-                    return None
+    
+    run_task_handler = functools.partial(rabbit_run_task_handler, step_data.metadata)
+    cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
+    res = await fetchnewdatahandler.handle(run_task_handler, cmd)
+    match res:
+        case Result(tag=ResultTag.ERROR, error=error):
+            return CompletedWith.Error(str(error))
+        case _:
+            return None # we won't complete step now, we will complete only after receive and process new data from task
 
 # ------------------------------------------------------------------------------------------------------------
 
