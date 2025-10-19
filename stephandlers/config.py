@@ -11,8 +11,9 @@ from faststream.rabbit import RabbitBroker
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitrunstep as rabbit_run_step
+from infrastructure import rabbitruntask as rabbit_task
 from shared.completedresult import CompletedResult
-from shared.customtypes import RunIdValue, StepIdValue
+from shared.customtypes import RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
@@ -68,6 +69,10 @@ class run_step_handler[TCfg, D]:
             return rabbit_complete_step.run(rabbit_client, run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
         handler_wrapper = functools.partial(step_handler_wrapper(handler), rabbit_send_response_handler)
         return rabbit_run_step.handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
+
+def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
+    return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
 
 @asynccontextmanager
 async def lifespan():

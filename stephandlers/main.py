@@ -8,7 +8,6 @@ from expression import Result, effect
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure import rabbitruntask as rabbit_task
 from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import TaskIdValue
@@ -24,7 +23,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, rabbit_client, run_step_handler, viber_api_config
+from config import app, rabbit_client, run_step_handler, run_task, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -124,15 +123,14 @@ class RabbitFetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
 
 @run_step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
 async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDataInput]):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_task_handler(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
+    def run_task_handler_with_parent_metadata(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
         metadata = {
             "fetch_id": cmd.fetch_id.to_value_with_checksum(),
             "parent_metadata": parent_metadata
         }
-        return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "fetch_new_data_handler", metadata)
+        return run_task(cmd.task_id, cmd.run_id, "fetch new data step", metadata)
     
-    run_task_handler = functools.partial(rabbit_run_task_handler, step_data.metadata)
+    run_task_handler = functools.partial(run_task_handler_with_parent_metadata, step_data.metadata)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
     res = await fetchnewdatahandler.handle(run_task_handler, cmd)
     match res:
@@ -145,7 +143,7 @@ async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDat
 
 @effect.result[tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict], str]()
 def definition_to_fetched_task(data: rabbit_definition_completed.DefinitionCompletedData) -> Generator[Any, Any, tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict]]:
-    yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "fetch_new_data_handler" else None)
+    yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "fetch new data step" else None)
     fetch_id = yield from parse_from_dict(data.metadata, "fetch_id", FetchIdValue.from_value_with_checksum)
     task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
     result = yield from Result.Ok(data.result) if type(data.result) is CompletedWith.Data or type(data.result) is CompletedWith.NoData else Result.Error("result is invalid")
