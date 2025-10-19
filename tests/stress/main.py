@@ -8,6 +8,7 @@ from infrastructure import rabbitdefinitioncompleted as rabbit_definition_comple
 from infrastructure import rabbitruntask as rabbit_task
 from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.customtypes import RunIdValue, TaskIdValue
+from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.infrastructure.storage.inmemory import InMemory
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInRepository
 
@@ -105,9 +106,9 @@ if __name__ == "__main__":
         "num_of_tasks": num_of_tasks
     }
 
-    @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
+    @rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
     async def remove_completed_task(input):
-        data: rabbit_definition_completed.DefinitionCompletedData = input.ok
+        data: DefinitionCompletedData = input.ok
         num_of_completed_tasks = running_tasks_storage.remove(data.run_id)
         print_intermediate_info = num_of_completed_tasks % state["count_of_completed_tasks_for_intermediate_info"] == 0
         if print_intermediate_info:

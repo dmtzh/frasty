@@ -11,6 +11,7 @@ from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, RunIdValue
+from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.dtodefinition import DefinitionAdapter
@@ -75,7 +76,7 @@ class CompleteManualRunCommand:
     run_id: RunIdValue
     result: CompletedResult
 
-@rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
+@rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
 async def complete_manual_run_definition_with_result(input):
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
@@ -85,7 +86,7 @@ async def complete_manual_run_definition_with_result(input):
             raise NotFoundException()
         new_state = state.complete(result)
         return (result, new_state)
-    def from_definition_completed_data(data: rabbit_definition_completed.DefinitionCompletedData) -> Result[CompleteManualRunCommand, str]:
+    def from_definition_completed_data(data: DefinitionCompletedData) -> Result[CompleteManualRunCommand, str]:
         raw_from = data.metadata.get("from")
         if raw_from != "definition_webapi":
             return Result.Error("from is not definition_webapi")

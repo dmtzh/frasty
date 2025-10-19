@@ -1,5 +1,4 @@
 from collections.abc import Awaitable, Callable, Coroutine
-from dataclasses import dataclass
 import functools
 import inspect
 from logging import LoggerAdapter
@@ -146,13 +145,6 @@ class _python_pickle:
             task_id = task_id_res.default_value(TaskIdValue(None))
             run_id = run_id_res.default_value(RunIdValue(None))
             return logger_creator.create(task_id, run_id, StepIdValue(None))
-
-@dataclass(frozen=True)
-class DefinitionCompletedData:
-    run_id: RunIdValue
-    definition_id: DefinitionIdValue
-    result: CompletedResult
-    metadata: dict
 
 def publish(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict):
     message = _python_pickle.data_to_message(run_id, definition_id, result, metadata)
