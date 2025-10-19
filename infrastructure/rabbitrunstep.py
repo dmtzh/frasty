@@ -153,14 +153,6 @@ class _python_pickle:
         logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
         return logger_creator.create(task_id, run_id, step_id)
 
-@dataclass(frozen=True)
-class RunStepData[TCfg, D]:
-    run_id: RunIdValue
-    step_id: StepIdValue
-    config: TCfg
-    data: D
-    metadata: dict
-
 def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict):
     command = get_step_definition_name(type(definition))
     message = _python_pickle.data_to_message(run_id, step_id, definition, data, metadata)

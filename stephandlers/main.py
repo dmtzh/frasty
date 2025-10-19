@@ -15,6 +15,7 @@ from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
+from shared.runstepdata import RunStepData
 from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result, make_async
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
@@ -40,105 +41,105 @@ import sendtoviberchannel.handler as sendtoviberchannelhandler
 from wrapper import wrap_step_handler as step_handler_wrapper
 
 class rabbit_run_step_handler[TCfg, D]:
-    def __init__(self, step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], rabbit_run_step.RunStepData[TCfg, D]]):
+    def __init__(self, step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], RunStepData[TCfg, D]]):
         self._step_definition_type = step_definition_type
         self._data_validator = data_validator
         self._input_adapter = input_adapter
     
-    def __call__(self, handler: Callable[[rabbit_run_step.RunStepData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
+    def __call__(self, handler: Callable[[RunStepData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
         @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-        def rabbit_send_response_handler(run_step_data: rabbit_run_step.RunStepData[TCfg, D], result: CompletedResult):
+        def rabbit_send_response_handler(run_step_data: RunStepData[TCfg, D], result: CompletedResult):
             return rabbit_complete_step.run(rabbit_client, run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
         handler_wrapper = functools.partial(step_handler_wrapper(handler), rabbit_send_response_handler)
         return rabbit_run_step.handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetContentFromJsonCommand(rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+class RabbitGetContentFromJsonCommand(RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     '''Input data for get content from json command'''
 
 @rabbit_run_step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
 @make_async
-def handle_get_content_from_json_command(step_data: rabbit_run_step.RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+def handle_get_content_from_json_command(step_data: RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
     res = getcontentfromjsonhandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
-class SendToViberChannelCommand(rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
+class SendToViberChannelCommand(RunStepData[SendToViberChannelConfig, list]):
     '''Input data for send to viber channel command'''
 
 @rabbit_run_step_handler(SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
-def handle_send_to_viber_channel_command(step_data: rabbit_run_step.RunStepData[SendToViberChannelConfig, list]):
+def handle_send_to_viber_channel_command(step_data: RunStepData[SendToViberChannelConfig, list]):
     cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
     return sendtoviberchannelhandler.handle(viber_api_config, cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetLinksFromHtmlCommand(rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
+class RabbitGetLinksFromHtmlCommand(RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
 @rabbit_run_step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
 @make_async
-def handle_get_links_from_html_command(step_data: rabbit_run_step.RunStepData[GetLinksFromHtmlConfig, dict | list]):
+def handle_get_links_from_html_command(step_data: RunStepData[GetLinksFromHtmlConfig, dict | list]):
     cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
     res = getlinksfromhtmlhandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetContentFromHtmlCommand(rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
+class RabbitGetContentFromHtmlCommand(RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
 @rabbit_run_step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
 @make_async
-def handle_get_content_from_html_command(step_data: rabbit_run_step.RunStepData[GetContentFromHtmlConfig, dict | list]):
+def handle_get_content_from_html_command(step_data: RunStepData[GetContentFromHtmlConfig, dict | list]):
     cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
     res = getcontentfromhtmlhandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFilterHtmlResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
+class RabbitFilterHtmlResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
 
 @rabbit_run_step_handler(FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
 @make_async
-def handle_filter_html_response_command(step_data: rabbit_run_step.RunStepData[None, HttpResponseData]):
+def handle_filter_html_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
     res = filterhtmlresponsehandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFilterSuccessResponseCommand(rabbit_run_step.RunStepData[None, HttpResponseData]):
+class RabbitFilterSuccessResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
 
 @rabbit_run_step_handler(FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
 @make_async
-def handle_filter_success_response_command(step_data: rabbit_run_step.RunStepData[None, HttpResponseData]):
+def handle_filter_success_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
     res = filtersuccessresponsehandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitRequestUrlCommand(rabbit_run_step.RunStepData[None, RequestUrlInputData]):
+class RabbitRequestUrlCommand(RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
 
 @rabbit_run_step_handler(RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
-def handle_request_url_command(step_data: rabbit_run_step.RunStepData[None, RequestUrlInputData]):
+def handle_request_url_command(step_data: RunStepData[None, RequestUrlInputData]):
     cmd = requesturlhandler.RequestUrlCommand(step_data.data)
     return requesturlhandler.handle(cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFetchNewDataCommand(rabbit_run_step.RunStepData[None, FetchNewDataInput]):
+class RabbitFetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
 
 @rabbit_run_step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
-async def handle_fetch_new_data_command(step_data: rabbit_run_step.RunStepData[None, FetchNewDataInput]):
+async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDataInput]):
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def rabbit_run_task_handler(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
         metadata = {
