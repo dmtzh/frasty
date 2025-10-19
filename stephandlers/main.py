@@ -6,14 +6,12 @@ from typing import Any
 
 from expression import Result, effect
 
-from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import TaskIdValue
-from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.runstepdata import RunStepData
-from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result, make_async
+from shared.utils.asyncresult import AsyncResult, async_result, coroutine_result, make_async
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
@@ -23,7 +21,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, rabbit_client, run_step_handler, run_task, viber_api_config
+from config import app, complete_step, rabbit_client, run_step_handler, run_task, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -157,14 +155,13 @@ class FetchedTaskValidationError:
 
 @rabbit_definition_completed.subscriber(rabbit_client, rabbit_definition_completed.DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)
 async def handle_fetched_task(input):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_fetch_new_data_completed_handler(metadata: dict, fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        return rabbit_complete_step.run(rabbit_client, fetch_cmd.run_id, fetch_cmd.step_id, completed_result, metadata)
+    def fetch_new_data_completed_handler_with_metadata(metadata: dict, fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
+        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, metadata)
     @coroutine_result()
     async def process_fetched_task(input: Result[rabbit_definition_completed.DefinitionCompletedData, Any]):
         fetch_id, completed_data, parent_metadata = await AsyncResult.from_result(input.bind(definition_to_fetched_task))\
             .map_error(FetchedTaskValidationError)
-        fetch_new_data_completed_handler = functools.partial(rabbit_fetch_new_data_completed_handler, parent_metadata)
+        fetch_new_data_completed_handler = functools.partial(fetch_new_data_completed_handler_with_metadata, parent_metadata)
         completed_result = await async_result(fetchnewdatahandler.handle_completed_task)(fetch_new_data_completed_handler, fetch_id, completed_data)
         return completed_result
     

@@ -57,6 +57,10 @@ _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbit
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 rabbit_client = RabbitMQClient(_rabbit_broker)
 
+def complete_step(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_complete_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_complete_step.run)
+    return rabbit_run_complete_step(rabbit_client, run_id, step_id, completed_result, metadata)
+
 class run_step_handler[TCfg, D]:
     def __init__(self, step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], RunStepData[TCfg, D]]):
         self._step_definition_type = step_definition_type
@@ -64,9 +68,8 @@ class run_step_handler[TCfg, D]:
         self._input_adapter = input_adapter
     
     def __call__(self, handler: Callable[[RunStepData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
-        @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
         def rabbit_send_response_handler(run_step_data: RunStepData[TCfg, D], result: CompletedResult):
-            return rabbit_complete_step.run(rabbit_client, run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
+            return complete_step(run_step_data.run_id, run_step_data.step_id, result, run_step_data.metadata)
         handler_wrapper = functools.partial(step_handler_wrapper(handler), rabbit_send_response_handler)
         return rabbit_run_step.handler(rabbit_client, self._step_definition_type, self._data_validator, self._input_adapter)(handler_wrapper)
 
