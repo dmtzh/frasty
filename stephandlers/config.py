@@ -1,19 +1,22 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from contextlib import asynccontextmanager
 import functools
 import os
 from typing import Any
 
-from expression import Result
+from expression import Result, effect
 
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
+from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrunstep as rabbit_run_step
 from infrastructure import rabbitruntask as rabbit_task
+from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult
 from shared.customtypes import RunIdValue, StepIdValue, TaskIdValue
+from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
@@ -21,11 +24,13 @@ from shared.infrastructure.rabbitmq.config import RabbitMQConfig
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.runstepdata import RunStepData
 from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
 
+from fetchnewdata.fetchidvalue import FetchIdValue
 from getcontentfromjson.definition import GetContentFromJson
 from sendtoviberchannel.config import ViberApiConfig
 from sendtoviberchannel.definition import SendToViberChannel
@@ -76,6 +81,31 @@ class run_step_handler[TCfg, D]:
 def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
+
+class data_fetched_handler[T]:
+    def __init__(self, input_adapter: Callable[[FetchIdValue, TaskIdValue, RunIdValue, CompletedResult, dict], T]):
+        self._input_adapter = input_adapter
+
+    @effect.result[T, str]()
+    def _definition_to_fetched_data(self, data: DefinitionCompletedData) -> Generator[Any, Any, T]:
+        yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "fetch new data step" else None)
+        fetch_id = yield from parse_from_dict(data.metadata, "fetch_id", FetchIdValue.from_value_with_checksum)
+        task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
+        metadata = yield from parse_from_dict(data.metadata, "parent_metadata", lambda pm: pm if type(pm) is dict else None)
+        return self._input_adapter(fetch_id, task_id, data.run_id, data.result, metadata)
+
+    def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
+        async def err_to_none(_):
+            return None
+        async def wrapper(input_res: Result[DefinitionCompletedData, Any]) -> Result | None:
+            res = await input_res\
+                .bind(self._definition_to_fetched_data)\
+                .map(handler)\
+                .map_error(err_to_none)\
+                .merge()
+            return res
+            
+        return rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)(wrapper)
 
 @asynccontextmanager
 async def lifespan():

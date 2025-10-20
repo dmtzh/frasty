@@ -1,19 +1,13 @@
 # import asyncio
-from collections.abc import Generator
 from dataclasses import dataclass
 import functools
-from typing import Any
 
-from expression import Result, effect
+from expression import Result
 
-from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import TaskIdValue
-from shared.definitioncompleteddata import DefinitionCompletedData
+from shared.customtypes import TaskIdValue, RunIdValue
 from shared.runstepdata import RunStepData
-from shared.utils.asyncresult import AsyncResult, async_result, coroutine_result, make_async
-from shared.utils.parse import parse_from_dict
+from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml, GetLinksFromHtmlConfig, GetLinksFromHtml
@@ -22,7 +16,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, complete_step, rabbit_client, run_step_handler, run_task, viber_api_config
+from config import app, complete_step, data_fetched_handler, run_step_handler, run_task, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -140,40 +134,27 @@ async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDat
 
 # ------------------------------------------------------------------------------------------------------------
 
-@effect.result[tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict], str]()
-def definition_to_fetched_task(data: DefinitionCompletedData) -> Generator[Any, Any, tuple[FetchIdValue, fetchnewdatahandler.CompletedTaskData, dict]]:
-    yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "fetch new data step" else None)
-    fetch_id = yield from parse_from_dict(data.metadata, "fetch_id", FetchIdValue.from_value_with_checksum)
-    task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
-    result = yield from Result.Ok(data.result) if type(data.result) is CompletedWith.Data or type(data.result) is CompletedWith.NoData else Result.Error("result is invalid")
-    completed_data = fetchnewdatahandler.CompletedTaskData(task_id, data.run_id, result)
-    parent_metadata = yield from parse_from_dict(data.metadata, "parent_metadata", lambda pm: pm if type(pm) is dict else None)
-    return fetch_id, completed_data, parent_metadata
-
 @dataclass(frozen=True)
-class FetchedTaskValidationError:
-    error: Any
+class FetchedData:
+    fetch_id: FetchIdValue
+    task_id: TaskIdValue
+    run_id: RunIdValue
+    result: CompletedResult
+    metadata: dict
 
-@rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)
-async def handle_fetched_task(input):
-    def fetch_new_data_completed_handler_with_metadata(metadata: dict, fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, metadata)
-    @coroutine_result()
-    async def process_fetched_task(input: Result[DefinitionCompletedData, Any]):
-        fetch_id, completed_data, parent_metadata = await AsyncResult.from_result(input.bind(definition_to_fetched_task))\
-            .map_error(FetchedTaskValidationError)
-        fetch_new_data_completed_handler = functools.partial(fetch_new_data_completed_handler_with_metadata, parent_metadata)
-        completed_result = await async_result(fetchnewdatahandler.handle_completed_task)(fetch_new_data_completed_handler, fetch_id, completed_data)
-        return completed_result
-    
-    process_fetched_task_res = await process_fetched_task(input)
-    match process_fetched_task_res:
-        case Result(tag=ResultTag.ERROR, error=FetchedTaskValidationError()):
-            return None
+@data_fetched_handler(FetchedData)
+async def handle_fetched_data(fetched_data: FetchedData):
+    if isinstance(fetched_data.result, CompletedWith.Error):
+        return None
+    def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
+        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
+    completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
+    handle_completed_task_res = await fetchnewdatahandler.handle_completed_task(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
+    match handle_completed_task_res:
         case Result(tag=ResultTag.ERROR, error=ValueInvalid()):
             return None
         case _:
-            return process_fetched_task_res
+            return handle_completed_task_res
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())
