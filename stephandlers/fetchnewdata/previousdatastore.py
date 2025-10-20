@@ -4,7 +4,7 @@ from typing import Any
 from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
+from shared.infrastructure.storage.filewithversionlimited import FileWithVersionLimited
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 
 import config
@@ -12,13 +12,14 @@ import config
 class PreviousDataStore:
     def __init__(self):
         folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "FetchNewDataStorage")
-        file_repo_with_ver = FileWithVersion[TaskIdValue, CompletedWith.Data | CompletedWith.NoData, dict[str, Any]](
+        file_repo_with_ver = FileWithVersionLimited[TaskIdValue, CompletedWith.Data | CompletedWith.NoData, dict[str, Any]](
             "PreviousData",
             CompletedResultAdapter.to_dict,
             CompletedResultAdapter.from_dict,
             JsonSerializer[dict[str, str]](),
             "json",
-            folder_path
+            folder_path,
+            5
         )
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
