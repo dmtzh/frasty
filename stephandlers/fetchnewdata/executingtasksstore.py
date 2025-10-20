@@ -7,7 +7,7 @@ from expression import Result, effect
 
 from shared.customtypes import TaskIdValue, RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
+from shared.infrastructure.storage.filewithversionlimited import FileWithVersionLimited
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.utils.parse import parse_from_dict, parse_int
 
@@ -55,13 +55,14 @@ class ExecutingTasksDataAdapter:
 class ExecutingTasksStore:
     def __init__(self):
         folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "FetchNewDataStorage")
-        file_repo_with_ver = FileWithVersion[str, ItemType, DtoItemType](
+        file_repo_with_ver = FileWithVersionLimited[str, ItemType, DtoItemType](
             "",
             ExecutingTasksDataAdapter.to_dict,
             ExecutingTasksDataAdapter.from_dict,
             JsonSerializer[DtoItemType](),
             "json",
-            folder_path
+            folder_path,
+            10
         )
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
