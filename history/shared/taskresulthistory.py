@@ -47,7 +47,7 @@ class TaskResultHistoryItemAdapter:
             case None:
                 prev_run_id = None
             case raw_prev_run_id:
-                prev_run_id = yield from parse_value(raw_prev_run_id, "prev_run_id", RunIdValue.from_value_with_checksum)
+                prev_run_id = yield from parse_value(raw_prev_run_id, "prev_run_id", RunIdValue.from_value)
         return TaskResultHistoryItem(result=result, timestamp=timestamp, definition_version=definition_version, prev_run_id=prev_run_id)
         
     
@@ -55,5 +55,5 @@ class TaskResultHistoryItemAdapter:
     def to_dict(item: TaskResultHistoryItem) -> dict[str, Any]:
         result_dict = {"result": CompletedResultAdapter.to_dict(item.result)}
         definition_version_dict = {"definition_version": item.definition_version} if item.definition_version is not None else {}
-        prev_run_id_dict = {"prev_run_id": item.prev_run_id.to_value_with_checksum()} if item.prev_run_id is not None else {}
+        prev_run_id_dict = {"prev_run_id": item.prev_run_id} if item.prev_run_id is not None else {}
         return result_dict | {"timestamp": item.timestamp} | definition_version_dict | prev_run_id_dict
