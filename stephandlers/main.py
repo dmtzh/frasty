@@ -16,7 +16,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, complete_step, data_fetched_handler, run_step_handler, run_task, viber_api_config
+from config import app, complete_step, data_fetched_handler, fetch_data, run_step_handler, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -116,21 +116,14 @@ class RabbitFetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
 
 @run_step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
 async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDataInput]):
-    def run_task_handler_with_parent_metadata(parent_metadata: dict, cmd: fetchnewdatahandler.RunTaskCommand):
-        metadata = {
-            "fetch_id": cmd.fetch_id.to_value_with_checksum(),
-            "parent_metadata": parent_metadata
-        }
-        return run_task(cmd.task_id, cmd.run_id, "fetch new data step", metadata)
-    
-    run_task_handler = functools.partial(run_task_handler_with_parent_metadata, step_data.metadata)
+    fetch_data_handler = functools.partial(fetch_data, step_data)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
-    res = await fetchnewdatahandler.handle(run_task_handler, cmd)
+    res = await fetchnewdatahandler.handle(fetch_data_handler, cmd)
     match res:
         case Result(tag=ResultTag.ERROR, error=error):
             return CompletedWith.Error(str(error))
         case _:
-            return None # we won't complete step now, we will complete only after receive and process new data from task
+            return None # we won't complete step now, we will complete only after receive and process data
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -149,12 +142,12 @@ async def handle_fetched_data(fetched_data: FetchedData):
     def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
         return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
     completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
-    handle_completed_task_res = await fetchnewdatahandler.handle_completed_task(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
-    match handle_completed_task_res:
+    handle_fetched_data_res = await fetchnewdatahandler.handle_fetched_data(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
+    match handle_fetched_data_res:
         case Result(tag=ResultTag.ERROR, error=ValueInvalid()):
             return None
         case _:
-            return handle_completed_task_res
+            return handle_fetched_data_res
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())

@@ -28,7 +28,7 @@ from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
-from stepdefinitions.task import FetchNewData
+from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from fetchnewdata.fetchidvalue import FetchIdValue
 from getcontentfromjson.definition import GetContentFromJson
@@ -81,6 +81,13 @@ class run_step_handler[TCfg, D]:
 def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
+
+def fetch_data(step_data: RunStepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
+    metadata = {
+        "fetch_id": fetch_id.to_value_with_checksum(),
+        "parent_metadata": step_data.metadata
+    }
+    return run_task(step_data.data.task_id, step_data.run_id, "fetch new data step", metadata)
 
 class data_fetched_handler[T]:
     def __init__(self, input_adapter: Callable[[FetchIdValue, TaskIdValue, RunIdValue, CompletedResult, dict], T]):

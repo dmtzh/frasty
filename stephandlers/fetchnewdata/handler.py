@@ -25,13 +25,7 @@ class FetchNewDataCommand:
     step_id: StepIdValue
 
 @dataclass(frozen=True)
-class RunTaskCommand:
-    task_id: TaskIdValue
-    run_id: RunIdValue
-    fetch_id: FetchIdValue
-
-@dataclass(frozen=True)
-class RunTaskError:
+class FetchDataError:
     fetch_id: FetchIdValue
     error: Any
 
@@ -55,36 +49,35 @@ async def get_recent_history_item(task_id: TaskIdValue):
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
-def apply_add_running(cmd: RunTaskCommand):
+def apply_add_running(fetch_id: FetchIdValue, fetch_task_id: TaskIdValue, run_id: RunIdValue):
     timestamp = int(datetime.datetime.now().timestamp())
-    data = ExecutingTaskData(cmd.task_id, cmd.run_id, timestamp)
-    return executing_tasks_storage.add(cmd.fetch_id, data)
+    data = ExecutingTaskData(fetch_task_id, run_id, timestamp)
+    return executing_tasks_storage.add(fetch_id, data)
 
 @coroutine_result()
-async def run_task_workflow(run_task_handler: Callable[[RunTaskCommand], Coroutine[Any, Any, Result]], fetch_cmd: FetchNewDataCommand):
+async def fetch_data_workflow(fetch_data_handler: Callable[[FetchIdValue], Coroutine[Any, Any, Result]], fetch_cmd: FetchNewDataCommand):
     fetch_id = await AsyncResult.from_result(step_id_to_fetch_id(fetch_cmd.step_id))
-    run_cmd = RunTaskCommand(fetch_cmd.fetch_task_id, fetch_cmd.run_id, fetch_id)
-    await apply_add_running(run_cmd)
-    await async_result(run_task_handler)(run_cmd).map_error(lambda error: RunTaskError(fetch_id, error))
+    await apply_add_running(fetch_id, fetch_cmd.fetch_task_id, fetch_cmd.run_id)
+    await async_result(fetch_data_handler)(fetch_id).map_error(lambda error: FetchDataError(fetch_id, error))
     return fetch_id
 
 async def clean_up_failed_command(error):
     match error:
-        case RunTaskError(fetch_id=fetch_id, error=_):
+        case FetchDataError(fetch_id=fetch_id, error=_):
             await async_catch_ex(executing_tasks_storage.remove)(fetch_id)
 
 def map_command_errors(error):
     match error:
-        case RunTaskError(fetch_id=_, error=run_task_err):
-            return run_task_err
+        case FetchDataError(fetch_id=_, error=fetch_data_err):
+            return fetch_data_err
         case _:
             return error
 
-async def handle(run_task_handler: Callable[[RunTaskCommand], Coroutine[Any, Any, Result]], cmd: FetchNewDataCommand):
-    run_task_res = await run_task_workflow(run_task_handler, cmd)
-    if run_task_res.is_error():
-        await clean_up_failed_command(run_task_res.error)
-    return run_task_res.map_error(map_command_errors)
+async def handle(fetch_data_handler: Callable[[FetchIdValue], Coroutine[Any, Any, Result]], cmd: FetchNewDataCommand):
+    fetch_data_res = await fetch_data_workflow(fetch_data_handler, cmd)
+    if fetch_data_res.is_error():
+        await clean_up_failed_command(fetch_data_res.error)
+    return fetch_data_res.map_error(map_command_errors)
 
 class CannotValidateError(Error):
     '''Completed data cannot be validated due to unexpected error'''
@@ -195,7 +188,7 @@ async def perform_fetch_new_data_completed_teardown(fetch_id: FetchIdValue, comp
         case CompletedWith.NoData() | CompletedWith.Data():
             await async_catch_ex(previous_data_storage.set)(completed_data.task_id, completed_data.result)
 
-async def handle_completed_task(fetch_new_data_completed_handler: Callable[[FetchNewDataCommand, CompletedResult], Coroutine[Any, Any, Result]], fetch_id: FetchIdValue, completed_data: CompletedTaskData) -> Result[CompletedResult, ValueInvalid | Error]:
+async def handle_fetched_data(fetch_new_data_completed_handler: Callable[[FetchNewDataCommand, CompletedResult], Coroutine[Any, Any, Result]], fetch_id: FetchIdValue, completed_data: CompletedTaskData) -> Result[CompletedResult, ValueInvalid | Error]:
     new_data_res = await get_new_data_workflow(fetch_id, completed_data)
     
     match new_data_res:
