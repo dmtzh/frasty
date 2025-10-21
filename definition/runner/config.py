@@ -1,4 +1,4 @@
-from collections.abc import Coroutine
+from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
 import os
 from typing import Any
@@ -7,8 +7,9 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from infrastructure import rabbitrundefinition as rabbit_run_definition
 from infrastructure import rabbitrunstep as rabbit_step
-from shared.customtypes import RunIdValue, StepIdValue
+from shared.customtypes import DefinitionIdValue, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
@@ -42,6 +43,20 @@ _log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(mess
 _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 rabbit_client = RabbitMQClient(_rabbit_broker)
+
+class run_definition_handler[T]:
+    def __init__(self, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], T]):
+        self._input_adapter = input_adapter
+    
+    def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
+        async def err_to_none(_):
+            return None
+        async def run_definition_handler_wrapper(input_res: Result[T, Any]) -> Result | None:
+            return await input_res\
+                .map(handler)\
+                .map_error(err_to_none)\
+                .merge()
+        return rabbit_run_definition.handler(rabbit_client, self._input_adapter)(run_definition_handler_wrapper)
 
 def run_step(run_id: RunIdValue, step_id: StepIdValue, definition: StepDefinition, data: Any, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_step.run)

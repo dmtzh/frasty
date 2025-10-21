@@ -122,12 +122,6 @@ class _python_pickle:
         run_id = run_id_res.default_value(RunIdValue(None))
         return logger_creator.create(task_id, run_id, StepIdValue(None))
 
-@dataclass(frozen=True)
-class RunDefinitionData:
-    run_id: RunIdValue
-    definition_id: DefinitionIdValue
-    metadata: dict
-
 def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):
     command = RUN_DEFINITION_COMMAND
     message = _python_pickle.data_to_message(run_id, definition_id, metadata)

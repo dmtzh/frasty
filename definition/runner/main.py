@@ -7,9 +7,8 @@ from expression import Result
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure import rabbitrundefinition as rabbit_run_definition
 from shared.completedresult import CompletedWith
-from shared.customtypes import Error, DefinitionIdValue
+from shared.customtypes import Error, DefinitionIdValue, RunIdValue
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.infrastructure.storage.repository import NotFoundError
@@ -17,46 +16,35 @@ from shared.utils.asyncresult import async_ex_to_error_result, AsyncResult, coro
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import app, rabbit_client, run_step
+from config import app, run_definition_handler, rabbit_client, run_step
 import completestephandler
 import rundefinitionhandler
 
 @dataclass(frozen=True)
-class RunDefinitionCommandValidationError:
-    error: Any
-@dataclass(frozen=True)
-class RunDefinitionHandlerError:
-    data: rabbit_run_definition.RunDefinitionData
-    error: Any
+class RunDefinitionData:
+    run_id: RunIdValue
+    definition_id: DefinitionIdValue
+    metadata: dict
 
-@rabbit_run_definition.handler(rabbit_client, rabbit_run_definition.RunDefinitionData)
-async def handle_run_definition_command(input):
-    def run_first_step_handler_with_data(data: rabbit_run_definition.RunDefinitionData, evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
+@run_definition_handler(RunDefinitionData)
+async def handle_run_definition_command(data: RunDefinitionData):
+    def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
         definition_dict = {"definition_id": data.definition_id.to_value_with_checksum(), "definition_version": str(definition_version)}
         metadata = data.metadata | definition_dict
         return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
-    @coroutine_result[RunDefinitionCommandValidationError | RunDefinitionHandlerError]()
-    async def run_definition(input: Result[rabbit_run_definition.RunDefinitionData, Any]):
-        data = await AsyncResult.from_result(input).map_error(RunDefinitionCommandValidationError)
-        run_first_step_handler = functools.partial(run_first_step_handler_with_data, data)
-        cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
-        res = await async_result(rundefinitionhandler.handle)(run_first_step_handler, cmd)\
-            .map_error(lambda err: RunDefinitionHandlerError(data, err))
-        return res
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    async def rabbit_rundefinition_failure_handler(data: rabbit_run_definition.RunDefinitionData, error):
+    async def rabbit_rundefinition_failure_handler(error):
         result = CompletedWith.Error(str(error))
         res = await rabbit_definition_completed.publish(rabbit_client, data.run_id, data.definition_id, result, data.metadata)
         return res.map(lambda _: result)
-
-    run_definition_res = await run_definition(input)
+    
+    cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
+    run_definition_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
     match run_definition_res:
-        case Result(tag=ResultTag.ERROR, error=RunDefinitionCommandValidationError()):
+        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
             return None
-        case Result(tag=ResultTag.ERROR, error=RunDefinitionHandlerError(_, NotFoundError())):
-            return None
-        case Result(tag=ResultTag.ERROR, error=RunDefinitionHandlerError(data, error)):
-            return await rabbit_rundefinition_failure_handler(data, error)
+        case Result(tag=ResultTag.ERROR, error=error):
+            return await rabbit_rundefinition_failure_handler(error)
         case _:
             return run_definition_res
 
