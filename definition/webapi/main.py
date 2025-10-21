@@ -1,11 +1,10 @@
 from dataclasses import dataclass
+
 from expression import Result
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from config import lifespan, rabbit_client
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure import rabbitrunstep as rabbit_step
 from infrastructure.rabbitmiddlewares import RequeueChance
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
@@ -15,12 +14,12 @@ from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.dtodefinition import DefinitionAdapter
-from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 import adddefinitionapihandler
+from config import lifespan, rabbit_client, run_step
 import manualrunapihandler
 
 app = FastAPI(lifespan=lifespan)
@@ -50,11 +49,10 @@ async def get_definition(id: str):
 
 @app.post("/definition/manual-run", status_code=201)
 async def manual_run(request: manualrunapihandler.ManualRunRequest):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_first_step_handler(manual_run_id: RunIdValue, manual_definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning):
+    def run_first_step_handler(manual_run_id: RunIdValue, manual_definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning):
         metadata = {"from": "definition_webapi", "definition_id": manual_definition_id.to_value_with_checksum()}
-        return rabbit_step.run(rabbit_client, manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
-    return await manualrunapihandler.handle(rabbit_run_first_step_handler, request)
+        return run_step(manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+    return await manualrunapihandler.handle(run_first_step_handler, request)
 
 @app.get("/definition/manual-run/{id}")
 async def get_status(id: str):
