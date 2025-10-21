@@ -8,6 +8,7 @@ from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from infrastructure import rabbitcompletestep as rabbit_complete_step
+from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrundefinition as rabbit_run_definition
 from infrastructure import rabbitrunstep as rabbit_step
 from shared.completedresult import CompletedResult
@@ -77,6 +78,10 @@ class complete_step_handler[T]:
                 .map_error(err_to_none)\
                 .merge()
         return rabbit_complete_step.handler(rabbit_client, self._input_adapter)(complete_step_handler_wrapper)
+
+def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_publish_definition_completed = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition_completed.publish)
+    return rabbit_publish_definition_completed(rabbit_client, run_id, definition_id, result, metadata)
 
 @asynccontextmanager
 async def lifespan():
