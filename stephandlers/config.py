@@ -5,7 +5,6 @@ import os
 from typing import Any
 
 from expression import Result, effect
-
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
@@ -66,7 +65,7 @@ def complete_step(run_id: RunIdValue, step_id: StepIdValue, completed_result: Co
     rabbit_run_complete_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_complete_step.run)
     return rabbit_run_complete_step(rabbit_client, run_id, step_id, completed_result, metadata)
 
-class run_step_handler[TCfg, D]:
+class step_handler[TCfg, D]:
     def __init__(self, step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], RunStepData[TCfg, D]]):
         self._step_definition_type = step_definition_type
         self._data_validator = data_validator
@@ -104,15 +103,14 @@ class data_fetched_handler[T]:
     def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
         async def err_to_none(_):
             return None
-        async def wrapper(input_res: Result[DefinitionCompletedData, Any]) -> Result | None:
+        async def data_fetched_handler_wrapper(input_res: Result[DefinitionCompletedData, Any]) -> Result | None:
             res = await input_res\
                 .bind(self._definition_to_fetched_data)\
                 .map(handler)\
                 .map_error(err_to_none)\
                 .merge()
             return res
-            
-        return rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)(wrapper)
+        return rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name="fetchnewdata_completed_tasks", requeue_chance=RequeueChance.HIGH)(data_fetched_handler_wrapper)
 
 @asynccontextmanager
 async def lifespan():

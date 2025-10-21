@@ -16,7 +16,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, complete_step, data_fetched_handler, fetch_data, run_step_handler, viber_api_config
+from config import app, complete_step, data_fetched_handler, fetch_data, step_handler, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 from fetchnewdata.fetchidvalue import FetchIdValue
@@ -34,7 +34,7 @@ import sendtoviberchannel.handler as sendtoviberchannelhandler
 class RabbitGetContentFromJsonCommand(RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     '''Input data for get content from json command'''
 
-@run_step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
+@step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
 @make_async
 def handle_get_content_from_json_command(step_data: RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
@@ -46,7 +46,7 @@ def handle_get_content_from_json_command(step_data: RunStepData[GetContentFromJs
 class SendToViberChannelCommand(RunStepData[SendToViberChannelConfig, list]):
     '''Input data for send to viber channel command'''
 
-@run_step_handler(SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
+@step_handler(SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
 def handle_send_to_viber_channel_command(step_data: RunStepData[SendToViberChannelConfig, list]):
     cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
     return sendtoviberchannelhandler.handle(viber_api_config, cmd)
@@ -56,7 +56,7 @@ def handle_send_to_viber_channel_command(step_data: RunStepData[SendToViberChann
 class RabbitGetLinksFromHtmlCommand(RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@run_step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
+@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
 @make_async
 def handle_get_links_from_html_command(step_data: RunStepData[GetLinksFromHtmlConfig, dict | list]):
     cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
@@ -68,7 +68,7 @@ def handle_get_links_from_html_command(step_data: RunStepData[GetLinksFromHtmlCo
 class RabbitGetContentFromHtmlCommand(RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@run_step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
+@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
 @make_async
 def handle_get_content_from_html_command(step_data: RunStepData[GetContentFromHtmlConfig, dict | list]):
     cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
@@ -80,7 +80,7 @@ def handle_get_content_from_html_command(step_data: RunStepData[GetContentFromHt
 class RabbitFilterHtmlResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
 
-@run_step_handler(FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
+@step_handler(FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
 @make_async
 def handle_filter_html_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
@@ -92,7 +92,7 @@ def handle_filter_html_response_command(step_data: RunStepData[None, HttpRespons
 class RabbitFilterSuccessResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
 
-@run_step_handler(FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
+@step_handler(FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
 @make_async
 def handle_filter_success_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
@@ -104,7 +104,7 @@ def handle_filter_success_response_command(step_data: RunStepData[None, HttpResp
 class RabbitRequestUrlCommand(RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
 
-@run_step_handler(RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
+@step_handler(RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
 def handle_request_url_command(step_data: RunStepData[None, RequestUrlInputData]):
     cmd = requesturlhandler.RequestUrlCommand(step_data.data)
     return requesturlhandler.handle(cmd)
@@ -114,7 +114,7 @@ def handle_request_url_command(step_data: RunStepData[None, RequestUrlInputData]
 class RabbitFetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
 
-@run_step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
+@step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
 async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDataInput]):
     fetch_data_handler = functools.partial(fetch_data, step_data)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
@@ -124,8 +124,6 @@ async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDat
             return CompletedWith.Error(str(error))
         case _:
             return None # we won't complete step now, we will complete only after receive and process data
-
-# ------------------------------------------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class FetchedData:
@@ -148,6 +146,8 @@ async def handle_fetched_data(fetched_data: FetchedData):
             return None
         case _:
             return handle_fetched_data_res
+
+# ------------------------------------------------------------------------------------------------------------
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())
