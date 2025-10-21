@@ -1,5 +1,4 @@
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
 import pickle

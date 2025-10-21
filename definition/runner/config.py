@@ -7,8 +7,10 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitrundefinition as rabbit_run_definition
 from infrastructure import rabbitrunstep as rabbit_step
+from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
@@ -61,6 +63,20 @@ class run_definition_handler[T]:
 def run_step(run_id: RunIdValue, step_id: StepIdValue, definition: StepDefinition, data: Any, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_step.run)
     return rabbit_run_step(rabbit_client, run_id, step_id, definition, data, metadata)
+
+class complete_step_handler[T]:
+    def __init__(self, input_adapter: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], T]):
+        self._input_adapter = input_adapter
+    
+    def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
+        async def err_to_none(_):
+            return None
+        async def complete_step_handler_wrapper(input_res: Result[T, Any]) -> Result | None:
+            return await input_res\
+                .map(handler)\
+                .map_error(err_to_none)\
+                .merge()
+        return rabbit_complete_step.handler(rabbit_client, self._input_adapter)(complete_step_handler_wrapper)
 
 @asynccontextmanager
 async def lifespan():

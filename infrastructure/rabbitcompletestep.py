@@ -1,5 +1,4 @@
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
 import functools
 from logging import LoggerAdapter
 import pickle
@@ -133,13 +132,6 @@ class _python_pickle:
         run_id = run_id_res.default_value(RunIdValue(None))
         step_id = step_id_res.default_value(StepIdValue(None))
         return logger_creator.create(task_id, run_id, step_id)
-
-@dataclass(frozen=True)
-class CompleteStepData:
-    run_id: RunIdValue
-    step_id: StepIdValue
-    result: CompletedResult
-    metadata: dict
 
 def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue, result: CompletedResult, metadata: dict):
     message = _python_pickle.data_to_message(run_id, step_id, result, metadata)
