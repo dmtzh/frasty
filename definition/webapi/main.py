@@ -4,8 +4,6 @@ from expression import Result
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
-from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure.rabbitmiddlewares import RequeueChance
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
@@ -15,11 +13,12 @@ from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.dtodefinition import DefinitionAdapter
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
-from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result
+from shared.utils.asynchronous import make_async
+from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import ResultTag
 
 import adddefinitionapihandler
-from config import lifespan, rabbit_client, run_step
+from config import definition_completed_subscriber, lifespan, run_step
 import manualrunapihandler
 
 app = FastAPI(lifespan=lifespan)
@@ -74,8 +73,22 @@ class CompleteManualRunCommand:
     run_id: RunIdValue
     result: CompletedResult
 
-@rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
-async def complete_manual_run_definition_with_result(input):
+@dataclass(frozen=True)
+class DataValidationError:
+    '''Data validation error'''
+
+@definition_completed_subscriber(DefinitionCompletedData)
+async def complete_manual_run_definition_with_result(data: DefinitionCompletedData):    
+    @async_result
+    @make_async
+    def to_complete_manual_run_cmd() -> Result[CompleteManualRunCommand, DataValidationError]:
+        raw_from = data.metadata.get("from")
+        match raw_from:
+            case "definition_webapi":
+                return Result.Ok(CompleteManualRunCommand(data.run_id, data.result))
+            case _:
+                return Result.Error(DataValidationError())
+    @async_result
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
     @manual_run_storage.with_storage
@@ -84,19 +97,18 @@ async def complete_manual_run_definition_with_result(input):
             raise NotFoundException()
         new_state = state.complete(result)
         return (result, new_state)
-    def from_definition_completed_data(data: DefinitionCompletedData) -> Result[CompleteManualRunCommand, str]:
-        raw_from = data.metadata.get("from")
-        if raw_from != "definition_webapi":
-            return Result.Error("from is not definition_webapi")
-        return Result.Ok(CompleteManualRunCommand(data.run_id, data.result))
+    @coroutine_result[DataValidationError | NotFoundError | StorageError]()
+    async def complete_manual_run():
+        cmd = await to_complete_manual_run_cmd()
+        completed_result = await apply_complete(cmd.run_id, cmd.result)
+        return completed_result
     
-    complete_manual_run_cmd_res = input.bind(from_definition_completed_data)
-    match complete_manual_run_cmd_res:
-        case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is CompleteManualRunCommand:
-            res = await apply_complete(cmd.run_id, cmd.result)
-            match res:
-                case Result(tag=ResultTag.ERROR, error=NotFoundError()):
-                    return None
-                case _:
-                    return res
-                    
+    complete_manual_run_res = await complete_manual_run()
+    match complete_manual_run_res:
+        case Result(tag=ResultTag.ERROR, error=DataValidationError()):
+            return None
+        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
+            return None
+        case _:
+            return complete_manual_run_res
+    
