@@ -8,7 +8,6 @@ from expression import Result
 from infrastructure import rabbitcompletestep as rabbit_complete_step
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrundefinition as rabbit_run_definition
-from infrastructure import rabbitrunstep as rabbit_step
 from shared.completedresult import CompletedWith
 from shared.customtypes import Error, DefinitionIdValue
 from shared.domainrunning import RunningDefinitionState
@@ -18,7 +17,7 @@ from shared.utils.asyncresult import async_ex_to_error_result, AsyncResult, coro
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import app, rabbit_client
+from config import app, rabbit_client, run_step
 import completestephandler
 import rundefinitionhandler
 
@@ -32,15 +31,14 @@ class RunDefinitionHandlerError:
 
 @rabbit_run_definition.handler(rabbit_client, rabbit_run_definition.RunDefinitionData)
 async def handle_run_definition_command(input):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_first_step_handler(data: rabbit_run_definition.RunDefinitionData, evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
+    def run_first_step_handler_with_data(data: rabbit_run_definition.RunDefinitionData, evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
         definition_dict = {"definition_id": data.definition_id.to_value_with_checksum(), "definition_version": str(definition_version)}
         metadata = data.metadata | definition_dict
-        return rabbit_step.run(rabbit_client, data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+        return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
     @coroutine_result[RunDefinitionCommandValidationError | RunDefinitionHandlerError]()
     async def run_definition(input: Result[rabbit_run_definition.RunDefinitionData, Any]):
         data = await AsyncResult.from_result(input).map_error(RunDefinitionCommandValidationError)
-        run_first_step_handler = functools.partial(rabbit_run_first_step_handler, data)
+        run_first_step_handler = functools.partial(run_first_step_handler_with_data, data)
         cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
         res = await async_result(rundefinitionhandler.handle)(run_first_step_handler, cmd)\
             .map_error(lambda err: RunDefinitionHandlerError(data, err))
@@ -82,7 +80,7 @@ async def handle_complete_step_command(input):
             case RunningDefinitionState.Events.DefinitionCompleted():
                 return rabbit_definition_completed.publish(rabbit_client, cmd.run_id, cmd.definition_id, evt.result, metadata)
             case RunningDefinitionState.Events.StepRunning():
-                return rabbit_step.run(rabbit_client, cmd.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+                return run_step(cmd.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
             case _:
                 async def error_res():
                     return Result.Error(Error(f"Unsupported event {evt}"))
