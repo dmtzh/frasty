@@ -11,6 +11,7 @@ from expression import Result, effect
 from faststream.exceptions import NackMessage
 from faststream.rabbit import RabbitMessage
 
+from shared.commands import ClearCommand, SetCommand, Command
 from shared.customtypes import ScheduleIdValue, TaskIdValue, Error, RunIdValue, StepIdValue
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
@@ -24,17 +25,6 @@ from shared.utils.string import strip_and_lowercase
 R = TypeVar("R")
 P = ParamSpec("P")
 CHANGE_TASK_SCHEDULE_COMMAND = "change_task_schedule"
-
-@dataclass(frozen=True)
-class ClearCommand:
-    '''Clear task schedule command'''
-
-@dataclass(frozen=True)
-class SetCommand:
-    '''Set task schedule command'''
-    schedule: CronSchedule
-
-type Command = ClearCommand | SetCommand
 
 class CommandDtoTypes(StrEnum):
     CLEAR = ClearCommand.__name__.lower()
@@ -76,24 +66,21 @@ class CommandAdapter:
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(task_id: TaskIdValue, schedule_id: ScheduleIdValue, command: Command, metadata: dict) -> PythonPickleMessage:
-        is_metadata_valid = isinstance(metadata, dict)
-        if not is_metadata_valid:
-            raise ValueError(f"Invalid 'metadata' value {metadata}")
+    def data_to_message(task_id: TaskIdValue, schedule_id: ScheduleIdValue, command: Command) -> PythonPickleMessage:
         task_id_dict = {"task_id": task_id.to_value_with_checksum()}
         schedule_id_dict = {"schedule_id": schedule_id.to_value_with_checksum()}
         command_dto = CommandAdapter.to_dict(command)
-        command_data = task_id_dict | schedule_id_dict | {"command": command_dto, "metadata": metadata}
+        command_data = task_id_dict | schedule_id_dict | {"command": command_dto}
         correlation_id = schedule_id_dict["schedule_id"]
         data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, dict, LoggerAdapter], R]):
+        def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, LoggerAdapter], R]):
             self._input_adapter = input_adapter
         
         @staticmethod
-        def _parse_rabbitmq_msg_python_pickle(rabbit_msg_err: RabbitMessageErrorCreator, msg: RabbitMessage) -> Result[tuple[str, str, dict, dict], RabbitMessageError]:
+        def _parse_rabbitmq_msg_python_pickle(rabbit_msg_err: RabbitMessageErrorCreator, msg: RabbitMessage) -> Result[tuple[str, str, dict], RabbitMessageError]:
             opt_correlation_id = ScheduleIdValue.from_value_with_checksum(msg.correlation_id)
             if opt_correlation_id is None:
                 return Result.Error(rabbit_msg_err(ValidationError, "Invalid 'correlation_id'"))
@@ -113,12 +100,6 @@ class _python_pickle:
             if not isinstance(command_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'command' should be {dict.__name__} value, got {type(command_unvalidated).__name__}"))
             
-            if "metadata" not in decoded:
-                return Result.Error(rabbit_msg_err(ParseError, f"'metadata' key not found in {decoded}"))
-            metadata_unvalidated = decoded["metadata"]
-            if not isinstance(metadata_unvalidated, dict):
-                return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
-            
             if "task_id" not in decoded:
                 return Result.Error(rabbit_msg_err(ParseError, f"'task_id' key not found in {decoded}"))
             task_id_unvalidated = decoded["task_id"]
@@ -133,11 +114,11 @@ class _python_pickle:
             if schedule_id_unvalidated != msg.correlation_id:
                 return Result.Error(rabbit_msg_err(ValidationError, f"Invalid 'schedule_id' value {schedule_id_unvalidated}"))
             
-            parsed_data = task_id_unvalidated, schedule_id_unvalidated, command_unvalidated, metadata_unvalidated
+            parsed_data = task_id_unvalidated, schedule_id_unvalidated, command_unvalidated
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, dict, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict, dict]) -> Result[R, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
             def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
                 opt_id = id_parser(id_unvalidated)
                 match opt_id:
@@ -146,14 +127,14 @@ class _python_pickle:
                     case valid_id:
                         return Result.Ok(valid_id)
             
-            task_id_unvalidated, schedule_id_unvalidated, command_unvalidated, metadata_unvalidated = parsed_data
+            task_id_unvalidated, schedule_id_unvalidated, command_unvalidated = parsed_data
             task_id_res = parse_from_str(task_id_unvalidated, "task_id", TaskIdValue.from_value_with_checksum)
             schedule_id_res = parse_from_str(schedule_id_unvalidated, "schedule_id", ScheduleIdValue.from_value_with_checksum)
             command_res = CommandAdapter.from_dict(command_unvalidated).map_error(lambda _: f"Invalid 'command' value {command_unvalidated}")
             match task_id_res, schedule_id_res, command_res:
                 case Result(tag=ResultTag.OK, ok=task_id), Result(tag=ResultTag.OK, ok=schedule_id), Result(tag=ResultTag.OK, ok=command):
                     logger = logger_creator.create(task_id, RunIdValue("None"), StepIdValue("None"))
-                    res = input_adapter(task_id, schedule_id, command, metadata_unvalidated, logger)
+                    res = input_adapter(task_id, schedule_id, command, logger)
                     return Result.Ok(res)
                 case _:
                     errors_with_none = [task_id_res.swap().default_value(None), schedule_id_res.swap().default_value(None), command_res.swap().default_value(None)]
@@ -176,14 +157,13 @@ class ChangeTaskScheduleData:
     task_id: TaskIdValue
     schedule_id: ScheduleIdValue
     command: Command
-    metadata: dict
 
-def run(rabbit_client: RabbitMQClient, task_id: TaskIdValue, schedule_id: ScheduleIdValue, command: Command, metadata: dict):
-    message = _python_pickle.data_to_message(task_id, schedule_id, command, metadata)
+def run(rabbit_client: RabbitMQClient, task_id: TaskIdValue, schedule_id: ScheduleIdValue, command: Command):
+    message = _python_pickle.data_to_message(task_id, schedule_id, command)
     return rabbit_client.send_command(CHANGE_TASK_SCHEDULE_COMMAND, message)
 
 class handler:
-    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, dict], R]):
+    def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], R]):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")
@@ -191,9 +171,9 @@ class handler:
         self._rabbit_client = rabbit_client
         self._input_adapter = validate_input_adapter()
     
-    def _consume_input(self, task_id: TaskIdValue, schedule_id: ScheduleIdValue, cmd: Command, metadata: dict, logger: LoggerAdapter):
+    def _consume_input(self, task_id: TaskIdValue, schedule_id: ScheduleIdValue, cmd: Command, logger: LoggerAdapter):
         self._logger = logger
-        return self._input_adapter(task_id, schedule_id, cmd, metadata)
+        return self._input_adapter(task_id, schedule_id, cmd)
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
         @functools.wraps(func)
