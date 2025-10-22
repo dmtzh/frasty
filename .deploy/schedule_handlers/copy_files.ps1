@@ -26,6 +26,7 @@ python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./schedule/shared $publish_shared_folder -e $exclude_folders
 New-Item -Path $publish_infrastructure_folder -ItemType Directory
 Copy-Item -Path ./schedule/infrastructure/rabbitchangetaskschedule.py -Destination $publish_infrastructure_folder
+Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
 Copy-Item -Path ./infrastructure/rabbitruntask.py -Destination $publish_infrastructure_folder
 Copy-Item -Path $publish_folder/../Dockerfile -Destination $publish_folder
 

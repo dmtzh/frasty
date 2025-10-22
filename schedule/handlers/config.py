@@ -1,20 +1,23 @@
-from collections.abc import Callable
+from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
 import os
 from typing import Any
 
 import aiocron
+from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
-from shared.customtypes import ScheduleIdValue
+from infrastructure import rabbitruntask as rabbit_task
+from shared.customtypes import RunIdValue, ScheduleIdValue, TaskIdValue
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
+from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
 from shared.infrastructure.rabbitmq.config import RabbitMQConfig
 from shared.infrastructure.storage.inmemory import InMemory
 
 from scheduler import Scheduler
+from shared.utils.asyncresult import async_ex_to_error_result
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
@@ -27,6 +30,10 @@ _log_fmt = '%(asctime)s %(levelname)-8s - %(message)s'
 _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 rabbit_client = RabbitMQClient(_rabbit_broker)
+
+def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
+    return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
 
 @asynccontextmanager
 async def _lifespan():

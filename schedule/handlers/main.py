@@ -5,32 +5,28 @@ from expression import Result
 from faststream.rabbit.annotations import Logger
 
 from infrastructure import rabbitchangetaskschedule
-from infrastructure import rabbitruntask as rabbit_task
 from shared.customtypes import TaskIdValue, RunIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
-from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
-from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 import cleartaskschedulehandler
-from config import app, rabbit_client, scheduler
+from config import app, rabbit_client, run_task, scheduler
 import settaskschedulehandler
 
-@async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-def rabbit_run_task(logger: Logger, task_id: TaskIdValue, schedule: TaskSchedule):
+def run_task_action(logger: Logger, task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")
     run_id = RunIdValue.new_id()
     schedule_id_with_checksum = schedule.schedule_id.to_value_with_checksum()
-    return rabbit_task.run(rabbit_client, task_id, run_id, f"schedule {schedule_id_with_checksum}", {})
+    return run_task(task_id, run_id, f"schedule {schedule_id_with_checksum}", {})
 
 @app.after_startup
 async def init_scheduled_tasks(logger: Logger):
     logger.info("Initializing scheduled tasks...")
     schedules = await tasks_schedules_storage.get_schedules()
     for task_id, schedule in schedules.items():
-        schedule_action_func = functools.partial(rabbit_run_task, logger, task_id, schedule)
+        schedule_action_func = functools.partial(run_task_action, logger, task_id, schedule)
         scheduler.add(schedule.schedule_id, schedule.cron, schedule_action_func)
         logger.info(f"{task_id} with schedule {schedule} started")
     logger.info("Scheduled tasks initialized")
@@ -51,7 +47,7 @@ def restart_scheduled_task(logger: Logger, task_id: TaskIdValue, old_schedule: T
         if old_schedule is not None:
             scheduler.remove(old_schedule.schedule_id)
             logger.warning(f"{task_id} with schedule {old_schedule} stopped")
-        schedule_action_func = functools.partial(rabbit_run_task, logger, task_id, new_schedule)
+        schedule_action_func = functools.partial(run_task_action, logger, task_id, new_schedule)
         scheduler.add(new_schedule.schedule_id, new_schedule.cron, schedule_action_func)
         logger.info(f"{task_id} with schedule {new_schedule} started")
         return Result.Ok(None)
