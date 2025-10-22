@@ -1,5 +1,6 @@
 from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
+import logging
 import os
 from typing import Any
 
@@ -8,7 +9,9 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from infrastructure import rabbitchangetaskschedule as rabbit_change_task_schedule
 from infrastructure import rabbitruntask as rabbit_task
+from shared.commands import Command
 from shared.customtypes import RunIdValue, ScheduleIdValue, TaskIdValue
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
@@ -35,6 +38,20 @@ def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dic
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
 
+class change_task_schedule_handler[T]:
+    def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], T]):
+        self._input_adapter = input_adapter
+    
+    def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
+        async def err_to_none(_):
+            return None
+        async def change_task_schedule_wrapper(input_res: Result[T, Any]) -> Result | None:
+            return await input_res\
+                .map(handler)\
+                .map_error(err_to_none)\
+                .merge()
+        return rabbit_change_task_schedule.handler(rabbit_client, self._input_adapter)(change_task_schedule_wrapper)
+
 @asynccontextmanager
 async def _lifespan():
     raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
@@ -55,3 +72,10 @@ def _add_aiocron_schedule_handler(cron: CronSchedule, action_func: Callable[[], 
 def _remove_aiocron_schedule_handler(state: aiocron.Cron):
     state.stop()
 scheduler = Scheduler(_scheduler_states_storage, _add_aiocron_schedule_handler, _remove_aiocron_schedule_handler)
+
+logger = logging.getLogger("schedule_handlers_logger")
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter(fmt=_log_fmt)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)

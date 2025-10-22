@@ -1,38 +1,37 @@
 # import asyncio
+from dataclasses import dataclass
 import functools
 
 from expression import Result
-from faststream.rabbit.annotations import Logger
 
-from infrastructure import rabbitchangetaskschedule
-from shared.customtypes import TaskIdValue, RunIdValue
+from shared.commands import Command, ClearCommand, SetCommand
+from shared.customtypes import ScheduleIdValue, TaskIdValue, RunIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
-from shared.utils.result import ResultTag
 
 import cleartaskschedulehandler
-from config import app, rabbit_client, run_task, scheduler
+from config import app, change_task_schedule_handler, logger, run_task, scheduler
 import settaskschedulehandler
 
-def run_task_action(logger: Logger, task_id: TaskIdValue, schedule: TaskSchedule):
+def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")
     run_id = RunIdValue.new_id()
     schedule_id_with_checksum = schedule.schedule_id.to_value_with_checksum()
     return run_task(task_id, run_id, f"schedule {schedule_id_with_checksum}", {})
 
 @app.after_startup
-async def init_scheduled_tasks(logger: Logger):
+async def init_scheduled_tasks():
     logger.info("Initializing scheduled tasks...")
     schedules = await tasks_schedules_storage.get_schedules()
     for task_id, schedule in schedules.items():
-        schedule_action_func = functools.partial(run_task_action, logger, task_id, schedule)
+        schedule_action_func = functools.partial(run_task_action, task_id, schedule)
         scheduler.add(schedule.schedule_id, schedule.cron, schedule_action_func)
         logger.info(f"{task_id} with schedule {schedule} started")
     logger.info("Scheduled tasks initialized")
 
 @make_async
-def stop_scheduled_task(logger: Logger, cmd: cleartaskschedulehandler.ClearTaskScheduleCommand, cron: CronSchedule):
+def stop_scheduled_task(cmd: cleartaskschedulehandler.ClearTaskScheduleCommand, cron: CronSchedule):
     try:
         scheduler.remove(cmd.schedule_id)
         schedule = TaskSchedule(cmd.schedule_id, cron)
@@ -42,37 +41,38 @@ def stop_scheduled_task(logger: Logger, cmd: cleartaskschedulehandler.ClearTaskS
         return Result.Ok(None)
 
 @make_async
-def restart_scheduled_task(logger: Logger, task_id: TaskIdValue, old_schedule: TaskSchedule | None, new_schedule: TaskSchedule):
+def restart_scheduled_task(task_id: TaskIdValue, old_schedule: TaskSchedule | None, new_schedule: TaskSchedule):
     try:
         if old_schedule is not None:
             scheduler.remove(old_schedule.schedule_id)
             logger.warning(f"{task_id} with schedule {old_schedule} stopped")
-        schedule_action_func = functools.partial(run_task_action, logger, task_id, new_schedule)
+        schedule_action_func = functools.partial(run_task_action, task_id, new_schedule)
         scheduler.add(new_schedule.schedule_id, new_schedule.cron, schedule_action_func)
         logger.info(f"{task_id} with schedule {new_schedule} started")
         return Result.Ok(None)
     except:  # noqa: E722
         return Result.Ok(None)
 
-@rabbitchangetaskschedule.handler(rabbit_client, rabbitchangetaskschedule.ChangeTaskScheduleData)
-async def handle_change_task_schedule_command(input, logger: Logger):
-    match input:
-        case Result(tag=ResultTag.OK, ok=data) if type(data) is rabbitchangetaskschedule.ChangeTaskScheduleData:
-            match data.command:
-                case rabbitchangetaskschedule.ClearCommand():
-                    cmd = cleartaskschedulehandler.ClearTaskScheduleCommand(data.task_id, data.schedule_id)
-                    clear_task_schedule_handler = functools.partial(stop_scheduled_task, logger, cmd)
-                    res = await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
-                    return res
-                case rabbitchangetaskschedule.SetCommand(schedule=schedule):
-                    schedule = TaskSchedule(data.schedule_id, schedule)
-                    cmd = settaskschedulehandler.SetTaskScheduleCommand(data.task_id, schedule)
-                    set_task_schedule_handler = functools.partial(restart_scheduled_task, logger, data.task_id)
-                    res = await settaskschedulehandler.handle(set_task_schedule_handler, cmd)
-                    return res
-        case Result(tag=ResultTag.ERROR, error=error):
-            # TODO: Handle error case
-            logger.warning(f">>>> Received invalid change task schedule command data: {error}")
+@dataclass(frozen=True)
+class ChangeTaskScheduleData:
+    task_id: TaskIdValue
+    schedule_id: ScheduleIdValue
+    command: Command
+
+@change_task_schedule_handler(ChangeTaskScheduleData)
+async def handle_change_task_schedule_command(data: ChangeTaskScheduleData):
+    match data.command:
+        case ClearCommand():
+            cmd = cleartaskschedulehandler.ClearTaskScheduleCommand(data.task_id, data.schedule_id)
+            clear_task_schedule_handler = functools.partial(stop_scheduled_task, cmd)
+            res = await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
+            return res
+        case SetCommand(schedule=schedule):
+            schedule = TaskSchedule(data.schedule_id, schedule)
+            cmd = settaskschedulehandler.SetTaskScheduleCommand(data.task_id, schedule)
+            set_task_schedule_handler = functools.partial(restart_scheduled_task, data.task_id)
+            res = await settaskschedulehandler.handle(set_task_schedule_handler, cmd)
+            return res
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())

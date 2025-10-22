@@ -1,68 +1,24 @@
-from collections.abc import Callable, Coroutine, Generator
-from dataclasses import dataclass
-from enum import StrEnum
+from collections.abc import Callable, Coroutine
 import functools
 from logging import LoggerAdapter
 import pickle
-import secrets
-from typing import Any, Optional, ParamSpec, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
-from expression import Result, effect
-from faststream.exceptions import NackMessage
+from expression import Result
 from faststream.rabbit import RabbitMessage
 
-from shared.commands import ClearCommand, SetCommand, Command
-from shared.customtypes import ScheduleIdValue, TaskIdValue, Error, RunIdValue, StepIdValue
-from shared.domainschedule import CronSchedule
+from infrastructure.rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, RequeueChance
+from shared.commands import Command, CommandAdapter
+from shared.customtypes import ScheduleIdValue, TaskIdValue, Error
 from shared.infrastructure.rabbitmq.client import RabbitMQClient
 from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
-from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
 from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
-from shared.utils.parse import parse_from_str, parse_from_dict
+from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
-from shared.utils.string import strip_and_lowercase
 
 R = TypeVar("R")
 P = ParamSpec("P")
 CHANGE_TASK_SCHEDULE_COMMAND = "change_task_schedule"
-
-class CommandDtoTypes(StrEnum):
-    CLEAR = ClearCommand.__name__.lower()
-    SET = SetCommand.__name__.lower()
-    @staticmethod
-    def parse(command_type: str) -> Optional["CommandDtoTypes"]:
-        if command_type is None:
-            return None
-        match strip_and_lowercase(command_type):
-            case CommandDtoTypes.CLEAR:
-                return CommandDtoTypes.CLEAR
-            case CommandDtoTypes.SET:
-                return CommandDtoTypes.SET
-            case _:
-                return None
-
-class CommandAdapter:
-    @staticmethod
-    def to_dict(command: Command) -> dict:
-        match command:
-            case ClearCommand():
-                return {"type": CommandDtoTypes.CLEAR}
-            case SetCommand(schedule=schedule):
-                return {"type": CommandDtoTypes.SET, "schedule": schedule}
-    
-    @effect.result[Command, str]()
-    @staticmethod
-    def from_dict(command_dto: dict) -> Generator[Any, Any, Command]:
-        command_type = yield from parse_from_dict(command_dto, "type", CommandDtoTypes.parse)
-        match command_type:
-            case CommandDtoTypes.CLEAR:
-                return ClearCommand()
-            case CommandDtoTypes.SET:
-                schedule = yield from parse_from_dict(command_dto, "schedule", CronSchedule.parse)
-                return SetCommand(schedule)
-            case _:
-                yield from Result.Error(f"command type {command_type} is invalid")
-                raise RuntimeError("command type is invalid")
 
 class _python_pickle:
     @staticmethod
@@ -76,7 +32,7 @@ class _python_pickle:
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, LoggerAdapter], R]):
+        def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], R]):
             self._input_adapter = input_adapter
         
         @staticmethod
@@ -118,23 +74,14 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(logger_creator: RabbitMessageLoggerCreator, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command, LoggerAdapter], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
-            def validate_id[T](id_parser: Callable[[str], T | None], id_unvalidated: str, id_name: str) -> Result[T, str]:
-                opt_id = id_parser(id_unvalidated)
-                match opt_id:
-                    case None:
-                        return Result.Error(f"Invalid '{id_name}' value {id_unvalidated}")
-                    case valid_id:
-                        return Result.Ok(valid_id)
-            
+        def _validate_rabbitmq_parsed_data(input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict]) -> Result[R, RabbitMessageError]:
             task_id_unvalidated, schedule_id_unvalidated, command_unvalidated = parsed_data
-            task_id_res = parse_from_str(task_id_unvalidated, "task_id", TaskIdValue.from_value_with_checksum)
-            schedule_id_res = parse_from_str(schedule_id_unvalidated, "schedule_id", ScheduleIdValue.from_value_with_checksum)
+            task_id_res = parse_value(task_id_unvalidated, "task_id", TaskIdValue.from_value_with_checksum)
+            schedule_id_res = parse_value(schedule_id_unvalidated, "schedule_id", ScheduleIdValue.from_value_with_checksum)
             command_res = CommandAdapter.from_dict(command_unvalidated).map_error(lambda _: f"Invalid 'command' value {command_unvalidated}")
             match task_id_res, schedule_id_res, command_res:
                 case Result(tag=ResultTag.OK, ok=task_id), Result(tag=ResultTag.OK, ok=schedule_id), Result(tag=ResultTag.OK, ok=command):
-                    logger = logger_creator.create(task_id, RunIdValue("None"), StepIdValue("None"))
-                    res = input_adapter(task_id, schedule_id, command, logger)
+                    res = input_adapter(task_id, schedule_id, command)
                     return Result.Ok(res)
                 case _:
                     errors_with_none = [task_id_res.swap().default_value(None), schedule_id_res.swap().default_value(None), command_res.swap().default_value(None)]
@@ -145,18 +92,11 @@ class _python_pickle:
         # @apply_types - uncomment this line to inject context variables like logger: Logger
         def __call__(self, message):
             msg: RabbitMessage = message
-            logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
             rabbit_msg_err = rabbit_message_error_creator(f"Decoding {CHANGE_TASK_SCHEDULE_COMMAND}", msg.correlation_id)
             parsed_data_res = self._parse_rabbitmq_msg_python_pickle(rabbit_msg_err, msg)
-            validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, logger_creator, self._input_adapter, rabbit_msg_err)
+            validate_parsed_data = functools.partial(self._validate_rabbitmq_parsed_data, self._input_adapter, rabbit_msg_err)
             validated_data_res = parsed_data_res.bind(validate_parsed_data)
             return validated_data_res
-
-@dataclass(frozen=True)
-class ChangeTaskScheduleData:
-    task_id: TaskIdValue
-    schedule_id: ScheduleIdValue
-    command: Command
 
 def run(rabbit_client: RabbitMQClient, task_id: TaskIdValue, schedule_id: ScheduleIdValue, command: Command):
     message = _python_pickle.data_to_message(task_id, schedule_id, command)
@@ -176,26 +116,8 @@ class handler:
         return self._input_adapter(task_id, schedule_id, cmd)
     
     def __call__(self, func: Callable[P, Coroutine[Any, Any, Result | None]]):
-        @functools.wraps(func)
-        async def wrapper(*args: P.args, **kwargs: P.kwargs):
-            match kwargs.get("input"):
-                case Result(tag=ResultTag.OK, ok=input):
-                    self._logger.info(f"{CHANGE_TASK_SCHEDULE_COMMAND} RECEIVED {input}")
-            change_task_schedule_res = await func(*args, **kwargs)
-            match change_task_schedule_res:
-                case Result(tag=ResultTag.OK, ok=result):
-                    first_100_chars = str(result)[:100]
-                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
-                    self._logger.info(f"{CHANGE_TASK_SCHEDULE_COMMAND} successfully completed with output {output}")
-                case Result(tag=ResultTag.ERROR, error=error):
-                    bits = secrets.randbits(1)
-                    requeue = bits == 1
-                    self._logger.error(f"{CHANGE_TASK_SCHEDULE_COMMAND} failed with error {error}")
-                    self._logger.error(f"requeue={requeue}")
-                    raise NackMessage(requeue=requeue)
-                case None:
-                    self._logger.warning(f"{CHANGE_TASK_SCHEDULE_COMMAND} PROCESSING SKIPPED")
-            return change_task_schedule_res
-        
-        decoder = _python_pickle.decoder(self._consume_input)
-        return self._rabbit_client.command_handler(CHANGE_TASK_SCHEDULE_COMMAND, decoder)(wrapper)
+        decoder = _python_pickle.decoder(self._input_adapter)
+        middlewares = (
+            error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
+        )
+        return self._rabbit_client.command_handler(CHANGE_TASK_SCHEDULE_COMMAND, decoder, middlewares)(func)
