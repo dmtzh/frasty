@@ -7,8 +7,10 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitrundefinition as rabbit_definition
 from infrastructure import rabbitruntask as rabbit_run_task
+from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
 from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
@@ -44,6 +46,10 @@ class run_task_handler[T]:
 def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_definition = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition.run)
     return rabbit_run_definition(rabbit_client, run_id, definition_id, metadata)
+
+def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_publish_definition_completed = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition_completed.publish)
+    return rabbit_publish_definition_completed(rabbit_client, run_id, definition_id, result, metadata)
 
 @asynccontextmanager
 async def lifespan():
