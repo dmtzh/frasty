@@ -7,11 +7,13 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from infrastructure import rabbitrundefinition as rabbit_definition
 from infrastructure import rabbitruntask as rabbit_run_task
-from shared.customtypes import RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
+from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
 from shared.infrastructure.rabbitmq.config import RabbitMQConfig
+from shared.utils.asyncresult import async_ex_to_error_result
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
@@ -38,6 +40,10 @@ class run_task_handler[T]:
                 .map_error(err_to_none)\
                 .merge()
         return rabbit_run_task.handler(rabbit_client, self._input_adapter)(run_task_handler_wrapper)
+
+def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_definition = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition.run)
+    return rabbit_run_definition(rabbit_client, run_id, definition_id, metadata)
 
 @asynccontextmanager
 async def lifespan():

@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from expression import Result
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure import rabbitrundefinition as rabbit_definition
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
@@ -12,7 +11,7 @@ from shared.infrastructure.storage.repository import NotFoundError
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
-from config import app, rabbit_client, run_task_handler
+from config import app, rabbit_client, run_definition, run_task_handler
 import runtaskdefinitionhandler
 
 @dataclass(frozen=True)
@@ -23,11 +22,10 @@ class RunTaskData:
 
 @run_task_handler(RunTaskData)
 async def handle_run_task_definition_command(data: RunTaskData):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     def run_definition_handler(definition_id: DefinitionIdValue):
         task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}
         metadata = data.metadata | task_id_dict
-        return rabbit_definition.run(rabbit_client, data.run_id, definition_id, metadata)
+        return run_definition(data.run_id, definition_id, metadata)
     @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
     async def runtask_failure_handler(error):
         definition_id = DefinitionIdValue(data.run_id)
