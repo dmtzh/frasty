@@ -5,20 +5,18 @@ from typing import Any
 from expression import Result, effect
 from fastapi import FastAPI
 
-from infrastructure import rabbitruntask as rabbit_task
 from shared.customtypes import TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
-from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.utils.asynchronous import make_async
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import async_result, coroutine_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
 import addtaskapihandler
 import cleartaskscheduleapihandler
 import completerunstatehandler
-from config import definition_completed_subscriber, lifespan, rabbit_client
+from config import definition_completed_subscriber, lifespan, run_task
 import getrunstateapihandler
 import runtaskapihandler
 import settaskscheduleapihandler
@@ -30,11 +28,10 @@ async def add_task(request: addtaskapihandler.AddTaskRequest):
     return await addtaskapihandler.handle(request)
 
 @app.post("/tasks/{id}/run", status_code=201)
-async def run_task(id: str):
-    @async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)
-    def rabbit_run_task_handler(cmd: runtaskapihandler.RunTaskCommand):
-        return rabbit_task.run(rabbit_client, cmd.task_id, cmd.run_id, "tasks_webapi", {})
-    return await runtaskapihandler.handle(rabbit_run_task_handler, id)
+async def run(id: str):
+    def run_task_handler(cmd: runtaskapihandler.RunTaskCommand):
+        return run_task(cmd.task_id, cmd.run_id, "tasks_webapi", {})
+    return await runtaskapihandler.handle(run_task_handler, id)
 
 @app.get("/tasks/{id}/run/{run_id}")
 async def get_run_state(id: str, run_id: str):

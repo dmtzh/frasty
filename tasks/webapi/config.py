@@ -8,12 +8,14 @@ from fastapi import FastAPI
 from faststream.rabbit import RabbitBroker
 
 from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
+from infrastructure import rabbitruntask as rabbit_task
 from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue
+from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
 from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
+from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
 from shared.infrastructure.rabbitmq.config import RabbitMQConfig
+from shared.utils.asyncresult import async_ex_to_error_result
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 ADD_DEFINITION_URL = os.environ['ADD_DEFINITION_URL']
@@ -43,6 +45,10 @@ class definition_completed_subscriber[T]:
                 .merge()
             return res
         return rabbit_definition_completed.subscriber(rabbit_client, self._input_adapter, queue_name=None, requeue_chance=RequeueChance.LOW)(definition_completed_subscriber_wrapper)
+
+def run_task(task_id: TaskIdValue,run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
+    return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
