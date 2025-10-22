@@ -43,7 +43,7 @@ def apply_add_result_to_history(history_item: TaskResultHistoryItem | None, queu
     history_item = TaskResultHistoryItem(data.result, timestamp, data.opt_definition_version, queue_item.prev_run_id)
     return (history_item, history_item)
 
-@coroutine_result()
+@coroutine_result[AddTaskResultToHistoryHandlerStorageError]()
 async def handle(data: CompletedTaskData) -> list[TaskResultHistoryItem]:
     next_pending_result = await apply_put_to_pending_results_queue(data.task_id, data)
     added_history_items = []
