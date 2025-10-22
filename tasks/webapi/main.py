@@ -1,20 +1,24 @@
-from expression import Result
+from collections.abc import Generator
+from dataclasses import dataclass
+from typing import Any
+
+from expression import Result, effect
 from fastapi import FastAPI
 
-from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
 from infrastructure import rabbitruntask as rabbit_task
-from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.customtypes import TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.infrastructure.rabbitmq.client import Error as RabbitClientError
-from shared.infrastructure.storage.repository import NotFoundError
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.infrastructure.storage.repository import NotFoundError, StorageError
+from shared.utils.asynchronous import make_async
+from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
 import addtaskapihandler
 import cleartaskscheduleapihandler
 import completerunstatehandler
-from config import lifespan, rabbit_client
+from config import definition_completed_subscriber, lifespan, rabbit_client
 import getrunstateapihandler
 import runtaskapihandler
 import settaskscheduleapihandler
@@ -44,31 +48,31 @@ async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRe
 async def clear_schedule(id: str, schedule_id: str):
     return await cleartaskscheduleapihandler.handle(id, schedule_id)
 
-@rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
-async def complete_web_api_task_run_state_with_result(input):
-    def from_definition_completed_data(data: DefinitionCompletedData) -> Result[completerunstatehandler.CompleteRunStateCommand, str]:
-        raw_from = data.metadata.get("from")
-        if raw_from != "tasks_webapi":
-            return Result.Error("from is not tasks_webapi")
-        raw_task_id = data.metadata.get("task_id")
-        if raw_task_id is None:
-            return Result.Error("task_id not found in metadata")
-        if not isinstance(raw_task_id, str):
-            return Result.Error("task_id is not a string")
-        opt_task_id = TaskIdValue.from_value_with_checksum(raw_task_id)
-        match opt_task_id:
-            case None:
-                return Result.Error("task_id is invalid")
-            case task_id:
-                cmd = completerunstatehandler.CompleteRunStateCommand(task_id, data.run_id, data.result)
-                return Result.Ok(cmd)
-    
-    complete_run_state_cmd_res = input.bind(from_definition_completed_data)
-    match complete_run_state_cmd_res:
-        case Result(tag=ResultTag.OK, ok=cmd) if type(cmd) is completerunstatehandler.CompleteRunStateCommand:
-            res = await completerunstatehandler.handle(cmd)
-            match res:
-                case Result(tag=ResultTag.ERROR, error=NotFoundError()):
-                    return None
-                case _:
-                    return res
+@dataclass(frozen=True)
+class DataValidationError:
+    '''Data validation error'''
+    error: str
+
+@definition_completed_subscriber(DefinitionCompletedData)
+async def complete_web_api_task_run_state_with_result(data: DefinitionCompletedData):
+    @async_result
+    @make_async
+    @effect.result[completerunstatehandler.CompleteRunStateCommand, str]()
+    def to_complete_run_state_cmd() -> Generator[Any, Any, completerunstatehandler.CompleteRunStateCommand]:
+        yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "tasks_webapi" else None)
+        task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
+        return completerunstatehandler.CompleteRunStateCommand(task_id, data.run_id, data.result)
+    @coroutine_result[DataValidationError | NotFoundError | StorageError]()
+    async def complete_run_state():
+        cmd = await to_complete_run_state_cmd().map_error(DataValidationError)
+        state = await async_result(completerunstatehandler.handle)(cmd)
+        return state
+
+    complete_run_state_res = await complete_run_state()
+    match complete_run_state_res:
+        case Result(tag=ResultTag.ERROR, error=DataValidationError()):
+            return None
+        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
+            return None
+        case _:
+            return complete_run_state_res

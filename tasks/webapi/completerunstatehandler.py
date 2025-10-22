@@ -1,4 +1,8 @@
+from collections.abc import Coroutine
 from dataclasses import dataclass
+from typing import Any
+
+from expression import Result
 
 from shared.completedresult import CompletedResult
 from shared.customtypes import RunIdValue, TaskIdValue
@@ -23,5 +27,5 @@ def apply_complete_with_result(state: WebApiTaskRunState | None, result: Complet
     new_state = state.complete(result)
     return (new_state, new_state)
 
-def handle(cmd: CompleteRunStateCommand):
+def handle(cmd: CompleteRunStateCommand) -> Coroutine[Any, Any, Result[WebApiTaskRunState, NotFoundError | StorageError]]:
     return apply_complete_with_result(cmd.task_id, cmd.run_id, cmd.result)
