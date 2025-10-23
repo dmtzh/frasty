@@ -31,10 +31,10 @@ import sendtoviberchannel.handler as sendtoviberchannelhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetContentFromJsonCommand(RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+class GetContentFromJsonCommand(RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     '''Input data for get content from json command'''
 
-@step_handler(GetContentFromJson, GetContentFromJson.validate_input, RabbitGetContentFromJsonCommand)
+@step_handler(GetContentFromJson, GetContentFromJson.validate_input, GetContentFromJsonCommand)
 @make_async
 def handle_get_content_from_json_command(step_data: RunStepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
@@ -53,10 +53,10 @@ def handle_send_to_viber_channel_command(step_data: RunStepData[SendToViberChann
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetLinksFromHtmlCommand(RunStepData[GetLinksFromHtmlConfig, dict | list]):
+class GetLinksFromHtmlCommand(RunStepData[GetLinksFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, RabbitGetLinksFromHtmlCommand)
+@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, GetLinksFromHtmlCommand)
 @make_async
 def handle_get_links_from_html_command(step_data: RunStepData[GetLinksFromHtmlConfig, dict | list]):
     cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
@@ -65,10 +65,10 @@ def handle_get_links_from_html_command(step_data: RunStepData[GetLinksFromHtmlCo
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitGetContentFromHtmlCommand(RunStepData[GetContentFromHtmlConfig, dict | list]):
+class GetContentFromHtmlCommand(RunStepData[GetContentFromHtmlConfig, dict | list]):
     '''Input data for get content from html command'''
 
-@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, RabbitGetContentFromHtmlCommand)
+@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, GetContentFromHtmlCommand)
 @make_async
 def handle_get_content_from_html_command(step_data: RunStepData[GetContentFromHtmlConfig, dict | list]):
     cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
@@ -77,10 +77,10 @@ def handle_get_content_from_html_command(step_data: RunStepData[GetContentFromHt
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFilterHtmlResponseCommand(RunStepData[None, HttpResponseData]):
+class FilterHtmlResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter html response command'''
 
-@step_handler(FilterHtmlResponse, HttpResponseData.from_dict, RabbitFilterHtmlResponseCommand)
+@step_handler(FilterHtmlResponse, HttpResponseData.from_dict, FilterHtmlResponseCommand)
 @make_async
 def handle_filter_html_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
@@ -89,10 +89,10 @@ def handle_filter_html_response_command(step_data: RunStepData[None, HttpRespons
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFilterSuccessResponseCommand(RunStepData[None, HttpResponseData]):
+class FilterSuccessResponseCommand(RunStepData[None, HttpResponseData]):
     '''Input data for filter success response command'''
 
-@step_handler(FilterSuccessResponse, HttpResponseData.from_dict, RabbitFilterSuccessResponseCommand)
+@step_handler(FilterSuccessResponse, HttpResponseData.from_dict, FilterSuccessResponseCommand)
 @make_async
 def handle_filter_success_response_command(step_data: RunStepData[None, HttpResponseData]):
     cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
@@ -101,20 +101,20 @@ def handle_filter_success_response_command(step_data: RunStepData[None, HttpResp
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitRequestUrlCommand(RunStepData[None, RequestUrlInputData]):
+class RequestUrlCommand(RunStepData[None, RequestUrlInputData]):
     '''Input data for request url command'''
 
-@step_handler(RequestUrl, RequestUrlInputData.from_dict, RabbitRequestUrlCommand)
+@step_handler(RequestUrl, RequestUrlInputData.from_dict, RequestUrlCommand)
 def handle_request_url_command(step_data: RunStepData[None, RequestUrlInputData]):
     cmd = requesturlhandler.RequestUrlCommand(step_data.data)
     return requesturlhandler.handle(cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RabbitFetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
+class FetchNewDataCommand(RunStepData[None, FetchNewDataInput]):
     '''Input data for fetch new data command'''
 
-@step_handler(FetchNewData, FetchNewDataInput.from_dict, RabbitFetchNewDataCommand)
+@step_handler(FetchNewData, FetchNewDataInput.from_dict, FetchNewDataCommand)
 async def handle_fetch_new_data_command(step_data: RunStepData[None, FetchNewDataInput]):
     fetch_data_handler = functools.partial(fetch_data, step_data)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
