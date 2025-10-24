@@ -18,17 +18,13 @@ if (Test-Path $publish_folder) {
     Remove-Item -Path $publish_folder -Recurse
 }
 
-$publish_shared_folder = Join-Path -Path $publish_folder -ChildPath "shared"
-$publish_infrastructure_folder = Join-Path -Path $publish_folder -ChildPath "infrastructure"
+$publish_shared_folder = $publish_folder + "/shared"
+$publish_infrastructure_folder = $publish_folder + "/infrastructure"
 
 python $copy_folder_script ./tasks/runner $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./tasks/shared $publish_shared_folder -e $exclude_folders
-New-Item -Path $publish_infrastructure_folder -ItemType Directory
-Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitdefinitioncompleted.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitrundefinition.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitruntask.py -Destination $publish_infrastructure_folder
+python $copy_folder_script ./infrastructure $publish_infrastructure_folder -e $exclude_folders
 Copy-Item -Path $publish_folder/../Dockerfile -Destination $publish_folder
 
 python -m venv $publish_folder/.venv

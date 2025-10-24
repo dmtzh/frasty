@@ -1,5 +1,5 @@
 from expression import Result
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.taskresulthistory import TaskResultHistoryItemAdapter
@@ -7,9 +7,7 @@ from shared.taskresultshistorystore import taskresultshistory_storage
 from shared.utils.asyncresult import async_catch_ex
 from shared.utils.result import ResultTag
 
-from config import lifespan
-
-app = FastAPI(lifespan=lifespan)
+from config import app
 
 @app.get("/tasks/{id}/run/history/{run_id}")
 async def get_result(id: str, run_id: str):

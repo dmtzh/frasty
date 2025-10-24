@@ -32,11 +32,7 @@ foreach ($step_child_folder in $step_handlers_with_definitions) {
     New-Item -Path $publish_stephandlers_folder/$step_child_folder -ItemType Directory
     Copy-Item -Path ./stephandlers/$step_child_folder/definition.py -Destination $publish_stephandlers_folder/$step_child_folder
 }
-New-Item -Path $publish_infrastructure_folder -ItemType Directory
-Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitcompletestep.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitdefinitioncompleted.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitrunstep.py -Destination $publish_infrastructure_folder
+python $copy_folder_script ./infrastructure $publish_infrastructure_folder -e $exclude_folders
 Copy-Item -Path $publish_folder/../Dockerfile -Destination $publish_folder
 python $copy_folder_script ./../html_sources $publish_folder/html_sources
 

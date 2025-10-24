@@ -8,3 +8,5 @@ STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
+
+app = FastAPI(lifespan=lifespan)

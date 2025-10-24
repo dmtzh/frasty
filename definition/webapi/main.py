@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from expression import Result
-from fastapi import FastAPI, HTTPException
+from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
 from manualrunstate import ManualRunStateAdapter, ManualRunState
@@ -18,10 +18,8 @@ from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result, a
 from shared.utils.result import ResultTag
 
 import adddefinitionapihandler
-from config import definition_completed_subscriber, lifespan, run_step
+from config import app, definition_completed_subscriber, run_step
 import manualrunapihandler
-
-app = FastAPI(lifespan=lifespan)
 
 @app.get("/tickets")
 def tickets():

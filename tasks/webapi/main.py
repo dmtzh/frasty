@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from expression import Result, effect
-from fastapi import FastAPI
 
 from shared.customtypes import TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
@@ -16,18 +15,16 @@ from shared.utils.result import ResultTag
 import addtaskapihandler
 import cleartaskscheduleapihandler
 import completerunstatehandler
-from config import definition_completed_subscriber, lifespan, run_task
+from config import app, definition_completed_subscriber, run_task
 import getrunstateapihandler
 import runtaskapihandler
 import settaskscheduleapihandler
-
-app = FastAPI(lifespan=lifespan)
 
 @app.post("/tasks")
 async def add_task(request: addtaskapihandler.AddTaskRequest):
     return await addtaskapihandler.handle(request)
 
-@app.post("/tasks/{id}/run", status_code=201)
+@app.post("/tasks/{id}/run", status_code=202)
 async def run(id: str):
     def run_task_handler(cmd: runtaskapihandler.RunTaskCommand):
         return run_task(cmd.task_id, cmd.run_id, "tasks_webapi", {})
