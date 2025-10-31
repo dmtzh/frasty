@@ -10,8 +10,7 @@ from faststream.rabbit import RabbitBroker
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
-from shared.pipeline.handlers import Handler, StepHandler, Subscriber
-from shared.runstepdata import RunStepData
+from shared.pipeline.handlers import Handler, StepDataValidator, StepDefinitionType, StepHandler, StepInputAdapter, Subscriber
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitchangetaskschedule as rabbit_change_task_schedule
@@ -55,7 +54,7 @@ def run_step(run_id: RunIdValue, step_id: StepIdValue, definition: StepDefinitio
     rabbit_run_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_step.run)
     return rabbit_run_step(_rabbit_client, run_id, step_id, definition, data, metadata)
 
-def step_handler[TCfg, D](step_definition_type: type[StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], RunStepData[TCfg, D]]) -> StepHandler[TCfg, D]:
+def step_handler[TCfg, D](step_definition_type: StepDefinitionType[TCfg], data_validator: StepDataValidator[D], input_adapter: StepInputAdapter[TCfg, D]) -> StepHandler[TCfg, D]:
     return rabbit_step.handler(_rabbit_client, step_definition_type, data_validator, input_adapter)
 
 def complete_step(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:

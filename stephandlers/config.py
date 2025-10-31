@@ -11,7 +11,7 @@ from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler
-from shared.runstepdata import RunStepData
+from shared.stepinputdata import StepInputData
 from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
@@ -43,7 +43,7 @@ complete_step = config.complete_step
 
 step_handler = StepHandlerAdapterFactory(config.step_handler, complete_step)
 
-def fetch_data(step_data: RunStepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
+def fetch_data(step_data: StepInputData[None, FetchNewDataInput], fetch_id: FetchIdValue):
     metadata = {
         "fetch_id": fetch_id.to_value_with_checksum(),
         "parent_metadata": step_data.metadata

@@ -6,17 +6,17 @@ import pytest
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import RunIdValue, StepIdValue
 from shared.pipeline.handlers import StepHandlerAdapter, StepHandlerContinuation
-from shared.runstepdata import RunStepData
+from shared.stepinputdata import StepInputData
 
 @dataclass(frozen=True)
-class TestStepInputData(RunStepData[None, dict]):
+class TestStepInputData(StepInputData[None, dict]):
     __test__ = False  # Instruct pytest to ignore this class for test collection
 
 class TestStepActionHandler[TCfg, D]:
     __test__ = False  # Instruct pytest to ignore this class for test collection
     def __call__(self, func: StepHandlerContinuation[TCfg, D]):
         self._func = func
-    def pass_result(self, result: Result[RunStepData[TCfg, D], Any]):
+    def pass_result(self, result: Result[StepInputData[TCfg, D], Any]):
         return self._func(result)
 
 @pytest.fixture
@@ -32,7 +32,7 @@ async def test_when_handler_pass_success_result_then_func_invokes_with_success_r
     state = {}
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         return Result.Ok(None)
-    async def func(v: RunStepData[None, dict]):
+    async def func(v: StepInputData[None, dict]):
         state["actual_step_input_data"] = v
         return CompletedWith.Data(v.data)
     StepHandlerAdapter(step_handler, complete_step_func)(func)
@@ -48,7 +48,7 @@ async def test_when_handler_pass_error_result_then_func_not_invoked():
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         return Result.Ok(None)
     state = {}
-    async def func(v: RunStepData[None, dict]):
+    async def func(v: StepInputData[None, dict]):
         state["actual_step_input_data"] = v
         return CompletedWith.Data(v.data)
     StepHandlerAdapter(step_handler, complete_step_func)(func)
@@ -65,7 +65,7 @@ async def test_when_handler_pass_error_result_then_complete_step_func_not_invoke
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         state["actual_completed_result"] = completed_result
         return Result.Ok(None)
-    async def func(v: RunStepData[None, dict]):
+    async def func(v: StepInputData[None, dict]):
         return CompletedWith.Data(v.data)
     StepHandlerAdapter(step_handler, complete_step_func)(func)
 
@@ -82,7 +82,7 @@ async def test_when_func_returns_completed_result_then_result_is_passed_to_compl
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         state["actual_completed_result"] = completed_result
         return Result.Ok(None)
-    async def func(v: RunStepData[None, dict]):
+    async def func(v: StepInputData[None, dict]):
         return expected_completed_result
     StepHandlerAdapter(step_handler, complete_step_func)(func)
 
@@ -98,7 +98,7 @@ async def test_when_func_returns_none_then_complete_step_func_not_invoked(step_i
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         state["actual_completed_result"] = completed_result
         return Result.Ok(None)
-    async def func(v: RunStepData[None, dict]):
+    async def func(v: StepInputData[None, dict]):
         return None
     StepHandlerAdapter(step_handler, complete_step_func)(func)
 
