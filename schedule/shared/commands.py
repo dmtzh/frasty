@@ -8,7 +8,7 @@ from expression import Result, effect
 from shared.utils.parse import parse_from_dict
 from shared.utils.string import strip_and_lowercase
 
-from .domainschedule import CronSchedule
+from .domainschedule import CronSchedule, CronScheduleAdapter
 
 @dataclass(frozen=True)
 class ClearCommand:
@@ -43,7 +43,7 @@ class CommandAdapter:
             case ClearCommand():
                 return {"type": CommandDtoTypes.CLEAR}
             case SetCommand(schedule=schedule):
-                return {"type": CommandDtoTypes.SET, "schedule": schedule}
+                return {"type": CommandDtoTypes.SET} | CronScheduleAdapter.to_dict(schedule)
     
     @effect.result[Command, str]()
     @staticmethod
@@ -53,7 +53,7 @@ class CommandAdapter:
             case CommandDtoTypes.CLEAR:
                 return ClearCommand()
             case CommandDtoTypes.SET:
-                schedule = yield from parse_from_dict(command_dto, "schedule", CronSchedule.parse)
+                schedule = yield from CronScheduleAdapter.from_dict(command_dto)
                 return SetCommand(schedule)
             case _:
                 yield from Result.Error(f"command type {command_type} is invalid")

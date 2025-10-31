@@ -5,8 +5,8 @@ from typing import Any
 
 from expression import Result
 
-from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import Error, DefinitionIdValue, RunIdValue, StepIdValue
+from shared.completedresult import CompletedWith
+from shared.customtypes import Error, DefinitionIdValue
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.utils.asynchronous import make_async
@@ -14,19 +14,13 @@ from shared.utils.asyncresult import coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step
+from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step, CompleteStepData, RunDefinitionData
 import completestephandler
 import rundefinitionhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
-@dataclass(frozen=True)
-class RunDefinitionData:
-    run_id: RunIdValue
-    definition_id: DefinitionIdValue
-    metadata: dict
-
-@run_definition_handler(RunDefinitionData)
+@run_definition_handler
 async def handle_run_definition_command(data: RunDefinitionData):
     def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
         definition_dict = {"definition_id": data.definition_id.to_value_with_checksum(), "definition_version": str(definition_version)}
@@ -55,14 +49,7 @@ class CompleteStepHandlerError:
     cmd: completestephandler.CompleteStepCommand
     error: Any
 
-@dataclass(frozen=True)
-class CompleteStepData:
-    run_id: RunIdValue
-    step_id: StepIdValue
-    result: CompletedResult
-    metadata: dict
-
-@complete_step_handler(CompleteStepData)
+@complete_step_handler
 async def handle_complete_step_command(data: CompleteStepData): 
     @async_result
     @make_async

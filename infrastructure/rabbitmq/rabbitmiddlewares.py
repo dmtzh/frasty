@@ -58,7 +58,9 @@ class command_handler_logging_middleware:
         decoded_data = await msg.decode()
         match decoded_data:
             case Result(tag=ResultTag.OK, ok=data):
-                logger.info(f"{self._message_prefix} RECEIVED {data}")
+                first_100_chars = str(data)[:100]
+                output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                logger.info(f"{self._message_prefix} RECEIVED {output}")
             case Result(tag=ResultTag.ERROR, error=error):
                 logger.error(f"{self._message_prefix} RECEIVED {error}")
             case unsupported_decoded_data:

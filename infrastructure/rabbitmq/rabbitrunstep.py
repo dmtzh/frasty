@@ -1,5 +1,4 @@
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
 import functools
 import inspect
 from logging import LoggerAdapter

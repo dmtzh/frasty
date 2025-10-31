@@ -1,69 +1,39 @@
-from collections.abc import Callable, Coroutine
-from contextlib import asynccontextmanager
+from collections.abc import Callable
+from dataclasses import dataclass
 import logging
 import os
 from typing import Any
 
 import aiocron
-from expression import Result
-from faststream import FastStream
-from faststream.rabbit import RabbitBroker
 
-from infrastructure import rabbitchangetaskschedule as rabbit_change_task_schedule
-from infrastructure import rabbitruntask as rabbit_task
-from shared.commands import Command
-from shared.customtypes import RunIdValue, ScheduleIdValue, TaskIdValue
+from infrastructure.rabbitmq import config
+from shared.commands import Command, CommandAdapter
+from shared.customtypes import ScheduleIdValue, TaskIdValue
 from shared.domainschedule import CronSchedule
-from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
-from shared.infrastructure.rabbitmq.config import RabbitMQConfig
 from shared.infrastructure.storage.inmemory import InMemory
+from shared.pipeline.handlers import HandlerAdapter, map_handler
 
 from scheduler import Scheduler
-from shared.utils.asyncresult import async_ex_to_error_result
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
-_raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
-_raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]
-_rabbitmqconfig = RabbitMQConfig.parse(_raw_rabbitmq_url, _raw_rabbitmq_publisher_confirms)
-if _rabbitmqconfig is None:
-    raise ValueError("Invalid RabbitMQ configuration")
-_log_fmt = '%(asctime)s %(levelname)-8s - %(message)s'
-_broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
-_rabbit_broker = RabbitMQBroker(_broker.subscriber)
-rabbit_client = RabbitMQClient(_rabbit_broker)
+run_task = config.run_task
 
-def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
-    rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
-    return rabbit_run_task(rabbit_client, task_id, run_id, from_, metadata)
+@dataclass(frozen=True)
+class ChangeTaskScheduleData:
+    task_id: TaskIdValue
+    schedule_id: ScheduleIdValue
+    command_dto: dict
 
-class change_task_schedule_handler[T]:
-    def __init__(self, input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], T]):
-        self._input_adapter = input_adapter
-    
-    def __call__(self, handler: Callable[[T], Coroutine[Any, Any, Result | None]]):
-        async def err_to_none(_):
-            return None
-        async def change_task_schedule_wrapper(input_res: Result[T, Any]) -> Result | None:
-            return await input_res\
-                .map(handler)\
-                .map_error(err_to_none)\
-                .merge()
-        return rabbit_change_task_schedule.handler(rabbit_client, self._input_adapter)(change_task_schedule_wrapper)
+def change_task_schedule_handler[T](input_adapter: Callable[[TaskIdValue, ScheduleIdValue, Command], T]):
+    handler = config.change_task_schedule_handler(ChangeTaskScheduleData)
+    def from_change_task_schedule_data(data: ChangeTaskScheduleData):
+        command_res = CommandAdapter.from_dict(data.command_dto)
+        return command_res.map(lambda command: input_adapter(data.task_id, data.schedule_id, command))
+    change_schedule_handler = map_handler(handler, lambda data_res: data_res.bind(from_change_task_schedule_data))
+    return HandlerAdapter(change_schedule_handler)
 
-@asynccontextmanager
-async def _lifespan():
-    raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
-    raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]
-    rabbitmqconfig = RabbitMQConfig.parse(raw_rabbitmq_url, raw_rabbitmq_publisher_confirms)
-    if rabbitmqconfig is None:
-        raise ValueError("Invalid RabbitMQ configuration")
-    await _rabbit_broker.connect(rabbitmqconfig)
-    yield
-    await _rabbit_broker.disconnect()
-
-app = FastStream(broker=_broker, lifespan=_lifespan)
+app = config.create_faststream_app()
 
 _scheduler_states_storage = InMemory[ScheduleIdValue, aiocron.Cron]()
 def _add_aiocron_schedule_handler(cron: CronSchedule, action_func: Callable[[], Any]) -> aiocron.Cron:
@@ -75,6 +45,7 @@ scheduler = Scheduler(_scheduler_states_storage, _add_aiocron_schedule_handler, 
 
 logger = logging.getLogger("schedule_handlers_logger")
 logger.setLevel(logging.INFO)
+_log_fmt = '%(asctime)s %(levelname)-8s - %(message)s'
 formatter = logging.Formatter(fmt=_log_fmt)
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)

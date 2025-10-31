@@ -1,8 +1,12 @@
+from dataclasses import dataclass
 import os
 
 from infrastructure.rabbitmq import config
+from shared.completedresult import CompletedResult
+from shared.customtypes import DefinitionIdValue, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
+from shared.pipeline.handlers import HandlerAdapter
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -21,11 +25,24 @@ for step_definition in step_definitions:
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
-run_definition_handler = config.run_definition_handler
+@dataclass(frozen=True)
+class RunDefinitionData:
+    run_id: RunIdValue
+    definition_id: DefinitionIdValue
+    metadata: dict
+
+run_definition_handler = HandlerAdapter(config.run_definition_handler(RunDefinitionData))
 
 run_step = config.run_step
 
-complete_step_handler = config.complete_step_handler
+@dataclass(frozen=True)
+class CompleteStepData:
+    run_id: RunIdValue
+    step_id: StepIdValue
+    result: CompletedResult
+    metadata: dict
+    
+complete_step_handler = HandlerAdapter(config.complete_step_handler(CompleteStepData))
 
 publish_completed_definition = config.publish_completed_definition
 

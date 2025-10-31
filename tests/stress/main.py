@@ -4,15 +4,12 @@ import functools
 import time
 from typing import Any
 
-from infrastructure import rabbitdefinitioncompleted as rabbit_definition_completed
-from infrastructure import rabbitruntask as rabbit_task
-from infrastructure.rabbitmiddlewares import RequeueChance
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.infrastructure.storage.inmemory import InMemory
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInRepository
 
-from config import rabbit_client, lifespan
+from config import stress_test_definition_completed_subscriber, lifespan, run_stress_test_task
 
 def get_tasks_to_run(task_ids: list[TaskIdValue], num_of_tasks: int):
     task_count = 0
@@ -74,7 +71,7 @@ async def main(state: dict, get_tasks_to_run: Callable[[], Generator[tuple[TaskI
         while (num_of_running > max_concurrent_tasks):
             await asyncio.sleep(1)
             num_of_running = running_tasks_storage.get_num_of_running_tasks()
-        await rabbit_task.run(rabbit_client, task_id, run_id, "stress test", {})
+        await run_stress_test_task(task_id, run_id)
 
     await state["all_tasks_completed"]
 
@@ -106,9 +103,8 @@ if __name__ == "__main__":
         "num_of_tasks": num_of_tasks
     }
 
-    @rabbit_definition_completed.subscriber(rabbit_client, DefinitionCompletedData, queue_name=None, requeue_chance=RequeueChance.LOW)
-    async def remove_completed_task(input):
-        data: DefinitionCompletedData = input.ok
+    @stress_test_definition_completed_subscriber(DefinitionCompletedData)
+    async def remove_completed_task(data: DefinitionCompletedData):
         num_of_completed_tasks = running_tasks_storage.remove(data.run_id)
         print_intermediate_info = num_of_completed_tasks % state["count_of_completed_tasks_for_intermediate_info"] == 0
         if print_intermediate_info:

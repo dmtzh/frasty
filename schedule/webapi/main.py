@@ -1,12 +1,8 @@
-from fastapi import FastAPI
-
 from shared.commands import ClearCommand, SetCommand
 
-from config import change_task_schedule, lifespan
 import cleartaskscheduleapihandler
 import settaskscheduleapihandler
-
-app = FastAPI(lifespan=lifespan)
+from config import app, change_task_schedule
 
 @app.post("/schedule/tasks/{id}", status_code=202)
 async def set_task_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):

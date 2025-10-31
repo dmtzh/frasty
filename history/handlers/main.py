@@ -1,4 +1,4 @@
-# import asyncio
+import asyncio
 from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
@@ -43,5 +43,5 @@ async def add_task_result_to_history(data: DefinitionCompletedData):
         case _:
             return add_to_history_res
 
-# if __name__ == "__main__":
-#     asyncio.run(app.run())
+if __name__ == "__main__":
+    asyncio.run(app.run())

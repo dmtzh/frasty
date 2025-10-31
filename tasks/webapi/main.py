@@ -15,10 +15,10 @@ from shared.utils.result import ResultTag
 import addtaskapihandler
 import cleartaskscheduleapihandler
 import completerunstatehandler
-from config import app, definition_completed_subscriber, run_task
 import getrunstateapihandler
 import runtaskapihandler
 import settaskscheduleapihandler
+from config import app, definition_completed_subscriber, run_task
 
 @app.post("/tasks")
 async def add_task(request: addtaskapihandler.AddTaskRequest):

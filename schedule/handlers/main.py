@@ -11,8 +11,8 @@ from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
 
 import cleartaskschedulehandler
-from config import app, change_task_schedule_handler, logger, run_task, scheduler
 import settaskschedulehandler
+from config import app, change_task_schedule_handler, logger, run_task, scheduler
 
 def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")

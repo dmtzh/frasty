@@ -18,18 +18,13 @@ if (Test-Path $publish_folder) {
     Remove-Item -Path $publish_folder -Recurse
 }
 
-$publish_shared_folder = Join-Path -Path $publish_folder -ChildPath "shared"
-$publish_infrastructure_folder = Join-Path -Path $publish_folder -ChildPath "infrastructure"
-$publish_stepdefinitions_folder = Join-Path -Path $publish_folder -ChildPath "stepdefinitions"
+$publish_shared_folder = $publish_folder + "/shared"
+$publish_infrastructure_folder = $publish_folder + "/infrastructure"
+$publish_stepdefinitions_folder = $publish_folder + "/stepdefinitions"
 
 python $copy_folder_script ./stephandlers $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
-New-Item -Path $publish_infrastructure_folder -ItemType Directory
-Copy-Item -Path ./infrastructure/rabbitmiddlewares.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitcompletestep.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitdefinitioncompleted.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitrunstep.py -Destination $publish_infrastructure_folder
-Copy-Item -Path ./infrastructure/rabbitruntask.py -Destination $publish_infrastructure_folder
+python $copy_folder_script ./infrastructure $publish_infrastructure_folder -e $exclude_folders
 New-Item -Path $publish_stepdefinitions_folder -ItemType Directory
 Copy-Item -Path ./stepdefinitions/shared.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path ./stepdefinitions/html.py -Destination $publish_stepdefinitions_folder

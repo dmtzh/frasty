@@ -1,31 +1,29 @@
+from collections.abc import Callable
 from contextlib import asynccontextmanager
-import os
 
-from faststream.rabbit import RabbitBroker
+from infrastructure.rabbitmq import config
+from shared.completedresult import CompletedResult
+from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
+from shared.definitioncompleteddata import DefinitionCompletedData
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, map_handler
+from shared.utils.parse import parse_from_dict
 
-from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
-from shared.infrastructure.rabbitmq.config import RabbitMQConfig
+def run_stress_test_task(task_id: TaskIdValue, run_id: RunIdValue):
+    return config.run_task(task_id, run_id, "stress test", {})
 
-_raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
-_raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]
-_rabbitmqconfig = RabbitMQConfig.parse(_raw_rabbitmq_url, _raw_rabbitmq_publisher_confirms)
-if _rabbitmqconfig is None:
-    raise ValueError("Invalid RabbitMQ configuration")
-_log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(message_id)-10s - %(message)s'
-_broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
-_rabbit_broker = RabbitMQBroker(_broker.subscriber)
-rabbit_client = RabbitMQClient(_rabbit_broker)
+def stress_test_definition_completed_subscriber[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], T]):
+    subscriber = config.definition_completed_subscriber(DefinitionCompletedData, None, config.RequeueChance.LOW)
+    def from_definition_completed_data(data: DefinitionCompletedData):
+        from_stress_test_res = parse_from_dict(data.metadata, "from", lambda s: True if s == "stress test" else None)
+        return from_stress_test_res.map(lambda _: input_adapter(data.run_id, data.definition_id, data.result, data.metadata))
+    stress_test_subscriber = map_handler(subscriber, lambda data_res: data_res.bind(from_definition_completed_data))
+    return DefinitionCompletedSubscriberAdapter(stress_test_subscriber)
 
 @asynccontextmanager
 async def _lifespan():
-    rabbitmqconfig = RabbitMQConfig.parse(_raw_rabbitmq_url, _raw_rabbitmq_publisher_confirms)
-    if rabbitmqconfig is None:
-        raise ValueError("Invalid RabbitMQ configuration")
-    await _rabbit_broker.connect(rabbitmqconfig)
-    await _broker.start()
-    yield
-    await _rabbit_broker.disconnect()
-    await _broker.stop()
+    async with config.lifespan():
+        await config._broker.start()
+        yield
+        await config._broker.stop()
 
 lifespan = _lifespan()

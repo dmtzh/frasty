@@ -1,23 +1,16 @@
 # import asyncio
-from dataclasses import dataclass
 
 from expression import Result
 
 from shared.completedresult import CompletedWith
-from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.utils.result import ResultTag
 
-from config import app, publish_completed_definition, run_definition, run_task_handler
+from config import app, publish_completed_definition, run_definition, run_task_handler, RunTaskData
 import runtaskdefinitionhandler
 
-@dataclass(frozen=True)
-class RunTaskData:
-    task_id: TaskIdValue
-    run_id: RunIdValue
-    metadata: dict
-
-@run_task_handler(RunTaskData)
+@run_task_handler
 async def handle_run_task_definition_command(data: RunTaskData):
     def run_definition_handler(definition_id: DefinitionIdValue):
         task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}
