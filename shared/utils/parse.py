@@ -41,14 +41,6 @@ def parse_bool_str(s: str) -> bool | None:
     }
     return bool_map.get(strip_and_lowercase(s), None)
 
-def parse_from_str[T](value: str, value_name: str, parser: Callable[[str], T | None]) -> Result[T, str]:
-    opt_parsed_value = parser(value)
-    match opt_parsed_value:
-        case None:
-            return Result.Error(f"invalid '{value_name}' value {value}")
-        case parsed_value:
-            return Result.Ok(parsed_value)
-
 def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     if key not in d:
         return Result.Error(f"'{key}' key is missing")

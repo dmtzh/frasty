@@ -10,7 +10,7 @@ from shared.domainschedule import CronSchedule, TaskSchedule
 from shared.customtypes import TaskIdValue, ScheduleIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.utils.asyncresult import AsyncResult, async_result, coroutine_result
-from shared.utils.parse import parse_from_str
+from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId
 
@@ -43,10 +43,10 @@ class SetTaskScheduleError:
 # Workflow implementation
 # ==================================
 def parse_task_id(raw_task_id: str) -> Result[TaskIdValue, InvalidId]:
-    return parse_from_str(raw_task_id, "task_id", TaskIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
+    return parse_value(raw_task_id, "task_id", TaskIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
 
 def parse_cron_schedule(raw_cron: str) -> Result[CronSchedule, InvalidSchedule]:
-    return parse_from_str(raw_cron, "cron", CronSchedule.parse).map_error(lambda _: InvalidSchedule())
+    return parse_value(raw_cron, "cron", CronSchedule.parse).map_error(lambda _: InvalidSchedule())
 
 @coroutine_result()
 async def set_schedule_workflow(set_task_schedule_handler: Callable[[SetTaskScheduleCommand], Coroutine[Any, Any, Result]], raw_task_id_with_checksum: str, resource: SetScheduleResource):

@@ -13,7 +13,7 @@ from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.task import Task
 from shared.tasksstore import tasks_storage
 from shared.utils.asyncresult import AsyncResult, coroutine_result, async_ex_to_error_result, async_result
-from shared.utils.parse import parse_from_str
+from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId
 
@@ -37,10 +37,10 @@ class ClearTaskScheduleError:
 # Workflow implementation
 # ==================================
 def validate_task_id(raw_id_with_checksum: str) -> Result[TaskIdValue, InvalidId]:
-    return parse_from_str(raw_id_with_checksum, "task_id", TaskIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
+    return parse_value(raw_id_with_checksum, "task_id", TaskIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
 
 def parse_schedule_id(raw_schedule_id_with_checksum: str) -> Result[ScheduleIdValue, InvalidId]:
-    return parse_from_str(raw_schedule_id_with_checksum, "schedule_id", ScheduleIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
+    return parse_value(raw_schedule_id_with_checksum, "schedule_id", ScheduleIdValue.from_value_with_checksum).map_error(lambda _: InvalidId())
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
