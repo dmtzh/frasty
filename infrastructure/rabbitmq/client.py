@@ -9,9 +9,10 @@ from faststream.broker.types import SubscriberMiddleware
 from faststream.rabbit import RabbitQueue
 
 from shared.customtypes import Error as CustomError
-from shared.infrastructure.rabbitmq.broker import RabbitMQBroker, Error as BrokerError
 from shared.utils.crockfordid import CrockfordId
 from shared.utils.result import ResultTag
+
+from .broker import RabbitMQBroker, Error as BrokerError
 
 P = ParamSpec("P")
 R = TypeVar("R")

@@ -13,15 +13,15 @@ from shared.customtypes import Error, IdValue, StepIdValue, RunIdValue, TaskIdVa
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.completedresult import CompletedResult
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
-from shared.infrastructure.rabbitmq.error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
-from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
-from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
 from shared.utils.parse import parse_from_dict, parse_value
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
 
+from .client import RabbitMQClient
+from .error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
+from .logging import RabbitMessageLoggerCreator
+from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, command_handler_logging_middleware, RequeueChance
 
 D = TypeVar("D")

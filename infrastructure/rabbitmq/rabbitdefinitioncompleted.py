@@ -11,13 +11,13 @@ from faststream.rabbit import RabbitMessage
 
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, TaskIdValue, StepIdValue
 from shared.completedresult import CompletedResult, CompletedResultAdapter
-from shared.infrastructure.rabbitmq.client import ExistingQueueName, NotExistingQueueName, QueueName, RabbitMQClient
-from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
-from shared.infrastructure.rabbitmq.logging import RabbitMessageLoggerCreator
-from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
+from .client import ExistingQueueName, NotExistingQueueName, QueueName, RabbitMQClient
+from .error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
+from .logging import RabbitMessageLoggerCreator
+from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, RequeueChance
 
 DEFINITION_COMPLETED_EVENT = "definition_completed"

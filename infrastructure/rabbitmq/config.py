@@ -10,9 +10,6 @@ from faststream.rabbit import RabbitBroker
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
-from shared.infrastructure.rabbitmq.broker import RabbitMQBroker
-from shared.infrastructure.rabbitmq.client import RabbitMQClient, Error as RabbitClientError
-from shared.infrastructure.rabbitmq.config import RabbitMQConfig
 from shared.pipeline.handlers import Handler, StepHandler, Subscriber
 from shared.runstepdata import RunStepData
 from shared.utils.asyncresult import async_ex_to_error_result
@@ -23,6 +20,8 @@ from . import rabbitrundefinition as rabbit_definition
 from . import rabbitdefinitioncompleted as rabbit_definition_completed
 from . import rabbitrunstep as rabbit_step
 from . import rabbitruntask as rabbit_task
+from .broker import RabbitMQBroker, RabbitMQConfig
+from .client import RabbitMQClient, Error as RabbitClientError
 from .rabbitmiddlewares import RequeueChance
 
 _raw_rabbitmq_url = os.environ["RABBITMQ_URL"]

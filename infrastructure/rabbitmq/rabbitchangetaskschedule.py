@@ -7,12 +7,12 @@ from expression import Result
 from faststream.rabbit import RabbitMessage
 
 from shared.customtypes import ScheduleIdValue, TaskIdValue, Error
-from shared.infrastructure.rabbitmq.client import RabbitMQClient
-from shared.infrastructure.rabbitmq.error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
-from shared.infrastructure.rabbitmq.pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 
+from .client import RabbitMQClient
+from .error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
+from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, RequeueChance
 
 R = TypeVar("R")
