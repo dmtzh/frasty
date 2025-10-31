@@ -40,9 +40,7 @@ class FileWithVersion[TId, TItem, TItemDto](
         all_items = await aos.listdir(self._folder_path)
         return all_items
     
-    async def _get_max_version(self, id: TId) -> int:
-        id_folder_path = os.path.join(self._folder_path, str(id))
-        all_files = await aos.listdir(id_folder_path)
+    def _get_max_version(self, all_files: list[str]) -> int:
         all_versions = [int(item.split(".")[0]) for item in all_files]
         max_ver = max(all_versions)
         return max_ver
@@ -72,8 +70,14 @@ class FileWithVersion[TId, TItem, TItemDto](
                     return ver, item
         
         try:
-            max_ver = await self._get_max_version(id)
-            return await get_existing_item(max_ver)
+            id_folder_path = os.path.join(self._folder_path, str(id))
+            all_files = await aos.listdir(id_folder_path)
+            match all_files:
+                case []:
+                    return None
+                case _:
+                    max_ver = self._get_max_version(all_files)
+                    return await get_existing_item(max_ver)
         except FileNotFoundError:
             return None
 

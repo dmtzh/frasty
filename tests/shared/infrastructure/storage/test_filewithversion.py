@@ -3,6 +3,7 @@ from enum import StrEnum
 import os
 from typing import Any, Optional
 
+import aiofiles.os as aos
 from expression import Result, effect
 import pytest
 
@@ -257,3 +258,31 @@ async def test_delete_existing_item(file_with_version_storage: FileWithVersion, 
 async def test_delete_does_not_raise_error_for_not_existing_item(file_with_version_storage: FileWithVersion):
     id = IdValue.new_id()
     await file_with_version_storage.delete(id)
+
+async def test_get_returns_none_when_empty_id_folder_exists(file_with_version_storage: FileWithVersion):
+    id = IdValue.new_id()
+    id_folder_path = os.path.join(file_with_version_storage._folder_path, str(id))
+    await aos.makedirs(id_folder_path, exist_ok=True)
+
+    actual_item_with_ver = await file_with_version_storage.get(id)
+    
+    assert actual_item_with_ver is None
+
+async def test_add_item_when_empty_id_folder_exists(file_with_version_storage: FileWithVersion, sample_domain: SampleDomain):
+    id = IdValue.new_id()
+    id_folder_path = os.path.join(file_with_version_storage._folder_path, str(id))
+    await aos.makedirs(id_folder_path, exist_ok=True)
+
+    res = await file_with_version_storage.add(id, sample_domain)
+    
+    assert res is None
+
+
+async def test_update_returns_false_when_empty_id_folder_exists(file_with_version_storage: FileWithVersion, sample_domain: SampleDomain):
+    id = IdValue.new_id()
+    id_folder_path = os.path.join(file_with_version_storage._folder_path, str(id))
+    await aos.makedirs(id_folder_path, exist_ok=True)
+
+    actual_updated = await file_with_version_storage.update(id, 1, sample_domain)
+
+    assert actual_updated is False
