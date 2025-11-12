@@ -4,8 +4,9 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import StepIdValue, RunIdValue
+from shared.customtypes import Metadata, StepIdValue, RunIdValue
 from shared.domaindefinition import StepDefinition
+from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
 from shared.stepinputdata import StepInputData
 from shared.utils.result import ResultTag
 
@@ -17,8 +18,6 @@ type Handler[T] = Callable[[HandlerContinuation[T]], Any]
 type StepHandlerContinuation[TCfg, D] = Callable[[Result[StepInputData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 type StepHandler[TCfg, D] = Callable[[StepHandlerContinuation[TCfg, D]], Any]
 type StepDefinitionType[TCfg] = type[StepDefinition[TCfg]]
-type StepDataValidator[D] = Callable[[Any], Result[D, Any]]
-type StepInputAdapter[TCfg, D] = Callable[[RunIdValue, StepIdValue, TCfg, D, dict], StepInputData[TCfg, D]]
 
 class to_continuation_with_custom_name[T]:
     def __init__(self, continuation: HandlerContinuation[T], name: str):
@@ -82,8 +81,8 @@ class HandlerAdapter[T]:
         cont = to_continuation(func)
         return self._handler(cont)
 
-class StepFunctionAdapter[TCfg, D]:
-    def __init__(self, func: Callable[[StepInputData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], Coroutine[Any, Any, Result]]):
+class to_step_function[TCfg, D]:
+    def __init__(self, func: Callable[[StepInputData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
         self._func = func
         self._complete_step_func = complete_step_func
         self.__name__ = func.__name__
@@ -98,22 +97,25 @@ class StepFunctionAdapter[TCfg, D]:
                 return complete_step_res.map(lambda _: completed_res)
 
 class StepHandlerAdapter[TCfg, D]:
-    def __init__(self, handler: StepHandler[TCfg, D], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], Coroutine[Any, Any, Result]]):
+    def __init__(self, handler: StepHandler[TCfg, D], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
         self._handler = handler
         self._complete_step_func = complete_step_func
     
     def __call__(self, func: Callable[[StepInputData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
-        step_func = StepFunctionAdapter(func, self._complete_step_func)
+        step_func = to_step_function(func, self._complete_step_func)
         cont = to_continuation(step_func)
         return self._handler(cont)
 
-class StepHandlerAdapterFactory[TCfg, D]:
-    def __init__(self, handler_creator: Callable[[StepDefinitionType[TCfg], StepDataValidator[D], StepInputAdapter[TCfg, D]], StepHandler[TCfg, D]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], Coroutine[Any, Any, Result]]):
+class StepHandlerAdapterFactory[TCfg]:
+    def __init__(self, handler_creator: Callable[[StepDefinitionType[TCfg]], StepHandler[TCfg, Any]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
         self._handler_creator = handler_creator
         self._complete_step_func = complete_step_func
     
-    def __call__(self, step_definition_type: StepDefinitionType[TCfg], data_validator: StepDataValidator[D], input_adapter: StepInputAdapter[TCfg, D]):
-        step_handler = self._handler_creator(step_definition_type, data_validator, input_adapter)
+    def __call__[D](self, step_definition_type: StepDefinitionType[TCfg], data_validator: Callable[[Any], Result[D, Any]]):
+        step_handler_with_unvalidated_data = self._handler_creator(step_definition_type)
+        message_prefix = get_step_definition_name(step_definition_type)
+        step_handler_with_logs = with_input_output_logging(step_handler_with_unvalidated_data, message_prefix)
+        step_handler = map_handler(step_handler_with_logs, lambda data_res: data_res.bind(lambda data: data_validator(data.data).map(lambda d: StepInputData(data.run_id, data.step_id, data.config, d, data.metadata))))
         return StepHandlerAdapter(step_handler, self._complete_step_func)
 
 type Subscriber[T] = Handler[T]

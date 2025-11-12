@@ -5,7 +5,7 @@ import functools
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import TaskIdValue, RunIdValue
+from shared.customtypes import Metadata, TaskIdValue, RunIdValue
 from shared.stepinputdata import StepInputData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
@@ -31,10 +31,7 @@ import sendtoviberchannel.handler as sendtoviberchannelhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
-class GetContentFromJsonCommand(StepInputData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
-    '''Input data for get content from json command'''
-
-@step_handler(GetContentFromJson, GetContentFromJson.validate_input, GetContentFromJsonCommand)
+@step_handler(GetContentFromJson, GetContentFromJson.validate_input)
 @make_async
 def handle_get_content_from_json_command(step_data: StepInputData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
@@ -43,20 +40,14 @@ def handle_get_content_from_json_command(step_data: StepInputData[GetContentFrom
 
 # ------------------------------------------------------------------------------------------------------------
 
-class SendToViberChannelCommand(StepInputData[SendToViberChannelConfig, list]):
-    '''Input data for send to viber channel command'''
-
-@step_handler(SendToViberChannel, SendToViberChannel.validate_input, SendToViberChannelCommand)
+@step_handler(SendToViberChannel, SendToViberChannel.validate_input)
 def handle_send_to_viber_channel_command(step_data: StepInputData[SendToViberChannelConfig, list]):
     cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
     return sendtoviberchannelhandler.handle(viber_api_config, cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class GetLinksFromHtmlCommand(StepInputData[GetLinksFromHtmlConfig, dict | list]):
-    '''Input data for get content from html command'''
-
-@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input, GetLinksFromHtmlCommand)
+@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input)
 @make_async
 def handle_get_links_from_html_command(step_data: StepInputData[GetLinksFromHtmlConfig, dict | list]):
     cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
@@ -65,10 +56,7 @@ def handle_get_links_from_html_command(step_data: StepInputData[GetLinksFromHtml
 
 # ------------------------------------------------------------------------------------------------------------
 
-class GetContentFromHtmlCommand(StepInputData[GetContentFromHtmlConfig, dict | list]):
-    '''Input data for get content from html command'''
-
-@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input, GetContentFromHtmlCommand)
+@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input)
 @make_async
 def handle_get_content_from_html_command(step_data: StepInputData[GetContentFromHtmlConfig, dict | list]):
     cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
@@ -77,10 +65,7 @@ def handle_get_content_from_html_command(step_data: StepInputData[GetContentFrom
 
 # ------------------------------------------------------------------------------------------------------------
 
-class FilterHtmlResponseCommand(StepInputData[None, HttpResponseData]):
-    '''Input data for filter html response command'''
-
-@step_handler(FilterHtmlResponse, HttpResponseData.from_dict, FilterHtmlResponseCommand)
+@step_handler(FilterHtmlResponse, HttpResponseData.from_dict)
 @make_async
 def handle_filter_html_response_command(step_data: StepInputData[None, HttpResponseData]):
     cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
@@ -89,10 +74,7 @@ def handle_filter_html_response_command(step_data: StepInputData[None, HttpRespo
 
 # ------------------------------------------------------------------------------------------------------------
 
-class FilterSuccessResponseCommand(StepInputData[None, HttpResponseData]):
-    '''Input data for filter success response command'''
-
-@step_handler(FilterSuccessResponse, HttpResponseData.from_dict, FilterSuccessResponseCommand)
+@step_handler(FilterSuccessResponse, HttpResponseData.from_dict)
 @make_async
 def handle_filter_success_response_command(step_data: StepInputData[None, HttpResponseData]):
     cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
@@ -101,20 +83,14 @@ def handle_filter_success_response_command(step_data: StepInputData[None, HttpRe
 
 # ------------------------------------------------------------------------------------------------------------
 
-class RequestUrlCommand(StepInputData[None, RequestUrlInputData]):
-    '''Input data for request url command'''
-
-@step_handler(RequestUrl, RequestUrlInputData.from_dict, RequestUrlCommand)
+@step_handler(RequestUrl, RequestUrlInputData.from_dict)
 def handle_request_url_command(step_data: StepInputData[None, RequestUrlInputData]):
     cmd = requesturlhandler.RequestUrlCommand(step_data.data)
     return requesturlhandler.handle(cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
-class FetchNewDataCommand(StepInputData[None, FetchNewDataInput]):
-    '''Input data for fetch new data command'''
-
-@step_handler(FetchNewData, FetchNewDataInput.from_dict, FetchNewDataCommand)
+@step_handler(FetchNewData, FetchNewDataInput.from_dict)
 async def handle_fetch_new_data_command(step_data: StepInputData[None, FetchNewDataInput]):
     fetch_data_handler = functools.partial(fetch_data, step_data)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
@@ -138,7 +114,7 @@ async def handle_fetched_data(fetched_data: FetchedData):
     if isinstance(fetched_data.result, CompletedWith.Error):
         return None
     def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
+        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, Metadata(fetched_data.metadata))
     completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
     handle_fetched_data_res = await fetchnewdatahandler.handle_fetched_data(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
     match handle_fetched_data_res:

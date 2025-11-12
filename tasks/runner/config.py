@@ -27,6 +27,6 @@ def run_task_handler(func: Callable[[RunTaskData], Coroutine[Any, Any, Result | 
 run_definition = config.run_definition
 
 def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: Metadata):
-    return config.publish_completed_definition(run_id, definition_id, result, dict(metadata))
+    return config.publish_completed_definition(run_id, definition_id, result, metadata.to_dict())
 
 app = config.create_faststream_app()

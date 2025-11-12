@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from shared.customtypes import RunIdValue, StepIdValue
+from shared.customtypes import Metadata, RunIdValue, StepIdValue
 
 @dataclass(frozen=True)
 class StepInputData[TCfg, D]:
@@ -8,4 +8,4 @@ class StepInputData[TCfg, D]:
     step_id: StepIdValue
     config: TCfg
     data: D
-    metadata: dict
+    metadata: Metadata

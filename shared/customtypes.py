@@ -66,3 +66,6 @@ class Metadata(dict):
     '''Metadata'''
     def set_task_id(self, task_id: TaskIdValue) -> None:
         self["task_id"] = task_id.to_value_with_checksum()
+    
+    def to_dict(self):
+        return dict(self)

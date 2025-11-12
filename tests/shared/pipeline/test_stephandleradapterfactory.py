@@ -1,18 +1,15 @@
-from dataclasses import dataclass
 from typing import Any
 
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import RunIdValue, StepIdValue
+from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import (
-    StepDataValidator,
     StepDefinitionType,
     StepHandler,
     StepHandlerAdapterFactory,
-    StepHandlerContinuation,
-    StepInputAdapter
+    StepHandlerContinuation
 )
 from shared.stepinputdata import StepInputData
 from shared.utils.parse import parse_value
@@ -31,10 +28,6 @@ class TestStepDefinition(StepDefinition[None]):
     def validate_input(data):
         return parse_value(data, "data", lambda v: v if isinstance(v, dict) else None)
 
-@dataclass(frozen=True)
-class TestStepInputData(StepInputData[None, dict]):
-    __test__ = False  # Instruct pytest to ignore this class for test collection
-
 class TestStepActionHandler[TCfg, D]:
     __test__ = False  # Instruct pytest to ignore this class for test collection
     def __call__(self, func: StepHandlerContinuation[TCfg, D]):
@@ -46,19 +39,19 @@ class TestStepActionHandler[TCfg, D]:
 
 async def test_uses_handler_creator_to_create_step_handler_adapter():
     data = {"data": {"foo": "bar"}}
-    expected_step_input_data = TestStepInputData(RunIdValue.new_id(), StepIdValue.new_id(), None, data, {})
+    expected_step_input_data = StepInputData[None, dict](RunIdValue.new_id(), StepIdValue.new_id(), None, data, Metadata())
     state = {}
     async def func(v: StepInputData[None, dict]):
         state["actual_step_input_data"] = v
         return CompletedWith.Data(v.data)
     step_handler = TestStepActionHandler[None, dict]()
-    def handler_creator(step_definition_type: StepDefinitionType[None], data_validator: StepDataValidator[dict], input_adapter: StepInputAdapter[None, dict]) -> StepHandler[None, dict]:
+    def handler_creator(step_definition_type: StepDefinitionType[None]) -> StepHandler[None, dict]:
         return step_handler
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
         return Result.Ok(None)
 
     factory = StepHandlerAdapterFactory(handler_creator, complete_step_func)
-    adapter = factory(TestStepDefinition, TestStepDefinition.validate_input, TestStepInputData)
+    adapter = factory(TestStepDefinition, TestStepDefinition.validate_input)
     adapter(func)
 
     await step_handler.pass_result(Result.Ok(expected_step_input_data))
@@ -71,11 +64,11 @@ async def test_uses_complete_step_func_to_create_step_handler_adapter():
     expected_run_id = RunIdValue.new_id()
     expected_step_id = StepIdValue.new_id()
     expected_data = {"data": {"foo": "bar"}}
-    step_input_data = TestStepInputData(expected_run_id, expected_step_id, None, expected_data, {})
+    step_input_data = StepInputData[None, dict](expected_run_id, expected_step_id, None, expected_data, Metadata())
     async def func(v: StepInputData[None, dict]):
         return CompletedWith.Data(v.data)
     step_handler = TestStepActionHandler[None, dict]()
-    def handler_creator(step_definition_type: StepDefinitionType[None], data_validator: StepDataValidator[dict], input_adapter: StepInputAdapter[None, dict]) -> StepHandler[None, dict]:
+    def handler_creator(step_definition_type: StepDefinitionType[None]) -> StepHandler[None, dict]:
         return step_handler
     state = {}
     async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
@@ -87,7 +80,7 @@ async def test_uses_complete_step_func_to_create_step_handler_adapter():
         return Result.Ok(None)
 
     factory = StepHandlerAdapterFactory(handler_creator, complete_step_func)
-    adapter = factory(TestStepDefinition, TestStepDefinition.validate_input, TestStepInputData)
+    adapter = factory(TestStepDefinition, TestStepDefinition.validate_input)
     adapter(func)
 
     await step_handler.pass_result(Result.Ok(step_input_data))
