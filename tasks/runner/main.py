@@ -3,7 +3,7 @@
 from expression import Result
 
 from shared.completedresult import CompletedWith
-from shared.customtypes import DefinitionIdValue
+from shared.customtypes import DefinitionIdValue, Metadata
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.utils.result import ResultTag
 
@@ -13,9 +13,9 @@ import runtaskdefinitionhandler
 @run_task_handler
 async def handle_run_task_definition_command(data: RunTaskData):
     def run_definition_handler(definition_id: DefinitionIdValue):
-        task_id_dict = {"task_id": data.task_id.to_value_with_checksum()}
-        metadata = data.metadata | task_id_dict
-        return run_definition(data.run_id, definition_id, metadata)    
+        metadata = Metadata(data.metadata)
+        metadata.set_task_id(data.task_id)
+        return run_definition(data.run_id, definition_id, metadata)
     
     cmd = runtaskdefinitionhandler.RunTaskDefinitionCommand(data.task_id, data.run_id)
     run_task_definition_res = await runtaskdefinitionhandler.handle(run_definition_handler, cmd)

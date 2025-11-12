@@ -7,6 +7,9 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import StepIdValue, RunIdValue
 from shared.domaindefinition import StepDefinition
 from shared.stepinputdata import StepInputData
+from shared.utils.result import ResultTag
+
+from .logging import pipeline_logger
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
 type Handler[T] = Callable[[HandlerContinuation[T]], Any]
@@ -17,17 +20,46 @@ type StepDefinitionType[TCfg] = type[StepDefinition[TCfg]]
 type StepDataValidator[D] = Callable[[Any], Result[D, Any]]
 type StepInputAdapter[TCfg, D] = Callable[[RunIdValue, StepIdValue, TCfg, D, dict], StepInputData[TCfg, D]]
 
-class map_continuation[T, R]:
-    def __init__(self, cont: Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]], func: Callable[[Result[R, Any]], Result[T, Any]]):
-        self._cont = cont
-        self._func = func
-        self.__name__ = cont.__name__
+class to_continuation_with_custom_name[T]:
+    def __init__(self, continuation: HandlerContinuation[T], name: str):
+        self._continuation = continuation
+        self.__name__ = name
     
-    async def __call__(self, input_res: Result[R, Any]) -> Result | None:
-        return await self._cont(self._func(input_res))
+    async def __call__(self, input_res: Result[T, Any]) -> Result | None:
+        return await self._continuation(input_res)
 
 def map_handler[T, R](handler: Handler[T], func: Callable[[Result[T, Any]], Result[R, Any]]) -> Handler[R]:
-    return lambda cont: handler(map_continuation(cont, func))
+    return lambda cont_r: handler(to_continuation_with_custom_name[T](lambda t_res: cont_r(func(t_res)), cont_r.__name__))
+
+def with_middleware[T](handler: Handler[T], func: Callable[[HandlerContinuation[T]], HandlerContinuation[T]]) -> Handler[T]:
+    return lambda cont: handler(to_continuation_with_custom_name(func(cont), cont.__name__))
+
+def with_input_output_logging[T](handler: Handler[T], message_prefix: str) -> Handler[T]:
+    def logs_middleware(cont: HandlerContinuation[T]):
+        async def with_logs(input_res: Result[T, Any]) -> Result | None:
+            logger = pipeline_logger(message_prefix, input_res)
+            match input_res:
+                case Result(tag=ResultTag.OK, ok=data):
+                    first_100_chars = str(data)[:100]
+                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                    logger.info(f"RECEIVED {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"RECEIVED {error}")
+                case unsupported_input:
+                    logger.warning(f"RECEIVED UNSUPPORTED {unsupported_input}")
+            res = await cont(input_res)
+            match res:
+                case Result(tag=ResultTag.OK, ok=result):
+                    first_100_chars = str(result)[:100]
+                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                    logger.info(f"successfully completed with output {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"failed with error {error}")
+                case None:
+                    logger.warning("PROCESSING SKIPPED")
+            return res
+        return with_logs
+    return with_middleware(handler, logs_middleware)
 
 class to_continuation[T]:
     def __init__(self, func: Callable[[T], Coroutine[Any, Any, Result | None]]):

@@ -8,7 +8,7 @@ from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDataValidator, StepDefinitionType, StepHandler, StepInputAdapter, Subscriber
 from shared.utils.asyncresult import async_ex_to_error_result
@@ -33,19 +33,18 @@ _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbit
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 _rabbit_client = RabbitMQClient(_rabbit_broker)
 
-async def _err_to_none(_):
-    return None
-
 def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(_rabbit_client, task_id, run_id, from_, metadata)
 
-def run_task_handler[T](input_adapter: Callable[[TaskIdValue, RunIdValue, dict], T]) -> Handler[T]:
+def run_task_handler() -> Handler[tuple[TaskIdValue, RunIdValue, Metadata]]:
+    def input_adapter(task_id: TaskIdValue, run_id: RunIdValue, metadata: dict):
+        return (task_id, run_id, Metadata(metadata))
     return rabbit_task.handler(_rabbit_client, input_adapter)
 
-def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_definition = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition.run)
-    return rabbit_run_definition(_rabbit_client, run_id, definition_id, metadata)
+    return rabbit_run_definition(_rabbit_client, run_id, definition_id, dict(metadata))
 
 def run_definition_handler[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], T]) -> Handler[T]:
     return rabbit_definition.handler(_rabbit_client, input_adapter)

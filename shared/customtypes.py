@@ -61,3 +61,8 @@ class StepIdValue(IdValue):
 
 class ScheduleIdValue(IdValue):
     '''Schedule id'''
+
+class Metadata(dict):
+    '''Metadata'''
+    def set_task_id(self, task_id: TaskIdValue) -> None:
+        self["task_id"] = task_id.to_value_with_checksum()
