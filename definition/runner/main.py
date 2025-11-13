@@ -6,15 +6,16 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedWith
-from shared.customtypes import Error, DefinitionIdValue
+from shared.customtypes import Error, DefinitionIdValue, Metadata
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.storage.repository import NotFoundError
+from shared.pipeline.types import RunDefinitionData
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step, CompleteStepData, RunDefinitionData
+from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step, CompleteStepData
 import completestephandler
 import rundefinitionhandler
 
@@ -23,8 +24,9 @@ import rundefinitionhandler
 @run_definition_handler
 async def handle_run_definition_command(data: RunDefinitionData):
     def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
-        definition_dict = {"definition_id": data.definition_id.to_value_with_checksum(), "definition_version": str(definition_version)}
-        metadata = data.metadata | definition_dict
+        metadata = data.metadata.clone()
+        metadata.set_definition_id(data.definition_id)
+        metadata.set("definition_version", str(definition_version))
         return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
     
     cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
@@ -59,7 +61,8 @@ async def handle_complete_step_command(data: CompleteStepData):
     def event_handler_with_def_id(definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
         match evt:
             case RunningDefinitionState.Events.DefinitionCompleted():
-                return publish_completed_definition(data.run_id, definition_id, evt.result, data.metadata)
+                metadata = Metadata(data.metadata)
+                return publish_completed_definition(data.run_id, definition_id, evt.result, metadata)
             case RunningDefinitionState.Events.StepRunning():
                 return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, data.metadata)
             case _:
@@ -82,7 +85,8 @@ async def handle_complete_step_command(data: CompleteStepData):
             return None
         case Result(tag=ResultTag.ERROR, error=CompleteStepHandlerError(cmd, error)):
             error_result = CompletedWith.Error(str(error))
-            publish_completed_definition_res = await publish_completed_definition(cmd.run_id, cmd.definition_id, error_result, data.metadata)
+            metadata = Metadata(data.metadata)
+            publish_completed_definition_res = await publish_completed_definition(cmd.run_id, cmd.definition_id, error_result, metadata)
             return publish_completed_definition_res.map(lambda _: error_result)
         case _:
             return complete_step_res

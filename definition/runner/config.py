@@ -1,12 +1,17 @@
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import os
+from typing import Any
+
+from expression import Result
 
 from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue, StepIdValue
+from shared.customtypes import RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import HandlerAdapter
+from shared.pipeline.handlers import HandlerAdapter, with_input_output_logging
+from shared.pipeline.types import RunDefinitionData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -25,13 +30,10 @@ for step_definition in step_definitions:
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
-@dataclass(frozen=True)
-class RunDefinitionData:
-    run_id: RunIdValue
-    definition_id: DefinitionIdValue
-    metadata: dict
-
-run_definition_handler = HandlerAdapter(config.run_definition_handler(RunDefinitionData))
+def run_definition_handler(func: Callable[[RunDefinitionData], Coroutine[Any, Any, Result | None]]):
+    handler = config.run_definition_handler()
+    handler_with_logging = with_input_output_logging(handler, "run_definition")
+    return HandlerAdapter(handler_with_logging)(func)
 
 run_step = config.run_step
 

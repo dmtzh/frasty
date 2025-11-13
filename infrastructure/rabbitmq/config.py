@@ -11,7 +11,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
-from shared.pipeline.types import RunTaskData
+from shared.pipeline.types import RunDefinitionData, RunTaskData
 from shared.stepinputdata import StepInputData
 from shared.utils.asyncresult import async_ex_to_error_result
 
@@ -44,11 +44,13 @@ def run_task_handler() -> Handler[RunTaskData]:
         return RunTaskData(task_id, run_id, Metadata(metadata))
     return rabbit_task.handler(_rabbit_client, input_adapter)
 
-def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_definition(data: RunDefinitionData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_definition = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition.run)
-    return rabbit_run_definition(_rabbit_client, run_id, definition_id, metadata.to_dict())
+    return rabbit_run_definition(_rabbit_client, data.run_id, data.definition_id, data.metadata.to_dict())
 
-def run_definition_handler[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], T]) -> Handler[T]:
+def run_definition_handler() -> Handler[RunDefinitionData]:
+    def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):
+        return RunDefinitionData(run_id, definition_id, Metadata(metadata))
     return rabbit_definition.handler(_rabbit_client, input_adapter)
 
 def run_step(run_id: RunIdValue, step_id: StepIdValue, definition: StepDefinition, data: Any, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
@@ -69,9 +71,9 @@ def complete_step(run_id: RunIdValue, step_id: StepIdValue, completed_result: Co
 def complete_step_handler[T](input_adapter: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], T]) -> Handler[T]:
     return rabbit_complete_step.handler(_rabbit_client, input_adapter)
 
-def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_publish_definition_completed = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition_completed.publish)
-    return rabbit_publish_definition_completed(_rabbit_client, run_id, definition_id, result, metadata)
+    return rabbit_publish_definition_completed(_rabbit_client, run_id, definition_id, result, metadata.to_dict())
 
 def definition_completed_subscriber[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], T], queue_name: str | None, requeue_chance: RequeueChance) -> Subscriber[T]:
     return rabbit_definition_completed.subscriber(_rabbit_client, input_adapter, queue_name, requeue_chance)

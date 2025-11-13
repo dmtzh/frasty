@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from .utils.crockfordid import CrockfordId
 
@@ -64,8 +65,20 @@ class ScheduleIdValue(IdValue):
 
 class Metadata(dict):
     '''Metadata'''
-    def set_task_id(self, task_id: TaskIdValue) -> None:
-        self["task_id"] = task_id.to_value_with_checksum()
+    def _set_id(self, key: str, id: IdValue):
+        self[key] = id.to_value_with_checksum()
+    
+    def set_task_id(self, task_id: TaskIdValue):
+        self._set_id("task_id", task_id)
+    
+    def set_definition_id(self, definition_id: DefinitionIdValue):
+        self._set_id("definition_id", definition_id)
+    
+    def set(self, key: str, value: Any):
+        self[key] = value
+    
+    def clone(self):
+        return Metadata(self)
     
     def to_dict(self):
-        return dict(self)
+        return self.copy()
