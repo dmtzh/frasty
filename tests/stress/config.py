@@ -3,13 +3,15 @@ from contextlib import asynccontextmanager
 
 from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, map_handler
+from shared.pipeline.types import RunTaskData
 from shared.utils.parse import parse_from_dict
 
 def run_stress_test_task(task_id: TaskIdValue, run_id: RunIdValue):
-    return config.run_task(task_id, run_id, "stress test", {})
+    data = RunTaskData(task_id, run_id, Metadata())
+    return config.run_task(data, "stress test")
 
 def stress_test_definition_completed_subscriber[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], T]):
     subscriber = config.definition_completed_subscriber(DefinitionCompletedData, None, config.RequeueChance.LOW)

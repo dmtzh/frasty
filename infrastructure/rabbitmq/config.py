@@ -11,6 +11,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
+from shared.pipeline.types import RunTaskData
 from shared.stepinputdata import StepInputData
 from shared.utils.asyncresult import async_ex_to_error_result
 
@@ -34,13 +35,13 @@ _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbit
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 _rabbit_client = RabbitMQClient(_rabbit_broker)
 
-def run_task(task_id: TaskIdValue, run_id: RunIdValue, from_: str, metadata: dict) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_task(data: RunTaskData, from_: str) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
-    return rabbit_run_task(_rabbit_client, task_id, run_id, from_, metadata)
+    return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, from_, data.metadata.to_dict())
 
-def run_task_handler() -> Handler[tuple[TaskIdValue, RunIdValue, Metadata]]:
+def run_task_handler() -> Handler[RunTaskData]:
     def input_adapter(task_id: TaskIdValue, run_id: RunIdValue, metadata: dict):
-        return (task_id, run_id, Metadata(metadata))
+        return RunTaskData(task_id, run_id, Metadata(metadata))
     return rabbit_task.handler(_rabbit_client, input_adapter)
 
 def run_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:

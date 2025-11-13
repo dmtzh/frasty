@@ -4,9 +4,10 @@ from typing import Any
 
 from expression import Result, effect
 
-from shared.customtypes import TaskIdValue
+from shared.customtypes import Metadata, TaskIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
+from shared.pipeline.types import RunTaskData
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import async_result, coroutine_result
 from shared.utils.parse import parse_from_dict
@@ -27,7 +28,8 @@ async def add_task(request: addtaskapihandler.AddTaskRequest):
 @app.post("/tasks/{id}/run", status_code=202)
 async def run(id: str):
     def run_task_handler(cmd: runtaskapihandler.RunTaskCommand):
-        return run_task(cmd.task_id, cmd.run_id, "tasks_webapi", {})
+        data = RunTaskData(cmd.task_id, cmd.run_id, Metadata())
+        return run_task(data, "tasks_webapi")
     return await runtaskapihandler.handle(run_task_handler, id)
 
 @app.get("/tasks/{id}/run/{run_id}")

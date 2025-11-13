@@ -5,8 +5,9 @@ import functools
 from expression import Result
 
 from shared.commands import Command, ClearCommand, SetCommand
-from shared.customtypes import ScheduleIdValue, TaskIdValue, RunIdValue
+from shared.customtypes import Metadata, ScheduleIdValue, TaskIdValue, RunIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
+from shared.pipeline.types import RunTaskData
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
 
@@ -18,7 +19,8 @@ def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")
     run_id = RunIdValue.new_id()
     schedule_id_with_checksum = schedule.schedule_id.to_value_with_checksum()
-    return run_task(task_id, run_id, f"schedule {schedule_id_with_checksum}", {})
+    data = RunTaskData(task_id, run_id, Metadata())
+    return run_task(data, f"schedule {schedule_id_with_checksum}")
 
 @app.after_startup
 async def init_scheduled_tasks():

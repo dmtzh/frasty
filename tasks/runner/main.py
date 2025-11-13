@@ -5,9 +5,10 @@ from expression import Result
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, Metadata
 from shared.infrastructure.storage.repository import NotFoundError
+from shared.pipeline.types import RunTaskData
 from shared.utils.result import ResultTag
 
-from config import app, publish_completed_definition, run_definition, run_task_handler, RunTaskData
+from config import app, publish_completed_definition, run_definition, run_task_handler
 import runtaskdefinitionhandler
 
 @run_task_handler
