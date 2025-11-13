@@ -64,7 +64,8 @@ async def handle_complete_step_command(data: CompleteStepData):
                 metadata = Metadata(data.metadata)
                 return publish_completed_definition(data.run_id, definition_id, evt.result, metadata)
             case RunningDefinitionState.Events.StepRunning():
-                return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, data.metadata)
+                metadata = Metadata(data.metadata)
+                return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
             case _:
                 async def error_res():
                     return Result.Error(Error(f"Unsupported event {evt}"))

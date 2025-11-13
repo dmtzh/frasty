@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue
 from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
@@ -47,7 +47,9 @@ async def get_definition(id: str):
 @app.post("/definition/manual-run", status_code=201)
 async def manual_run(request: manualrunapihandler.ManualRunRequest):
     def run_first_step_handler(manual_run_id: RunIdValue, manual_definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning):
-        metadata = {"from": "definition_webapi", "definition_id": manual_definition_id.to_value_with_checksum()}
+        metadata = Metadata()
+        metadata.set("from", "definition_webapi")
+        metadata.set_definition_id(manual_definition_id)
         return run_step(manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
     return await manualrunapihandler.handle(run_first_step_handler, request)
 

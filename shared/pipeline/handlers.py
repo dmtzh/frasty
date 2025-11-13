@@ -7,10 +7,10 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, StepIdValue, RunIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
-from shared.stepinputdata import StepInputData
 from shared.utils.result import ResultTag
 
 from .logging import pipeline_logger
+from .types import StepInputData
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
 type Handler[T] = Callable[[HandlerContinuation[T]], Any]

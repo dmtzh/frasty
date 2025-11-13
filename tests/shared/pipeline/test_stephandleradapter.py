@@ -4,9 +4,9 @@ from expression import Result
 import pytest
 
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import RunIdValue, StepIdValue
+from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.handlers import StepHandlerAdapter, StepHandlerContinuation
-from shared.stepinputdata import StepInputData
+from shared.pipeline.types import StepInputData
 
 @dataclass(frozen=True)
 class TestStepInputData(StepInputData[None, dict]):
@@ -22,7 +22,7 @@ class TestStepActionHandler[TCfg, D]:
 @pytest.fixture
 def step_input_data():
     data = {"data": {"foo": "bar"}}
-    return TestStepInputData(RunIdValue.new_id(), StepIdValue.new_id(), None, data, {})
+    return TestStepInputData(RunIdValue.new_id(), StepIdValue.new_id(), None, data, Metadata())
 
 
 

@@ -6,7 +6,7 @@ from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import Metadata, TaskIdValue, RunIdValue
-from shared.stepinputdata import StepInputData
+from shared.pipeline.types import StepInputData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid

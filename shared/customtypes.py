@@ -65,14 +65,14 @@ class ScheduleIdValue(IdValue):
 
 class Metadata(dict):
     '''Metadata'''
-    def _set_id(self, key: str, id: IdValue):
+    def set_id(self, key: str, id: IdValue):
         self[key] = id.to_value_with_checksum()
     
     def set_task_id(self, task_id: TaskIdValue):
-        self._set_id("task_id", task_id)
+        self.set_id("task_id", task_id)
     
     def set_definition_id(self, definition_id: DefinitionIdValue):
-        self._set_id("definition_id", definition_id)
+        self.set_id("definition_id", definition_id)
     
     def set(self, key: str, value: Any):
         self[key] = value

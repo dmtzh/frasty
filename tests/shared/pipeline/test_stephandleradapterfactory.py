@@ -11,7 +11,7 @@ from shared.pipeline.handlers import (
     StepHandlerAdapterFactory,
     StepHandlerContinuation
 )
-from shared.stepinputdata import StepInputData
+from shared.pipeline.types import StepInputData
 from shared.utils.parse import parse_value
 
 class TestStepDefinition(StepDefinition[None]):
