@@ -3,10 +3,10 @@ from typing import Any
 from expression import Result
 import pytest
 
-from shared.completedresult import CompletedResult, CompletedWith
+from shared.completedresult import CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.handlers import StepHandlerAdapter, StepHandlerContinuation
-from shared.pipeline.types import StepInputData
+from shared.pipeline.types import CompleteStepData, StepInputData
 
 @dataclass(frozen=True)
 class TestStepInputData(StepInputData[None, dict]):
@@ -30,7 +30,7 @@ async def test_when_handler_pass_success_result_then_func_invokes_with_success_r
     expected_step_input_data = step_input_data
     step_handler = TestStepActionHandler[None, dict]()
     state = {}
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
+    async def complete_step_func(data: CompleteStepData) -> Result:
         return Result.Ok(None)
     async def func(v: StepInputData[None, dict]):
         state["actual_step_input_data"] = v
@@ -45,7 +45,7 @@ async def test_when_handler_pass_success_result_then_func_invokes_with_success_r
 
 async def test_when_handler_pass_error_result_then_func_not_invoked():
     step_handler = TestStepActionHandler[None, dict]()
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
+    async def complete_step_func(data: CompleteStepData) -> Result:
         return Result.Ok(None)
     state = {}
     async def func(v: StepInputData[None, dict]):
@@ -62,8 +62,8 @@ async def test_when_handler_pass_error_result_then_func_not_invoked():
 async def test_when_handler_pass_error_result_then_complete_step_func_not_invoked():
     step_handler = TestStepActionHandler[None, dict]()
     state = {}
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
-        state["actual_completed_result"] = completed_result
+    async def complete_step_func(data: CompleteStepData) -> Result:
+        state["actual_completed_result"] = data.result
         return Result.Ok(None)
     async def func(v: StepInputData[None, dict]):
         return CompletedWith.Data(v.data)
@@ -79,8 +79,8 @@ async def test_when_func_returns_completed_result_then_result_is_passed_to_compl
     expected_completed_result = CompletedWith.Data(step_input_data.data)
     step_handler = TestStepActionHandler[None, dict]()
     state = {}
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
-        state["actual_completed_result"] = completed_result
+    async def complete_step_func(data: CompleteStepData) -> Result:
+        state["actual_completed_result"] = data.result
         return Result.Ok(None)
     async def func(v: StepInputData[None, dict]):
         return expected_completed_result
@@ -95,8 +95,8 @@ async def test_when_func_returns_completed_result_then_result_is_passed_to_compl
 async def test_when_func_returns_none_then_complete_step_func_not_invoked(step_input_data: TestStepInputData):
     step_handler = TestStepActionHandler[None, dict]()
     state = {}
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
-        state["actual_completed_result"] = completed_result
+    async def complete_step_func(data: CompleteStepData) -> Result:
+        state["actual_completed_result"] = data.result
         return Result.Ok(None)
     async def func(v: StepInputData[None, dict]):
         return None

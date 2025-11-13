@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
 
 @dataclass(frozen=True)
@@ -20,4 +21,11 @@ class StepInputData[TCfg, D]:
     step_id: StepIdValue
     config: TCfg
     data: D
+    metadata: Metadata
+
+@dataclass(frozen=True)
+class CompleteStepData:
+    run_id: RunIdValue
+    step_id: StepIdValue
+    result: CompletedResult
     metadata: Metadata

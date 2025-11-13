@@ -6,7 +6,7 @@ from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.customtypes import Metadata, TaskIdValue, RunIdValue
-from shared.pipeline.types import StepInputData
+from shared.pipeline.types import CompleteStepData, StepInputData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
@@ -114,7 +114,8 @@ async def handle_fetched_data(fetched_data: FetchedData):
     if isinstance(fetched_data.result, CompletedWith.Error):
         return None
     def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        return complete_step(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, Metadata(fetched_data.metadata))
+        data = CompleteStepData(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, Metadata(fetched_data.metadata))
+        return complete_step(data)
     completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
     handle_fetched_data_res = await fetchnewdatahandler.handle_fetched_data(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
     match handle_fetched_data_res:

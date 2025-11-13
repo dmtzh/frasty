@@ -11,7 +11,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
-from shared.pipeline.types import RunDefinitionData, RunTaskData, StepInputData
+from shared.pipeline.types import CompleteStepData, RunDefinitionData, RunTaskData, StepInputData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitchangetaskschedule as rabbit_change_task_schedule
@@ -63,11 +63,13 @@ def step_handler[TCfg](step_definition_type: StepDefinitionType[TCfg]) -> StepHa
         return StepInputData[TCfg, Any](run_id, step_id, cfg, data, Metadata(metadata))
     return rabbit_step.handler(_rabbit_client, step_definition_type, data_validator, input_adapter)
 
-def complete_step(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
+def complete_step(data: CompleteStepData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_complete_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_complete_step.run)
-    return rabbit_run_complete_step(_rabbit_client, run_id, step_id, completed_result, metadata.to_dict())
+    return rabbit_run_complete_step(_rabbit_client, data.run_id, data.step_id, data.result, data.metadata.to_dict())
 
-def complete_step_handler[T](input_adapter: Callable[[RunIdValue, StepIdValue, CompletedResult, dict], T]) -> Handler[T]:
+def complete_step_handler() -> Handler[CompleteStepData]:
+    def input_adapter(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict):
+        return CompleteStepData(run_id, step_id, completed_result, Metadata(metadata))
     return rabbit_complete_step.handler(_rabbit_client, input_adapter)
 
 def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:

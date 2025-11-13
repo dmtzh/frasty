@@ -6,7 +6,7 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedWith
-from shared.customtypes import Error, DefinitionIdValue, Metadata
+from shared.customtypes import Error, DefinitionIdValue
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.pipeline.types import RunDefinitionData
@@ -61,11 +61,9 @@ async def handle_complete_step_command(data: CompleteStepData):
     def event_handler_with_def_id(definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
         match evt:
             case RunningDefinitionState.Events.DefinitionCompleted():
-                metadata = Metadata(data.metadata)
-                return publish_completed_definition(data.run_id, definition_id, evt.result, metadata)
+                return publish_completed_definition(data.run_id, definition_id, evt.result, data.metadata)
             case RunningDefinitionState.Events.StepRunning():
-                metadata = Metadata(data.metadata)
-                return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+                return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, data.metadata)
             case _:
                 async def error_res():
                     return Result.Error(Error(f"Unsupported event {evt}"))
@@ -86,8 +84,7 @@ async def handle_complete_step_command(data: CompleteStepData):
             return None
         case Result(tag=ResultTag.ERROR, error=CompleteStepHandlerError(cmd, error)):
             error_result = CompletedWith.Error(str(error))
-            metadata = Metadata(data.metadata)
-            publish_completed_definition_res = await publish_completed_definition(cmd.run_id, cmd.definition_id, error_result, metadata)
+            publish_completed_definition_res = await publish_completed_definition(cmd.run_id, cmd.definition_id, error_result, data.metadata)
             return publish_completed_definition_res.map(lambda _: error_result)
         case _:
             return complete_step_res

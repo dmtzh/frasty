@@ -1,17 +1,14 @@
 from collections.abc import Callable, Coroutine
-from dataclasses import dataclass
 import os
 from typing import Any
 
 from expression import Result
 
 from infrastructure.rabbitmq import config
-from shared.completedresult import CompletedResult
-from shared.customtypes import RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.pipeline.handlers import HandlerAdapter, with_input_output_logging
-from shared.pipeline.types import RunDefinitionData
+from shared.pipeline.types import CompleteStepData, RunDefinitionData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -37,14 +34,10 @@ def run_definition_handler(func: Callable[[RunDefinitionData], Coroutine[Any, An
 
 run_step = config.run_step
 
-@dataclass(frozen=True)
-class CompleteStepData:
-    run_id: RunIdValue
-    step_id: StepIdValue
-    result: CompletedResult
-    metadata: dict
-    
-complete_step_handler = HandlerAdapter(config.complete_step_handler(CompleteStepData))
+def complete_step_handler(func: Callable[[CompleteStepData], Coroutine[Any, Any, Result | None]]):
+    handler = config.complete_step_handler()
+    handler_with_logging = with_input_output_logging(handler, "complete_step")
+    return HandlerAdapter(handler_with_logging)(func)
 
 publish_completed_definition = config.publish_completed_definition
 

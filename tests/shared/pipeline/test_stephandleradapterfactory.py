@@ -2,7 +2,7 @@ from typing import Any
 
 from expression import Result
 
-from shared.completedresult import CompletedResult, CompletedWith
+from shared.completedresult import CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import (
@@ -11,7 +11,7 @@ from shared.pipeline.handlers import (
     StepHandlerAdapterFactory,
     StepHandlerContinuation
 )
-from shared.pipeline.types import StepInputData
+from shared.pipeline.types import CompleteStepData, StepInputData
 from shared.utils.parse import parse_value
 
 class TestStepDefinition(StepDefinition[None]):
@@ -47,7 +47,7 @@ async def test_uses_handler_creator_to_create_step_handler_adapter():
     step_handler = TestStepActionHandler[None, dict]()
     def handler_creator(step_definition_type: StepDefinitionType[None]) -> StepHandler[None, dict]:
         return step_handler
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
+    async def complete_step_func(data: CompleteStepData) -> Result:
         return Result.Ok(None)
 
     factory = StepHandlerAdapterFactory(handler_creator, complete_step_func)
@@ -71,10 +71,10 @@ async def test_uses_complete_step_func_to_create_step_handler_adapter():
     def handler_creator(step_definition_type: StepDefinitionType[None]) -> StepHandler[None, dict]:
         return step_handler
     state = {}
-    async def complete_step_func(run_id: RunIdValue, step_id: StepIdValue, completed_result: CompletedResult, metadata: dict) -> Result:
-        state["actual_run_id"] = run_id
-        state["actual_step_id"] = step_id
-        match completed_result:
+    async def complete_step_func(data: CompleteStepData) -> Result:
+        state["actual_run_id"] = data.run_id
+        state["actual_step_id"] = data.step_id
+        match data.result:
             case CompletedWith.Data(data):
                 state["actual_data"] = data
         return Result.Ok(None)

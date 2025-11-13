@@ -4,13 +4,12 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import Metadata, StepIdValue, RunIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
 from shared.utils.result import ResultTag
 
 from .logging import pipeline_logger
-from .types import StepInputData
+from .types import CompleteStepData, StepInputData
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
 type Handler[T] = Callable[[HandlerContinuation[T]], Any]
@@ -82,7 +81,7 @@ class HandlerAdapter[T]:
         return self._handler(cont)
 
 class to_step_function[TCfg, D]:
-    def __init__(self, func: Callable[[StepInputData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
+    def __init__(self, func: Callable[[StepInputData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_step_func: Callable[[CompleteStepData], Coroutine[Any, Any, Result]]):
         self._func = func
         self._complete_step_func = complete_step_func
         self.__name__ = func.__name__
@@ -93,11 +92,12 @@ class to_step_function[TCfg, D]:
             case None:
                 return None
             case completed_res:
-                complete_step_res = await self._complete_step_func(input_data.run_id, input_data.step_id, completed_res, input_data.metadata)
+                data = CompleteStepData(input_data.run_id, input_data.step_id, completed_res, input_data.metadata)
+                complete_step_res = await self._complete_step_func(data)
                 return complete_step_res.map(lambda _: completed_res)
 
 class StepHandlerAdapter[TCfg, D]:
-    def __init__(self, handler: StepHandler[TCfg, D], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
+    def __init__(self, handler: StepHandler[TCfg, D], complete_step_func: Callable[[CompleteStepData], Coroutine[Any, Any, Result]]):
         self._handler = handler
         self._complete_step_func = complete_step_func
     
@@ -107,7 +107,7 @@ class StepHandlerAdapter[TCfg, D]:
         return self._handler(cont)
 
 class StepHandlerAdapterFactory[TCfg]:
-    def __init__(self, handler_creator: Callable[[StepDefinitionType[TCfg]], StepHandler[TCfg, Any]], complete_step_func: Callable[[RunIdValue, StepIdValue, CompletedResult, Metadata], Coroutine[Any, Any, Result]]):
+    def __init__(self, handler_creator: Callable[[StepDefinitionType[TCfg]], StepHandler[TCfg, Any]], complete_step_func: Callable[[CompleteStepData], Coroutine[Any, Any, Result]]):
         self._handler_creator = handler_creator
         self._complete_step_func = complete_step_func
     
