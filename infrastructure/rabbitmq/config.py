@@ -34,9 +34,9 @@ _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbit
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 _rabbit_client = RabbitMQClient(_rabbit_broker)
 
-def run_task(data: RunTaskData, from_: str) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
-    return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, from_, data.metadata.to_dict())
+    return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, data.metadata.to_dict())
 
 def run_task_handler() -> Handler[RunTaskData]:
     def input_adapter(task_id: TaskIdValue, run_id: RunIdValue, metadata: dict):

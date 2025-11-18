@@ -22,7 +22,7 @@ def run_webapi_task(task_id: TaskIdValue, run_id: RunIdValue):
     metadata = Metadata()
     metadata.set_from("run task webapi")
     data = RunTaskData(task_id, run_id, metadata)
-    return config.run_task(data, "run task webapi")
+    return config.run_task(data)
 
 @dataclass(frozen=True)
 class CompletedTaskData:

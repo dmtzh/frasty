@@ -10,8 +10,10 @@ from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData
 
 def run_stress_test_task(task_id: TaskIdValue, run_id: RunIdValue):
-    data = RunTaskData(task_id, run_id, Metadata())
-    return config.run_task(data, "stress test")
+    metadata = Metadata()
+    metadata.set_from("stress test")
+    data = RunTaskData(task_id, run_id, metadata)
+    return config.run_task(data)
 
 def stress_test_definition_completed_subscriber(func: Callable[[CompletedDefinitionData], Coroutine[Any, Any, Result | None]]):
     subscriber = config.definition_completed_subscriber(None, config.RequeueChance.LOW)

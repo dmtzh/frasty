@@ -49,7 +49,7 @@ def fetch_data(step_data: StepInputData[None, FetchNewDataInput], fetch_id: Fetc
     metadata.set_id("fetch_id", fetch_id)
     metadata.set("parent_metadata", step_data.metadata.to_dict())
     data = RunTaskData(step_data.data.task_id, step_data.run_id, metadata)
-    return config.run_task(data, "fetch new data step")
+    return config.run_task(data)
 
 @dataclass(frozen=True)
 class FetchedData:

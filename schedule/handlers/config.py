@@ -8,16 +8,22 @@ import aiocron
 
 from infrastructure.rabbitmq import config
 from shared.commands import Command, CommandAdapter
-from shared.customtypes import ScheduleIdValue, TaskIdValue
+from shared.customtypes import Metadata, RunIdValue, ScheduleIdValue, TaskIdValue
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.storage.inmemory import InMemory
 from shared.pipeline.handlers import HandlerAdapter, map_handler
 
 from scheduler import Scheduler
+from shared.pipeline.types import RunTaskData
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
-run_task = config.run_task
+def run_task(task_id: TaskIdValue, run_id: RunIdValue, schedule_id: ScheduleIdValue):
+    schedule_id_with_checksum = schedule_id.to_value_with_checksum()
+    metadata = Metadata()
+    metadata.set_from(f"schedule {schedule_id_with_checksum}")
+    data = RunTaskData(task_id, run_id, metadata)
+    return config.run_task(data)
 
 @dataclass(frozen=True)
 class ChangeTaskScheduleData:
