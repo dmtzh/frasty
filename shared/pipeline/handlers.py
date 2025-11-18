@@ -9,7 +9,7 @@ from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definitio
 from shared.utils.result import ResultTag
 
 from .logging import pipeline_logger
-from .types import CompleteStepData, StepInputData
+from .types import CompleteStepData, CompletedDefinitionData, StepInputData
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
 type Handler[T] = Callable[[HandlerContinuation[T]], Any]
@@ -118,7 +118,37 @@ class StepHandlerAdapterFactory[TCfg]:
         step_handler = map_handler(step_handler_with_logs, lambda data_res: data_res.bind(lambda data: data_validator(data.data).map(lambda d: StepInputData(data.run_id, data.step_id, data.config, d, data.metadata))))
         return StepHandlerAdapter(step_handler, self._complete_step_func)
 
-type Subscriber[T] = Handler[T]
+type Subscriber = Handler[CompletedDefinitionData]
+
+def only_from(subscriber: Subscriber, from_: str):
+    def short_circuit_if_not_from(decoratee: HandlerContinuation[CompletedDefinitionData]):
+        async def middleware_func(data: CompletedDefinitionData):
+            return await decoratee(Result.Ok(data)) if data.metadata.get_from() == from_ else None
+        return to_continuation(middleware_func)
+    return with_middleware(subscriber, short_circuit_if_not_from)
+
+def with_input_output_logging_subscriber(subscriber: Subscriber, message_prefix: str) -> Subscriber:
+    def decorate_with_logs(decoratee: HandlerContinuation[CompletedDefinitionData]):
+        async def logs_middleware(input_res: Result[CompletedDefinitionData, Any]) -> Result | None:
+            logger = pipeline_logger(message_prefix, input_res)
+            match input_res:
+                case Result(tag=ResultTag.OK, ok=data):
+                    logger.info(f"RECEIVED {data}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"RECEIVED {error}")
+                case unsupported_input:
+                    logger.warning(f"RECEIVED UNSUPPORTED {unsupported_input}")
+            res = await decoratee(input_res)
+            match res:
+                case Result(tag=ResultTag.OK, ok=output):
+                    logger.info(f"data processed with output {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"data failed to process with error {error}")
+                case None:
+                    logger.warning("PROCESSING SKIPPED")
+            return res
+        return logs_middleware
+    return with_middleware(subscriber, decorate_with_logs)
 
 class DefinitionCompletedSubscriberAdapter[T](HandlerAdapter[T]):
     '''Definition completed subscriber adapter'''

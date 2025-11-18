@@ -1,18 +1,18 @@
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Coroutine, Generator
+from dataclasses import dataclass
 import os
 from typing import Any
 
-from expression import effect
+from expression import Result, effect
 
 from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, TaskIdValue
-from shared.definitioncompleteddata import DefinitionCompletedData
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler
-from shared.pipeline.types import RunTaskData, StepInputData
-from shared.utils.parse import parse_from_dict
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler, only_from, with_input_output_logging_subscriber
+from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepInputData
+from shared.utils.parse import parse_value
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -45,21 +45,32 @@ step_handler = StepHandlerAdapterFactory(config.step_handler, complete_step)
 
 def fetch_data(step_data: StepInputData[None, FetchNewDataInput], fetch_id: FetchIdValue):
     metadata = Metadata()
+    metadata.set_from("fetch new data step")
     metadata.set_id("fetch_id", fetch_id)
     metadata.set("parent_metadata", step_data.metadata.to_dict())
     data = RunTaskData(step_data.data.task_id, step_data.run_id, metadata)
     return config.run_task(data, "fetch new data step")
 
-def data_fetched_handler[T](input_adapter: Callable[[FetchIdValue, TaskIdValue, RunIdValue, CompletedResult, dict], T]):
-    @effect.result[T, str]()
-    def definition_to_fetched_data(data: DefinitionCompletedData) -> Generator[Any, Any, T]:
-        yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "fetch new data step" else None)
-        fetch_id = yield from parse_from_dict(data.metadata, "fetch_id", FetchIdValue.from_value_with_checksum)
-        task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
-        metadata = yield from parse_from_dict(data.metadata, "parent_metadata", lambda pm: pm if type(pm) is dict else None)
-        return input_adapter(fetch_id, task_id, data.run_id, data.result, metadata)
-    subscriber = config.definition_completed_subscriber(DefinitionCompletedData, "fetchnewdata_completed_tasks", config.RequeueChance.HIGH)
-    fetched_data_subscriber = map_handler(subscriber, lambda data_res: data_res.bind(definition_to_fetched_data))
-    return DefinitionCompletedSubscriberAdapter(fetched_data_subscriber)
+@dataclass(frozen=True)
+class FetchedData:
+    fetch_id: FetchIdValue
+    task_id: TaskIdValue
+    run_id: RunIdValue
+    result: CompletedResult
+    metadata: Metadata
+
+def data_fetched_subscriber(func: Callable[[FetchedData], Coroutine[Any, Any, Result | None]]):
+    @effect.result[FetchedData, str]()
+    def definition_to_fetched_data(data: CompletedDefinitionData) -> Generator[Any, Any, FetchedData]:
+        fetch_id = yield from parse_value(data.metadata, "fetch_id", lambda m: Metadata.get_id(m, "fetch_id", FetchIdValue))
+        task_id = yield from parse_value(data.metadata, "task_id", lambda m: Metadata.get_id(m, "task_id", TaskIdValue))
+        metadata_dict = yield from parse_value(data.metadata.get("parent_metadata"), "parent_metadata", lambda pm: pm if type(pm) is dict else None)
+        metadata = Metadata(metadata_dict)
+        return FetchedData(fetch_id, task_id, data.run_id, data.result, metadata)
+    subscriber = config.definition_completed_subscriber("fetchnewdata_completed_tasks", config.RequeueChance.HIGH)
+    fetch_new_data_step_subscriber = only_from(subscriber, "fetch new data step")
+    with_logging_subscriber = with_input_output_logging_subscriber(fetch_new_data_step_subscriber, "data_fetched")
+    fetched_data_subscriber = map_handler(with_logging_subscriber, lambda data_res: data_res.bind(definition_to_fetched_data))
+    return DefinitionCompletedSubscriberAdapter(fetched_data_subscriber)(func)
 
 app = config.create_faststream_app()

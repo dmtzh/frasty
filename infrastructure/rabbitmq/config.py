@@ -11,7 +11,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
-from shared.pipeline.types import CompleteStepData, RunDefinitionData, RunTaskData, StepInputData
+from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepInputData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitchangetaskschedule as rabbit_change_task_schedule
@@ -72,11 +72,13 @@ def complete_step_handler() -> Handler[CompleteStepData]:
         return CompleteStepData(run_id, step_id, completed_result, Metadata(metadata))
     return rabbit_complete_step.handler(_rabbit_client, input_adapter)
 
-def publish_completed_definition(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
+def publish_completed_definition(data: CompletedDefinitionData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_publish_definition_completed = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition_completed.publish)
-    return rabbit_publish_definition_completed(_rabbit_client, run_id, definition_id, result, metadata.to_dict())
+    return rabbit_publish_definition_completed(_rabbit_client, data.run_id, data.definition_id, data.result, data.metadata.to_dict())
 
-def definition_completed_subscriber[T](input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], T], queue_name: str | None, requeue_chance: RequeueChance) -> Subscriber[T]:
+def definition_completed_subscriber(queue_name: str | None, requeue_chance: RequeueChance) -> Subscriber:
+    def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, completed_result: CompletedResult, metadata: dict):
+        return CompletedDefinitionData(run_id, definition_id, completed_result, Metadata(metadata))
     return rabbit_definition_completed.subscriber(_rabbit_client, input_adapter, queue_name, requeue_chance)
 
 def change_task_schedule(task_id: TaskIdValue, schedule_id: ScheduleIdValue, command_dto: dict):

@@ -1,25 +1,18 @@
-from collections.abc import Generator
-from dataclasses import dataclass
-from typing import Any
+from expression import Result
 
-from expression import Result, effect
-
-from shared.customtypes import Metadata, TaskIdValue
-from shared.definitioncompleteddata import DefinitionCompletedData
-from shared.infrastructure.storage.repository import NotFoundError, StorageError
-from shared.pipeline.types import RunTaskData
-from shared.utils.asynchronous import make_async
-from shared.utils.asyncresult import async_result, coroutine_result
-from shared.utils.parse import parse_from_dict
+from shared.completedresult import CompletedResult
+from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
+from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 import addtaskapihandler
 import cleartaskscheduleapihandler
-import completerunstatehandler
 import getrunstateapihandler
 import runtaskapihandler
 import settaskscheduleapihandler
-from config import app, definition_completed_subscriber, run_task
+from webapitaskrunstate import WebApiTaskRunState
+from webapitaskrunstore import web_api_task_run_storage
+from config import CompletedTaskData, app, run_webapi_task, webapi_task_completed_subscriber
 
 @app.post("/tasks")
 async def add_task(request: addtaskapihandler.AddTaskRequest):
@@ -27,10 +20,7 @@ async def add_task(request: addtaskapihandler.AddTaskRequest):
 
 @app.post("/tasks/{id}/run", status_code=202)
 async def run(id: str):
-    def run_task_handler(cmd: runtaskapihandler.RunTaskCommand):
-        data = RunTaskData(cmd.task_id, cmd.run_id, Metadata())
-        return run_task(data, "tasks_webapi")
-    return await runtaskapihandler.handle(run_task_handler, id)
+    return await runtaskapihandler.handle(lambda cmd: run_webapi_task(cmd.task_id, cmd.run_id), id)
 
 @app.get("/tasks/{id}/run/{run_id}")
 async def get_run_state(id: str, run_id: str):
@@ -44,30 +34,19 @@ async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRe
 async def clear_schedule(id: str, schedule_id: str):
     return await cleartaskscheduleapihandler.handle(id, schedule_id)
 
-@dataclass(frozen=True)
-class DataValidationError:
-    '''Data validation error'''
-    error: str
-
-@definition_completed_subscriber(DefinitionCompletedData)
-async def complete_web_api_task_run_state_with_result(data: DefinitionCompletedData):
-    @async_result
-    @make_async
-    @effect.result[completerunstatehandler.CompleteRunStateCommand, str]()
-    def to_complete_run_state_cmd() -> Generator[Any, Any, completerunstatehandler.CompleteRunStateCommand]:
-        yield from parse_from_dict(data.metadata, "from", lambda s: True if s == "tasks_webapi" else None)
-        task_id = yield from parse_from_dict(data.metadata, "task_id", TaskIdValue.from_value_with_checksum)
-        return completerunstatehandler.CompleteRunStateCommand(task_id, data.run_id, data.result)
-    @coroutine_result[DataValidationError | NotFoundError | StorageError]()
-    async def complete_run_state():
-        cmd = await to_complete_run_state_cmd().map_error(DataValidationError)
-        state = await async_result(completerunstatehandler.handle)(cmd)
-        return state
-
-    complete_run_state_res = await complete_run_state()
+@webapi_task_completed_subscriber
+async def complete_run_state_with_result(data: CompletedTaskData):
+    @async_ex_to_error_result(StorageError.from_exception)
+    @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
+    @web_api_task_run_storage.with_storage
+    def apply_complete_run_state(state: WebApiTaskRunState | None, result: CompletedResult):
+        if state is None:
+            raise NotFoundException()
+        new_state = state.complete(result)
+        return (new_state, new_state)
+    
+    complete_run_state_res = await apply_complete_run_state(data.task_id, data.run_id, data.result)
     match complete_run_state_res:
-        case Result(tag=ResultTag.ERROR, error=DataValidationError()):
-            return None
         case Result(tag=ResultTag.ERROR, error=NotFoundError()):
             return None
         case _:

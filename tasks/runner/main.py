@@ -5,7 +5,7 @@ from expression import Result
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue
 from shared.infrastructure.storage.repository import NotFoundError
-from shared.pipeline.types import RunDefinitionData, RunTaskData
+from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, RunTaskData
 from shared.utils.result import ResultTag
 
 from config import app, publish_completed_definition, run_definition, run_task_handler
@@ -27,7 +27,8 @@ async def handle_run_task_definition_command(data: RunTaskData):
         case Result(tag=ResultTag.ERROR, error=error):
             definition_id = DefinitionIdValue(data.run_id)
             error_result = CompletedWith.Error(str(error))
-            publish_completed_definition_res = await publish_completed_definition(data.run_id, definition_id, error_result, data.metadata)
+            compl_def_data = CompletedDefinitionData(data.run_id, definition_id, error_result, data.metadata)
+            publish_completed_definition_res = await publish_completed_definition(compl_def_data)
             return publish_completed_definition_res.map(lambda _: error_result)
         case _:
             return run_task_definition_res

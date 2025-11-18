@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from .utils.crockfordid import CrockfordId
 
@@ -63,10 +63,15 @@ class StepIdValue(IdValue):
 class ScheduleIdValue(IdValue):
     '''Schedule id'''
 
+IdVal = TypeVar("IdVal", bound=IdValue)
+
 class Metadata(dict):
     '''Metadata'''
+    def set(self, key: str, value: Any):
+        self[key] = value
+    
     def set_id(self, key: str, id: IdValue):
-        self[key] = id.to_value_with_checksum()
+        self.set(key, id.to_value_with_checksum())
     
     def set_task_id(self, task_id: TaskIdValue):
         self.set_id("task_id", task_id)
@@ -74,11 +79,20 @@ class Metadata(dict):
     def set_definition_id(self, definition_id: DefinitionIdValue):
         self.set_id("definition_id", definition_id)
     
-    def set(self, key: str, value: Any):
-        self[key] = value
-    
     def clone(self):
         return Metadata(self)
     
     def to_dict(self):
         return self.copy()
+    
+    def set_from(self, value: str):
+        self.set("from", value)
+    
+    def get_from(self) -> str | None:
+        return self.get("from", None)
+    
+    def get_task_id(self) -> TaskIdValue | None:
+        return TaskIdValue.from_value_with_checksum(self.get("task_id", ""))
+    
+    def get_id(self, key: str, id_type: type[IdVal]):
+        return id_type.from_value_with_checksum(self.get(key, ""))

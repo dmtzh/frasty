@@ -29,3 +29,10 @@ class CompleteStepData:
     step_id: StepIdValue
     result: CompletedResult
     metadata: Metadata
+
+@dataclass(frozen=True)
+class CompletedDefinitionData:
+    run_id: RunIdValue
+    definition_id: DefinitionIdValue
+    result: CompletedResult
+    metadata: Metadata

@@ -1,11 +1,9 @@
 # import asyncio
-from dataclasses import dataclass
 import functools
 
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.customtypes import Metadata, TaskIdValue, RunIdValue
 from shared.pipeline.types import CompleteStepData, StepInputData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
@@ -16,10 +14,9 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, complete_step, data_fetched_handler, fetch_data, step_handler, viber_api_config
+from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler, viber_api_config
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
-from fetchnewdata.fetchidvalue import FetchIdValue
 import fetchnewdata.handler as fetchnewdatahandler
 from getcontentfromjson.definition import GetContentFromJson, GetContentFromJsonConfig
 import getcontentfromjson.handler as getcontentfromjsonhandler
@@ -101,20 +98,12 @@ async def handle_fetch_new_data_command(step_data: StepInputData[None, FetchNewD
         case _:
             return None # we won't complete step now, we will complete only after receive and process data
 
-@dataclass(frozen=True)
-class FetchedData:
-    fetch_id: FetchIdValue
-    task_id: TaskIdValue
-    run_id: RunIdValue
-    result: CompletedResult
-    metadata: dict
-
-@data_fetched_handler(FetchedData)
+@data_fetched_subscriber
 async def handle_fetched_data(fetched_data: FetchedData):
     if isinstance(fetched_data.result, CompletedWith.Error):
         return None
     def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        data = CompleteStepData(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, Metadata(fetched_data.metadata))
+        data = CompleteStepData(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
         return complete_step(data)
     completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
     handle_fetched_data_res = await fetchnewdatahandler.handle_fetched_data(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
