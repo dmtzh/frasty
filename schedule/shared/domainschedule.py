@@ -7,6 +7,7 @@ from expression import Result
 from shared.customtypes import ScheduleIdValue
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
+from shared.validation import ValueError as ValueErr, ValueInvalid, ValueMissing
 
 class CronSchedule(str):
     def __new__(cls, value):
@@ -33,8 +34,10 @@ class CronScheduleAdapter:
         return {"cron": schedule}
 
     @staticmethod
-    def from_dict(data: dict[str, str]) -> Result[CronSchedule, str]:
-        return parse_from_dict(data, "cron", CronSchedule.parse)
+    def from_dict(data: dict[str, str]) -> Result[CronSchedule, list[ValueErr]]:
+        if "cron" not in data:
+            return Result.Error([ValueMissing("cron")])
+        return parse_from_dict(data, "cron", CronSchedule.parse).map_error(lambda _: [ValueInvalid("cron")])
 
 @dataclass(frozen=True)
 class TaskSchedule:
@@ -49,7 +52,7 @@ class TaskScheduleAdapter:
     @staticmethod
     def from_dict(raw_schedule: dict[str, str]) -> Result[TaskSchedule, str]:
         schedule_id_res = parse_from_dict(raw_schedule, "schedule_id", ScheduleIdValue.from_value)
-        cron_res = CronScheduleAdapter.from_dict(raw_schedule)
+        cron_res = CronScheduleAdapter.from_dict(raw_schedule).map_error(lambda _: "invalid cron value")
         match schedule_id_res, cron_res:
             case Result(tag=ResultTag.OK, ok=schedule_id), Result(tag=ResultTag.OK, ok=cron_schedule):
                 return Result.Ok(TaskSchedule(schedule_id, cron_schedule))

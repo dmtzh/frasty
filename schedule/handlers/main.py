@@ -1,11 +1,10 @@
 # import asyncio
-from dataclasses import dataclass
 import functools
 
 from expression import Result
 
 from shared.commands import Command, ClearCommand, SetCommand
-from shared.customtypes import ScheduleIdValue, TaskIdValue, RunIdValue
+from shared.customtypes import TaskIdValue, RunIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
@@ -30,7 +29,7 @@ async def init_scheduled_tasks():
     logger.info("Scheduled tasks initialized")
 
 @make_async
-def stop_scheduled_task(cmd: cleartaskschedulehandler.ClearTaskScheduleCommand, cron: CronSchedule):
+def stop_scheduled_task(cmd: ClearCommand, cron: CronSchedule):
     try:
         scheduler.remove(cmd.schedule_id)
         schedule = TaskSchedule(cmd.schedule_id, cron)
@@ -52,24 +51,15 @@ def restart_scheduled_task(task_id: TaskIdValue, old_schedule: TaskSchedule | No
     except:  # noqa: E722
         return Result.Ok(None)
 
-@dataclass(frozen=True)
-class ChangeTaskScheduleData:
-    task_id: TaskIdValue
-    schedule_id: ScheduleIdValue
-    command: Command
-
-@change_task_schedule_handler(ChangeTaskScheduleData)
-async def handle_change_task_schedule_command(data: ChangeTaskScheduleData):
-    match data.command:
+@change_task_schedule_handler
+async def handle_change_task_schedule_command(cmd: Command):
+    match cmd:
         case ClearCommand():
-            cmd = cleartaskschedulehandler.ClearTaskScheduleCommand(data.task_id, data.schedule_id)
             clear_task_schedule_handler = functools.partial(stop_scheduled_task, cmd)
             res = await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
             return res
-        case SetCommand(schedule=schedule):
-            schedule = TaskSchedule(data.schedule_id, schedule)
-            cmd = settaskschedulehandler.SetTaskScheduleCommand(data.task_id, schedule)
-            set_task_schedule_handler = functools.partial(restart_scheduled_task, data.task_id)
+        case SetCommand():
+            set_task_schedule_handler = functools.partial(restart_scheduled_task, cmd.task_id)
             res = await settaskschedulehandler.handle(set_task_schedule_handler, cmd)
             return res
 

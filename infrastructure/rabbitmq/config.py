@@ -1,4 +1,4 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Coroutine
 from contextlib import asynccontextmanager
 import os
 from typing import Any
@@ -8,13 +8,12 @@ from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
 from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepData
 from shared.utils.asyncresult import async_ex_to_error_result
 
-from . import rabbitchangetaskschedule as rabbit_change_task_schedule
 from . import rabbitcompletestep as rabbit_complete_step
 from . import rabbitrundefinition as rabbit_definition
 from . import rabbitdefinitioncompleted as rabbit_definition_completed
@@ -80,13 +79,6 @@ def definition_completed_subscriber(queue_name: str | None, requeue_chance: Requ
     def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, completed_result: CompletedResult, metadata: dict):
         return CompletedDefinitionData(run_id, definition_id, completed_result, Metadata(metadata))
     return rabbit_definition_completed.subscriber(_rabbit_client, input_adapter, queue_name, requeue_chance)
-
-def change_task_schedule(task_id: TaskIdValue, schedule_id: ScheduleIdValue, command_dto: dict):
-    rabbit_change_schedule = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_change_task_schedule.run)
-    return rabbit_change_schedule(_rabbit_client, task_id, schedule_id, command_dto)
-
-def change_task_schedule_handler[T](input_adapter: Callable[[TaskIdValue, ScheduleIdValue, dict], T]) -> Handler[T]:
-    return rabbit_change_task_schedule.handler(_rabbit_client, input_adapter)
 
 @asynccontextmanager
 async def lifespan():
