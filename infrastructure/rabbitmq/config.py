@@ -11,7 +11,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, ScheduleIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import Handler, StepDefinitionType, StepHandler, Subscriber
-from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepInputData
+from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitchangetaskschedule as rabbit_change_task_schedule
@@ -52,15 +52,15 @@ def run_definition_handler() -> Handler[RunDefinitionData]:
         return RunDefinitionData(run_id, definition_id, Metadata(metadata))
     return rabbit_definition.handler(_rabbit_client, input_adapter)
 
-def run_step(run_id: RunIdValue, step_id: StepIdValue, definition: StepDefinition, data: Any, metadata: Metadata) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_step(data: StepData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_step.run)
-    return rabbit_run_step(_rabbit_client, run_id, step_id, definition, data, metadata.to_dict())
+    return rabbit_run_step(_rabbit_client, data.run_id, data.step_id, data.definition, data.data, data.metadata.to_dict())
 
 def step_handler[TCfg](step_definition_type: StepDefinitionType[TCfg]) -> StepHandler[TCfg, Any]:
     def data_validator(data: Any) -> Result[Any, Any]:
         return Result.Ok(data)
-    def input_adapter(run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: Any, metadata: dict):
-        return StepInputData[TCfg, Any](run_id, step_id, cfg, data, Metadata(metadata))
+    def input_adapter(run_id: RunIdValue, step_id: StepIdValue, step_definition: StepDefinition[TCfg], data: Any, metadata: dict):
+        return StepData[TCfg, Any](run_id, step_id, step_definition, data, Metadata(metadata))
     return rabbit_step.handler(_rabbit_client, step_definition_type, data_validator, input_adapter)
 
 def complete_step(data: CompleteStepData) -> Coroutine[Any, Any, Result[None, Any]]:

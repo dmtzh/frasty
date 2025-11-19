@@ -43,7 +43,7 @@ class _python_pickle:
         return PythonPickleMessage(data_with_correlation_id)
     
     class decoder():
-        def __init__(self, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R]):
+        def __init__(self, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D, dict], R]):
             self._command = command
             self._data_validator = data_validator
             self._input_adapter = input_adapter
@@ -97,22 +97,21 @@ class _python_pickle:
             return Result.Ok(parsed_data)
         
         @staticmethod
-        def _validate_rabbitmq_parsed_data(command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict, Any, dict]) -> Result[R, RabbitMessageError]:
+        def _validate_rabbitmq_parsed_data(command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D, dict], R], rabbit_msg_err: RabbitMessageErrorCreator, parsed_data: tuple[str, str, dict, Any, dict]) -> Result[R, RabbitMessageError]:
             run_id_unvalidated, step_id_unvalidated, step_definition_unvalidated, data_unvalidated, metadata_unvalidated = parsed_data
             run_id_res = parse_value(run_id_unvalidated, "run_id", RunIdValue.from_value_with_checksum)
             step_id_res = parse_value(step_id_unvalidated, "step_id", StepIdValue.from_value_with_checksum)
-            cfg_res = shdtodef.StepDefinitionAdapter.from_dict(step_definition_unvalidated)\
+            step_definition_res = shdtodef.StepDefinitionAdapter.from_dict(step_definition_unvalidated)\
                 .filter(lambda step_def: get_step_definition_name(type(step_def)) == command, [ValueInvalid("step")])\
-                .map(lambda definition: definition.config)\
                 .map_error(lambda error: f"Invalid 'definition' data: {step_definition_unvalidated}; error: {error}")
             data_res = data_validator(data_unvalidated)\
                 .map_error(lambda _: f"Invalid 'data' value {data_unvalidated}")
-            match run_id_res, step_id_res, cfg_res, data_res:
-                case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=step_id), Result(tag=ResultTag.OK, ok=cfg), Result(tag=ResultTag.OK, ok=data):
-                    res = input_adapter(run_id, step_id, cfg, data, metadata_unvalidated)
+            match run_id_res, step_id_res, step_definition_res, data_res:
+                case Result(tag=ResultTag.OK, ok=run_id), Result(tag=ResultTag.OK, ok=step_id), Result(tag=ResultTag.OK, ok=step_definition), Result(tag=ResultTag.OK, ok=data):
+                    res = input_adapter(run_id, step_id, step_definition, data, metadata_unvalidated)
                     return Result.Ok(res)
                 case _:
-                    errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), cfg_res.swap().default_value(None), data_res.swap().default_value(None)]
+                    errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), step_definition_res.swap().default_value(None), data_res.swap().default_value(None)]
                     errors = [err for err in errors_with_none if err is not None]
                     err = rabbit_msg_err(ValidationError, ", ".join(errors))
                     return Result.Error(err)
@@ -159,17 +158,17 @@ def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue,
 
 class handler[TCfg, D, R]:
     @staticmethod
-    def _consume_input(input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R], run_id: RunIdValue, step_id: StepIdValue, cfg: TCfg, data: D, metadata: dict):
+    def _consume_input(input_adapter: Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D], R] | Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D, dict], R], run_id: RunIdValue, step_id: StepIdValue, step_definition: shdomaindef.StepDefinition[TCfg], data: D, metadata: dict):
         params = inspect.signature(input_adapter).parameters
         include_metadata_param = len(params) > 4
         if include_metadata_param:
-            params_array = [run_id, step_id, cfg, data, metadata]
+            params_array = [run_id, step_id, step_definition, data, metadata]
             return input_adapter(*params_array)
         else:
-            params_array = [run_id, step_id, cfg, data]
+            params_array = [run_id, step_id, step_definition, data]
             return input_adapter(*params_array)
 
-    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, TCfg, D], R] | Callable[[RunIdValue, StepIdValue, TCfg, D, dict], R]):
+    def __init__(self, rabbit_client: RabbitMQClient, step_definition_type: type[shdomaindef.StepDefinition[TCfg]], data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D], R] | Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D, dict], R]):
         def validate_input_adapter():
             if not callable(input_adapter):
                raise TypeError(f"input_adapter should be callable, got {type(input_adapter).__name__}")

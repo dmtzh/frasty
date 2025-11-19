@@ -11,7 +11,7 @@ from shared.customtypes import Metadata, RunIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler, only_from, with_input_output_logging_subscriber
-from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepInputData
+from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.parse import parse_value
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
@@ -43,7 +43,7 @@ complete_step = config.complete_step
 
 step_handler = StepHandlerAdapterFactory(config.step_handler, complete_step)
 
-def fetch_data(step_data: StepInputData[None, FetchNewDataInput], fetch_id: FetchIdValue):
+def fetch_data(step_data: StepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
     metadata = Metadata()
     metadata.set_from("fetch new data step")
     metadata.set_id("fetch_id", fetch_id)

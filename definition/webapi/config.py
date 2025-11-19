@@ -12,7 +12,7 @@ from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from, with_input_output_logging_subscriber
-from shared.pipeline.types import CompletedDefinitionData
+from shared.pipeline.types import CompletedDefinitionData, StepData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -35,7 +35,8 @@ def run_first_step_manually(manual_run_id: RunIdValue, manual_definition_id: Def
     metadata = Metadata()
     metadata.set_from("definition manual run webapi")
     metadata.set_definition_id(manual_definition_id)
-    return config.run_step(manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+    data = StepData(manual_run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+    return config.run_step(data)
 
 def manual_run_definition_completed_subscriber(func: Callable[[CompletedDefinitionData], Coroutine[Any, Any, Result | None]]):
     subscriber = config.definition_completed_subscriber(None, config.RequeueChance.LOW)

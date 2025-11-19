@@ -9,7 +9,7 @@ from shared.completedresult import CompletedWith
 from shared.customtypes import Error, DefinitionIdValue
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.storage.repository import NotFoundError
-from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData
+from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, StepData
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
@@ -27,7 +27,8 @@ async def handle_run_definition_command(data: RunDefinitionData):
         metadata = data.metadata.clone()
         metadata.set_definition_id(data.definition_id)
         metadata.set("definition_version", str(definition_version))
-        return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+        step_data = StepData(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
+        return run_step(step_data)
     
     cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
     run_definition_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
@@ -65,7 +66,8 @@ async def handle_complete_step_command(data: CompleteStepData):
                 compl_def_data = CompletedDefinitionData(data.run_id, definition_id, evt.result, data.metadata)
                 return publish_completed_definition(compl_def_data)
             case RunningDefinitionState.Events.StepRunning():
-                return run_step(data.run_id, evt.step_id, evt.step_definition, evt.input_data, data.metadata)
+                step_data = StepData(data.run_id, evt.step_id, evt.step_definition, evt.input_data, data.metadata)
+                return run_step(step_data)
             case _:
                 async def error_res():
                     return Result.Error(Error(f"Unsupported event {evt}"))

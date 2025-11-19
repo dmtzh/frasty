@@ -11,7 +11,7 @@ from shared.pipeline.handlers import (
     StepHandlerAdapterFactory,
     StepHandlerContinuation
 )
-from shared.pipeline.types import CompleteStepData, StepInputData
+from shared.pipeline.types import CompleteStepData, StepData
 from shared.utils.parse import parse_value
 
 class TestStepDefinition(StepDefinition[None]):
@@ -32,16 +32,16 @@ class TestStepActionHandler[TCfg, D]:
     __test__ = False  # Instruct pytest to ignore this class for test collection
     def __call__(self, func: StepHandlerContinuation[TCfg, D]):
         self._func = func
-    def pass_result(self, result: Result[StepInputData[TCfg, D], Any]):
+    def pass_result(self, result: Result[StepData[TCfg, D], Any]):
         return self._func(result)
 
 
 
 async def test_uses_handler_creator_to_create_step_handler_adapter():
     data = {"data": {"foo": "bar"}}
-    expected_step_input_data = StepInputData[None, dict](RunIdValue.new_id(), StepIdValue.new_id(), None, data, Metadata())
+    expected_step_data = StepData[None, dict](RunIdValue.new_id(), StepIdValue.new_id(), TestStepDefinition(), data, Metadata())
     state = {}
-    async def func(v: StepInputData[None, dict]):
+    async def func(v: StepData[None, dict]):
         state["actual_step_input_data"] = v
         return CompletedWith.Data(v.data)
     step_handler = TestStepActionHandler[None, dict]()
@@ -54,9 +54,9 @@ async def test_uses_handler_creator_to_create_step_handler_adapter():
     adapter = factory(TestStepDefinition, TestStepDefinition.validate_input)
     adapter(func)
 
-    await step_handler.pass_result(Result.Ok(expected_step_input_data))
+    await step_handler.pass_result(Result.Ok(expected_step_data))
 
-    assert state["actual_step_input_data"] == expected_step_input_data
+    assert state["actual_step_input_data"] == expected_step_data
 
 
 
@@ -64,8 +64,8 @@ async def test_uses_complete_step_func_to_create_step_handler_adapter():
     expected_run_id = RunIdValue.new_id()
     expected_step_id = StepIdValue.new_id()
     expected_data = {"data": {"foo": "bar"}}
-    step_input_data = StepInputData[None, dict](expected_run_id, expected_step_id, None, expected_data, Metadata())
-    async def func(v: StepInputData[None, dict]):
+    step_data = StepData[None, dict](expected_run_id, expected_step_id, TestStepDefinition(), expected_data, Metadata())
+    async def func(v: StepData[None, dict]):
         return CompletedWith.Data(v.data)
     step_handler = TestStepActionHandler[None, dict]()
     def handler_creator(step_definition_type: StepDefinitionType[None]) -> StepHandler[None, dict]:
@@ -83,7 +83,7 @@ async def test_uses_complete_step_func_to_create_step_handler_adapter():
     adapter = factory(TestStepDefinition, TestStepDefinition.validate_input)
     adapter(func)
 
-    await step_handler.pass_result(Result.Ok(step_input_data))
+    await step_handler.pass_result(Result.Ok(step_data))
 
     assert state["actual_run_id"] == expected_run_id
     assert state["actual_step_id"] == expected_step_id

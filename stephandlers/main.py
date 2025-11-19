@@ -4,7 +4,7 @@ import functools
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
-from shared.pipeline.types import CompleteStepData, StepInputData
+from shared.pipeline.types import CompleteStepData, StepData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
@@ -30,24 +30,28 @@ import sendtoviberchannel.handler as sendtoviberchannelhandler
 
 @step_handler(GetContentFromJson, GetContentFromJson.validate_input)
 @make_async
-def handle_get_content_from_json_command(step_data: StepInputData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
-    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.config, step_data.data)
+def handle_get_content_from_json_command(step_data: StepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
+    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.definition.config, step_data.data)
     res = getcontentfromjsonhandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------
 
 @step_handler(SendToViberChannel, SendToViberChannel.validate_input)
-def handle_send_to_viber_channel_command(step_data: StepInputData[SendToViberChannelConfig, list]):
-    cmd = sendtoviberchannelhandler.SendToViberChannelCommand(step_data.config.channel_id, step_data.config.title, step_data.data)
+def handle_send_to_viber_channel_command(step_data: StepData[SendToViberChannelConfig, list]):
+    cmd = sendtoviberchannelhandler.SendToViberChannelCommand(
+        step_data.definition.config.channel_id,
+        step_data.definition.config.title,
+        step_data.data
+    )
     return sendtoviberchannelhandler.handle(viber_api_config, cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
 @step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input)
 @make_async
-def handle_get_links_from_html_command(step_data: StepInputData[GetLinksFromHtmlConfig, dict | list]):
-    cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.config, step_data.data)
+def handle_get_links_from_html_command(step_data: StepData[GetLinksFromHtmlConfig, dict | list]):
+    cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.definition.config, step_data.data)
     res = getlinksfromhtmlhandler.handle(cmd)
     return res
 
@@ -55,8 +59,8 @@ def handle_get_links_from_html_command(step_data: StepInputData[GetLinksFromHtml
 
 @step_handler(GetContentFromHtml, GetContentFromHtml.validate_input)
 @make_async
-def handle_get_content_from_html_command(step_data: StepInputData[GetContentFromHtmlConfig, dict | list]):
-    cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.config, step_data.data)
+def handle_get_content_from_html_command(step_data: StepData[GetContentFromHtmlConfig, dict | list]):
+    cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.definition.config, step_data.data)
     res = getcontentfromhtmlhandler.handle(cmd)
     return res
 
@@ -64,7 +68,7 @@ def handle_get_content_from_html_command(step_data: StepInputData[GetContentFrom
 
 @step_handler(FilterHtmlResponse, HttpResponseData.from_dict)
 @make_async
-def handle_filter_html_response_command(step_data: StepInputData[None, HttpResponseData]):
+def handle_filter_html_response_command(step_data: StepData[None, HttpResponseData]):
     cmd = filterhtmlresponsehandler.FilterHtmlResponseCommand(step_data.data)
     res = filterhtmlresponsehandler.handle(cmd)
     return res
@@ -73,7 +77,7 @@ def handle_filter_html_response_command(step_data: StepInputData[None, HttpRespo
 
 @step_handler(FilterSuccessResponse, HttpResponseData.from_dict)
 @make_async
-def handle_filter_success_response_command(step_data: StepInputData[None, HttpResponseData]):
+def handle_filter_success_response_command(step_data: StepData[None, HttpResponseData]):
     cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
     res = filtersuccessresponsehandler.handle(cmd)
     return res
@@ -81,14 +85,14 @@ def handle_filter_success_response_command(step_data: StepInputData[None, HttpRe
 # ------------------------------------------------------------------------------------------------------------
 
 @step_handler(RequestUrl, RequestUrlInputData.from_dict)
-def handle_request_url_command(step_data: StepInputData[None, RequestUrlInputData]):
+def handle_request_url_command(step_data: StepData[None, RequestUrlInputData]):
     cmd = requesturlhandler.RequestUrlCommand(step_data.data)
     return requesturlhandler.handle(cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 
 @step_handler(FetchNewData, FetchNewDataInput.from_dict)
-async def handle_fetch_new_data_command(step_data: StepInputData[None, FetchNewDataInput]):
+async def handle_fetch_new_data_command(step_data: StepData[None, FetchNewDataInput]):
     fetch_data_handler = functools.partial(fetch_data, step_data)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
     res = await fetchnewdatahandler.handle(fetch_data_handler, cmd)
