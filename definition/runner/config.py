@@ -7,7 +7,8 @@ from expression import Result
 from infrastructure.rabbitmq import config
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import HandlerAdapter, with_input_output_logging
+from shared.pipeline.handlers import HandlerAdapter
+from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import CompleteStepData, RunDefinitionData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse

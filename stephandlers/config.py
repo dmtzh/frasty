@@ -9,9 +9,9 @@ from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
-from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler, only_from
-from shared.pipeline.logging import with_input_output_logging_subscriber
+from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name, step_definition_creators_storage
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepDefinitionType, StepHandler, StepHandlerAdapterFactory, map_handler, only_from
+from shared.pipeline.logging import with_input_output_logging, with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.parse import parse_value
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
@@ -42,7 +42,12 @@ viber_api_config = _viber_api_config
 
 complete_step = config.complete_step
 
-step_handler = StepHandlerAdapterFactory(config.step_handler, complete_step)
+def _handler_creator[TCfg](step_definition_type: StepDefinitionType[TCfg]) -> StepHandler[TCfg, Any]:
+    step_handler = config.step_handler(step_definition_type)
+    message_prefix = get_step_definition_name(step_definition_type)
+    step_handler_with_logs = with_input_output_logging(step_handler, message_prefix)
+    return step_handler_with_logs
+step_handler = StepHandlerAdapterFactory(_handler_creator, complete_step)
 
 def fetch_data(step_data: StepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
     metadata = Metadata()

@@ -8,7 +8,7 @@ from shared.pipeline.types import CompletedDefinitionData
 from shared.utils.parse import parse_from_dict, parse_value
 from shared.utils.result import ResultTag
 
-from .handlers import HandlerContinuation, Subscriber, with_middleware
+from .handlers import Handler, HandlerContinuation, Subscriber, with_middleware
 
 class LoggingFormatter(logging.Formatter):
 
@@ -69,6 +69,33 @@ def pipeline_logger[T](message_prefix: str, input_res: Result[T, Any]):
     message_prefix_str = f"{message_prefix} " if message_prefix is not None else ""
     extra = {"message_id": message_id, "message_prefix": message_prefix_str}
     return logging.LoggerAdapter(logger, extra=extra)
+
+def with_input_output_logging[T](handler: Handler[T], message_prefix: str) -> Handler[T]:
+    def logs_middleware(cont: HandlerContinuation[T]):
+        async def with_logs(input_res: Result[T, Any]) -> Result | None:
+            logger = pipeline_logger(message_prefix, input_res)
+            match input_res:
+                case Result(tag=ResultTag.OK, ok=data):
+                    first_100_chars = str(data)[:100]
+                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                    logger.info(f"RECEIVED {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"RECEIVED {error}")
+                case unsupported_input:
+                    logger.warning(f"RECEIVED UNSUPPORTED {unsupported_input}")
+            res = await cont(input_res)
+            match res:
+                case Result(tag=ResultTag.OK, ok=result):
+                    first_100_chars = str(result)[:100]
+                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
+                    logger.info(f"successfully completed with output {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"failed with error {error}")
+                case None:
+                    logger.warning("PROCESSING SKIPPED")
+            return res
+        return with_logs
+    return with_middleware(handler, logs_middleware)
 
 def with_input_output_logging_subscriber(subscriber: Subscriber, message_prefix: str) -> Subscriber:
     def decorate_with_logs(decoratee: HandlerContinuation[CompletedDefinitionData]):

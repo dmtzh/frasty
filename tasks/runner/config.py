@@ -5,7 +5,8 @@ from typing import Any
 from expression import Result
 
 from infrastructure.rabbitmq import config
-from shared.pipeline.handlers import HandlerAdapter, with_input_output_logging
+from shared.pipeline.handlers import HandlerAdapter
+from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import RunTaskData
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']

@@ -5,10 +5,7 @@ from expression import Result
 
 from shared.completedresult import CompletedResult
 from shared.domaindefinition import StepDefinition
-from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
-from shared.utils.result import ResultTag
 
-from .logging import pipeline_logger
 from .types import CompleteStepData, CompletedDefinitionData, StepData
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
@@ -31,33 +28,6 @@ def map_handler[T, R](handler: Handler[T], func: Callable[[Result[T, Any]], Resu
 
 def with_middleware[T](handler: Handler[T], func: Callable[[HandlerContinuation[T]], HandlerContinuation[T]]) -> Handler[T]:
     return lambda cont: handler(to_continuation_with_custom_name(func(cont), cont.__name__))
-
-def with_input_output_logging[T](handler: Handler[T], message_prefix: str) -> Handler[T]:
-    def logs_middleware(cont: HandlerContinuation[T]):
-        async def with_logs(input_res: Result[T, Any]) -> Result | None:
-            logger = pipeline_logger(message_prefix, input_res)
-            match input_res:
-                case Result(tag=ResultTag.OK, ok=data):
-                    first_100_chars = str(data)[:100]
-                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
-                    logger.info(f"RECEIVED {output}")
-                case Result(tag=ResultTag.ERROR, error=error):
-                    logger.error(f"RECEIVED {error}")
-                case unsupported_input:
-                    logger.warning(f"RECEIVED UNSUPPORTED {unsupported_input}")
-            res = await cont(input_res)
-            match res:
-                case Result(tag=ResultTag.OK, ok=result):
-                    first_100_chars = str(result)[:100]
-                    output = first_100_chars + "..." if len(first_100_chars) == 100 else first_100_chars
-                    logger.info(f"successfully completed with output {output}")
-                case Result(tag=ResultTag.ERROR, error=error):
-                    logger.error(f"failed with error {error}")
-                case None:
-                    logger.warning("PROCESSING SKIPPED")
-            return res
-        return with_logs
-    return with_middleware(handler, logs_middleware)
 
 class to_continuation[T]:
     def __init__(self, func: Callable[[T], Coroutine[Any, Any, Result | None]]):
@@ -113,9 +83,7 @@ class StepHandlerAdapterFactory[TCfg]:
     
     def __call__[D](self, step_definition_type: StepDefinitionType[TCfg], data_validator: Callable[[Any], Result[D, Any]]):
         step_handler_with_unvalidated_data = self._handler_creator(step_definition_type)
-        message_prefix = get_step_definition_name(step_definition_type)
-        step_handler_with_logs = with_input_output_logging(step_handler_with_unvalidated_data, message_prefix)
-        step_handler = map_handler(step_handler_with_logs, lambda data_res: data_res.bind(lambda data: data_validator(data.data).map(lambda d: StepData(data.run_id, data.step_id, data.definition, d, data.metadata))))
+        step_handler = map_handler(step_handler_with_unvalidated_data, lambda data_res: data_res.bind(lambda data: data_validator(data.data).map(lambda d: StepData(data.run_id, data.step_id, data.definition, d, data.metadata))))
         return StepHandlerAdapter(step_handler, self._complete_step_func)
 
 type Subscriber = Handler[CompletedDefinitionData]
