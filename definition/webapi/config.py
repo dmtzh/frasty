@@ -11,7 +11,8 @@ from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue
 from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from, with_input_output_logging_subscriber
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from
+from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, StepData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse

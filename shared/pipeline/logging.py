@@ -4,8 +4,11 @@ from typing import Any
 from expression import Result
 
 from shared.customtypes import Metadata, RunIdValue, StepIdValue, TaskIdValue
+from shared.pipeline.types import CompletedDefinitionData
 from shared.utils.parse import parse_from_dict, parse_value
 from shared.utils.result import ResultTag
+
+from .handlers import HandlerContinuation, Subscriber, with_middleware
 
 class LoggingFormatter(logging.Formatter):
 
@@ -66,3 +69,26 @@ def pipeline_logger[T](message_prefix: str, input_res: Result[T, Any]):
     message_prefix_str = f"{message_prefix} " if message_prefix is not None else ""
     extra = {"message_id": message_id, "message_prefix": message_prefix_str}
     return logging.LoggerAdapter(logger, extra=extra)
+
+def with_input_output_logging_subscriber(subscriber: Subscriber, message_prefix: str) -> Subscriber:
+    def decorate_with_logs(decoratee: HandlerContinuation[CompletedDefinitionData]):
+        async def logs_middleware(input_res: Result[CompletedDefinitionData, Any]) -> Result | None:
+            logger = pipeline_logger(message_prefix, input_res)
+            match input_res:
+                case Result(tag=ResultTag.OK, ok=data):
+                    logger.info(f"RECEIVED {data}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"RECEIVED {error}")
+                case unsupported_input:
+                    logger.warning(f"RECEIVED UNSUPPORTED {unsupported_input}")
+            res = await decoratee(input_res)
+            match res:
+                case Result(tag=ResultTag.OK, ok=output):
+                    logger.info(f"data processed with output {output}")
+                case Result(tag=ResultTag.ERROR, error=error):
+                    logger.error(f"data failed to process with error {error}")
+                case None:
+                    logger.warning("PROCESSING SKIPPED")
+            return res
+        return logs_middleware
+    return with_middleware(subscriber, decorate_with_logs)

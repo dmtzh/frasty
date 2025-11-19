@@ -6,7 +6,8 @@ from expression import Result
 
 from infrastructure.rabbitmq import config
 from shared.customtypes import Metadata
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, HandlerContinuation, map_handler, with_input_output_logging_subscriber, with_middleware
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, HandlerContinuation, map_handler, with_middleware
+from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData
 from shared.taskpendingresultsqueue import DefinitionVersion, CompletedTaskData
 from shared.utils.parse import parse_value

@@ -10,7 +10,8 @@ from fastapi import FastAPI
 from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, TaskIdValue
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, map_handler, only_from, with_input_output_logging_subscriber
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, map_handler, only_from
+from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData
 from shared.utils.parse import parse_value
 

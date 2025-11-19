@@ -10,7 +10,8 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler, only_from, with_input_output_logging_subscriber
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepHandlerAdapterFactory, map_handler, only_from
+from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.parse import parse_value
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
