@@ -33,7 +33,7 @@ class FetchDataError:
 class CompletedTaskData:
     task_id: TaskIdValue
     run_id: RunIdValue
-    result: CompletedWith.Data | CompletedWith.NoData
+    result: CompletedResult
 
 def step_id_to_fetch_id(step_id: StepIdValue):
     return parse_value(step_id, "fetch_id", FetchIdValue.from_value).map_error(lambda _: ValueInvalid("fetch_id"))

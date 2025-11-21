@@ -312,6 +312,20 @@ async def test_when_pass_str_data_then_completes_with_error(executing_task: Exec
 
 
 
+async def test_when_pass_error_then_completes_with_same_error(executing_task: ExecutingTask, completed_handler):
+    fetch_id = executing_task.fetch_id
+    completed_result = CompletedWith.Error("error")
+    completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
+    expected_completed_result = completed_result
+
+    new_data_res = await handle_fetched_data(completed_handler, fetch_id, completed_data)
+
+    assert type(new_data_res) is Result
+    actual_completed_result = new_data_res.ok
+    assert actual_completed_result == expected_completed_result
+
+
+
 async def test_when_pass_list_with_new_data_then_new_data_is_passed_to_fetch_new_data_completed_handler(executing_task: ExecutingTask, new_list_data: list):
     state = {}
     async def fetch_new_data_completed_handler(fetch_cmd: FetchNewDataCommand, completed_with: CompletedResult):
@@ -457,6 +471,22 @@ async def test_when_pass_str_data_then_error_is_passed_to_fetch_new_data_complet
 
 
 
+async def test_when_pass_error_then_this_error_is_passed_to_fetch_new_data_completed_handler(executing_task: ExecutingTask):
+    state = {}
+    async def fetch_new_data_completed_handler(fetch_cmd: FetchNewDataCommand, completed_with: CompletedResult):
+        state["actual_completed_with"] = completed_with
+        return Result.Ok(None)
+    fetch_id = executing_task.fetch_id
+    completed_result = CompletedWith.Error("error")
+    completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
+    expected_completed_with = completed_result
+    
+    await handle_fetched_data(fetch_new_data_completed_handler, fetch_id, completed_data)
+
+    assert state["actual_completed_with"] == expected_completed_with
+
+
+
 async def test_when_pass_wrong_fetch_id_then_returns_invalid_value_result(executing_task: ExecutingTask, new_list_data: list, completed_handler):
     fetch_id = FetchIdValue.new_id()
     completed_result = CompletedWith.Data(new_list_data)
@@ -568,6 +598,21 @@ async def test_when_returns_success_result_then_fetch_id_is_removed_from_executi
 
 
 
+async def test_when_returns_success_result_with_error_then_fetch_id_is_removed_from_executing_tasks_storage(executing_task: ExecutingTask, completed_handler):
+    fetch_id = executing_task.fetch_id
+    completed_result = CompletedWith.Error("error")
+    completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
+    expected_fetch_id_data = None
+    
+    new_data_res = await handle_fetched_data(completed_handler, fetch_id, completed_data)
+    actual_fetch_id_data = await executing_tasks_storage.get(fetch_id)
+
+    assert type(new_data_res) is Result
+    assert new_data_res.is_ok()
+    assert actual_fetch_id_data == expected_fetch_id_data
+
+
+
 async def test_when_returns_failure_result_then_fetch_id_remains_in_executing_tasks_storage(executing_task: ExecutingTask, new_list_data: list):
     async def fetch_new_data_completed_handler(fetch_cmd: FetchNewDataCommand, completed_with: CompletedResult):
         return Result.Error("expected error")
@@ -641,6 +686,22 @@ async def test_when_returns_success_result_then_prev_data_is_updated_with_comple
     completed_result = CompletedWith.Data(list_with_new_data)
     completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
     expected_prev_data = completed_result
+    
+    new_data_res = await handle_fetched_data(completed_handler, fetch_id, completed_data)
+    actual_prev_data = await previous_data_storage.get(executing_task.task_id)
+
+    assert type(new_data_res) is Result
+    assert new_data_res.is_ok()
+    assert actual_prev_data == expected_prev_data
+
+
+
+async def test_when_returns_success_result_with_error_then_prev_data_remains_unchanged(executing_task: ExecutingTask, list_without_new_data: list, completed_handler):
+    await previous_data_storage.set(executing_task.task_id, CompletedWith.Data(list_without_new_data))
+    fetch_id = executing_task.fetch_id
+    completed_result = CompletedWith.Error("error")
+    completed_data = CompletedTaskData(executing_task.task_id, executing_task.run_id, completed_result)
+    expected_prev_data = CompletedWith.Data(list_without_new_data)
     
     new_data_res = await handle_fetched_data(completed_handler, fetch_id, completed_data)
     actual_prev_data = await previous_data_storage.get(executing_task.task_id)
