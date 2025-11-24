@@ -104,8 +104,6 @@ async def handle_fetch_new_data_command(step_data: StepData[None, FetchNewDataIn
 
 @data_fetched_subscriber
 async def handle_fetched_data(fetched_data: FetchedData):
-    if isinstance(fetched_data.result, CompletedWith.Error):
-        return None
     def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
         data = CompleteStepData(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
         return complete_step(data)

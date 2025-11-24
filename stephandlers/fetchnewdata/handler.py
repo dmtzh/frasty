@@ -82,11 +82,8 @@ async def handle(fetch_data_handler: Callable[[FetchIdValue], Coroutine[Any, Any
 class CannotValidateError(Error):
     '''Completed data cannot be validated due to unexpected error'''
 
-@async_result
 @async_ex_to_error_result(CannotValidateError.from_exception)
 async def validate_completed_data(fetch_id: FetchIdValue, completed_data: CompletedTaskData) -> Result[CompletedTaskData, ValueInvalid]:
-    if type(completed_data.result) is not CompletedWith.Data and type(completed_data.result) is not CompletedWith.NoData:
-        return Result.Error(ValueInvalid("completed_data"))
     opt_data = await executing_tasks_storage.get(fetch_id)
     match opt_data:
         case None:
@@ -94,8 +91,9 @@ async def validate_completed_data(fetch_id: FetchIdValue, completed_data: Comple
         case data:
             task_id_same = completed_data.task_id == data.task_id
             run_id_same = completed_data.run_id == data.run_id
-            match task_id_same, run_id_same:
-                case True, True:
+            result_valid = isinstance(completed_data.result, CompletedResult.__value__)
+            match task_id_same, run_id_same, result_valid:
+                case True, True, True:
                     return Result.Ok(completed_data)
                 case _:
                     return Result.Error(ValueInvalid("completed_data"))
@@ -165,11 +163,10 @@ def to_new_data(data: Any):
         or to_new_list_data(data)\
         or Result[list, str].Error(f"fetchnewdatahandler received unsupported result of type {type(data).__name__}")
 
-@coroutine_result[ValueInvalid | CannotValidateError | StorageError | str]()
-async def get_new_data_workflow(fetch_id: FetchIdValue, completed_data: CompletedTaskData):
-    valid_completed_data = await validate_completed_data(fetch_id, completed_data)
-    opt_data_to_exclude = await get_prev_data(valid_completed_data.task_id)
-    match valid_completed_data.result, opt_data_to_exclude:
+@coroutine_result[StorageError | str]()
+async def get_new_data_workflow(completed_data: CompletedTaskData):
+    opt_data_to_exclude = await get_prev_data(completed_data.task_id)
+    match completed_data.result, opt_data_to_exclude:
         case CompletedWith.Data(data), CompletedWith.Data(None):
             new_data = await AsyncResult.from_result(to_new_data(data))
             return new_data
@@ -189,9 +186,8 @@ async def perform_fetch_new_data_completed_teardown(fetch_id: FetchIdValue, comp
             await async_catch_ex(previous_data_storage.set)(completed_data.task_id, completed_data.result)
 
 async def handle_fetched_data(fetch_new_data_completed_handler: Callable[[FetchNewDataCommand, CompletedResult], Coroutine[Any, Any, Result]], fetch_id: FetchIdValue, completed_data: CompletedTaskData) -> Result[CompletedResult, ValueInvalid | Error]:
-    new_data_res = await get_new_data_workflow(fetch_id, completed_data)
-    
-    match new_data_res:
+    valid_completed_data_res = await validate_completed_data(fetch_id, completed_data)
+    match valid_completed_data_res:
         case Result(tag=ResultTag.ERROR, error=ValueInvalid(name=value_name)):
             # Nothing to do with invalid data
             return Result.Error(ValueInvalid(value_name))
@@ -199,13 +195,20 @@ async def handle_fetched_data(fetch_new_data_completed_handler: Callable[[FetchN
             # completed_data cannot be validated due to unexpected error, let caller handle this
             return Result.Error(Error(error_message))
         case _:
-            new_data_completed_result = new_data_res\
-                .map(lambda new_data: CompletedWith.Data(new_data) if new_data else CompletedWith.NoData())\
-                .map_error(lambda error: CompletedWith.Error(message=str(error)))\
-                .merge()
-            fetch_cmd = FetchNewDataCommand(completed_data.task_id, completed_data.run_id, fetch_id)
+            valid_completed_data = valid_completed_data_res.ok
+            match valid_completed_data.result:
+                case CompletedWith.NoData() | CompletedWith.Data():
+                    new_data_res = await get_new_data_workflow(valid_completed_data)
+                    new_data_completed_result = new_data_res\
+                        .map(lambda new_data: CompletedWith.Data(new_data) if new_data else CompletedWith.NoData())\
+                        .map_error(lambda error: CompletedWith.Error(message=str(error)))\
+                        .merge()
+                case CompletedWith.Error():
+                    new_data_completed_result = valid_completed_data.result
+            fetch_cmd = FetchNewDataCommand(valid_completed_data.task_id, valid_completed_data.run_id, fetch_id)
             fetch_completed_res = await fetch_new_data_completed_handler(fetch_cmd, new_data_completed_result)
             match fetch_completed_res:
                 case Result(tag=ResultTag.OK, ok=_):
-                    await perform_fetch_new_data_completed_teardown(fetch_id, completed_data)
+                    await perform_fetch_new_data_completed_teardown(fetch_id, valid_completed_data)
             return fetch_completed_res.map(lambda _: new_data_completed_result)
+        
