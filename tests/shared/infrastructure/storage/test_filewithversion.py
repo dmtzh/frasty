@@ -11,6 +11,7 @@ import config
 from shared.customtypes import IdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 import shared.infrastructure.storage.filewithversion as filewithversion
+from shared.infrastructure.storage.repository import AlreadyExistsException
 from shared.utils.string import strip_and_lowercase
 
 class SampleFirstName(StrEnum):
@@ -116,9 +117,9 @@ async def test_add_version_is_1(file_with_version_storage: FileWithVersion, samp
 async def test_add_raises_error_for_existing_item(file_with_version_storage: FileWithVersion, sample_domain: SampleDomain):
     id = IdValue.new_id()
     await file_with_version_storage.add(id, sample_domain)
-    with pytest.raises(filewithversion.ItemAlreadyExistsError) as ex_info:
+    with pytest.raises(AlreadyExistsException) as ex_info:
         await file_with_version_storage.add(id, sample_domain)
-    assert ex_info.value.id == id
+    assert ex_info.value.args[0] == id
 
 async def test_get_returns_correct_item(file_with_version_storage: FileWithVersion, sample_domain: SampleDomain):
     id = IdValue.new_id()

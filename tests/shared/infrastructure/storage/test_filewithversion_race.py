@@ -6,7 +6,8 @@ import pytest
 
 import config
 from shared.infrastructure.serialization.serializer import Serializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion, ItemAlreadyExistsError
+from shared.infrastructure.storage.filewithversion import FileWithVersion
+from shared.infrastructure.storage.repository import AlreadyExistsException
 from shared.utils.crockfordid import CrockfordId
 
 @pytest.fixture(autouse=True, scope="module")
@@ -20,7 +21,7 @@ def add_item(input: tuple[FileWithVersion[str, str, str], str, int]):
         item = f"test{num}"
         asyncio.get_event_loop().run_until_complete(file_repo.add(id, item))
         return 1
-    except ItemAlreadyExistsError:
+    except AlreadyExistsException:
         return 0
 
 class StrSerializer(Serializer[str]):

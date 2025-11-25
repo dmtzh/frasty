@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import dataclass
 import os
 import shutil
 
@@ -8,13 +7,8 @@ import aiofiles.os as aos
 from expression import Result
 
 from shared.infrastructure.serialization.serializer import Serializer
-from shared.infrastructure.storage.repository import AsyncRepositoryWithVersion
+from shared.infrastructure.storage.repository import AlreadyExistsException, AsyncRepositoryWithVersion
 from shared.utils.result import ResultTag
-
-@dataclass(frozen=True)
-class ItemAlreadyExistsError[TId](Exception):
-    """Raised when an item with the same ID already exists."""
-    id: TId
 
 class FileWithVersion[TId, TItem, TItemDto](
     AsyncRepositoryWithVersion[TId, TItem]
@@ -92,7 +86,7 @@ class FileWithVersion[TId, TItem, TItemDto](
             async with aiofiles.open(file_path, mode='x') as f:
                 await f.write(self._serializer.serialize(dto_item))
         except FileExistsError:
-            raise ItemAlreadyExistsError(id)
+            raise AlreadyExistsException(id)
 
     async def update(self, id: TId, ver: int, item: TItem) -> bool:
         ver_file_name = f"{ver}.{self._extension}"
