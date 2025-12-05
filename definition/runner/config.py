@@ -7,7 +7,7 @@ from expression import Result
 from infrastructure.rabbitmq import config
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.handlers import HandlerAdapter
+from shared.pipeline.handlers import to_continuation
 from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import CompleteStepData, RunDefinitionData
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
@@ -29,16 +29,16 @@ for step_definition in step_definitions:
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
 def run_definition_handler(func: Callable[[RunDefinitionData], Coroutine[Any, Any, Result | None]]):
-    handler = config.run_definition_handler()
+    handler = to_continuation(func)
     handler_with_logging = with_input_output_logging(handler, "run_definition")
-    return HandlerAdapter(handler_with_logging)(func)
+    return config.run_definition_handler(handler_with_logging)
 
 run_step = config.run_step
 
 def complete_step_handler(func: Callable[[CompleteStepData], Coroutine[Any, Any, Result | None]]):
-    handler = config.complete_step_handler()
+    handler = to_continuation(func)
     handler_with_logging = with_input_output_logging(handler, "complete_step")
-    return HandlerAdapter(handler_with_logging)(func)
+    return config.complete_step_handler(handler_with_logging)
 
 publish_completed_definition = config.publish_completed_definition
 
