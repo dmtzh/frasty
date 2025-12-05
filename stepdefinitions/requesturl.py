@@ -95,6 +95,7 @@ class HttpMethod(StrEnum):
 class RequestUrlInputData:
     url: str
     http_method: str
+    headers: dict[str, str] | None
 
     @staticmethod
     def from_dict(data) -> Result[RequestUrlInputData, list[ValueErr]]:
@@ -114,24 +115,38 @@ class RequestUrlInputData:
                 return Result.Error([ValueInvalid("http_method")])
             opt_http_method = HttpMethod.parse(raw_http_method)
             return Result.Ok(raw_http_method) if opt_http_method is not None else Result.Error([ValueInvalid("http_method")])
+        def validate_headers() -> Result[dict[str, str] | None, list[ValueErr]]:
+            if "headers" not in data:
+                return Result.Ok(None)
+            raw_headers = data.get("headers")
+            if not isinstance(raw_headers, dict):
+                return Result.Error([ValueInvalid("headers")])
+            if not raw_headers:
+                return Result.Ok(None)
+            all_keys_and_vals_str = all(isinstance(k, str) and isinstance(v, str) for k, v in raw_headers.items())
+            if not all_keys_and_vals_str:
+                return Result.Error([ValueInvalid("headers")])
+            return Result.Ok(raw_headers)
         
         if not isinstance(data, dict):
             return Result.Error([ValueInvalid("data")])
         url_res = validate_url()
         http_method_res = validate_http_method()
-        errors = url_res.swap().default_value([]) + http_method_res.swap().default_value([])
+        headers_res = validate_headers()
+        errors = url_res.swap().default_value([]) + http_method_res.swap().default_value([]) + headers_res.swap().default_value([])
         match errors:
             case []:
-                return Result.Ok(RequestUrlInputData(url=url_res.ok, http_method=http_method_res.ok))
+                return Result.Ok(RequestUrlInputData(url=url_res.ok, http_method=http_method_res.ok, headers=headers_res.ok))
             case _:
                 return Result.Error(errors)
     
     @staticmethod
     def to_dict(data: RequestUrlInputData):
+        headers_dict = { "headers": data.headers } if data.headers else {}
         return {
             "url": data.url,
-            "http_method": data.http_method
-        }
+            "http_method": data.http_method,
+        } | headers_dict
 
 class RequestUrl(StepDefinition[None]):
     def __init__(self):

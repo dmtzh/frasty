@@ -18,7 +18,7 @@ async def request_data(request_url: RequestUrlInputData) -> CompletedResult:
     async with aiohttp.ClientSession() as session:
         timeout_15_seconds = aiohttp.ClientTimeout(total=15)
         try:
-            async with session.request(method=request_url.http_method, url=request_url.url, timeout=timeout_15_seconds) as response:
+            async with session.request(method=request_url.http_method, url=request_url.url, headers=request_url.headers, timeout=timeout_15_seconds) as response:
                 # bytes = await response.read()
                 # json = await response.json()
                 # content_stream = response.content
