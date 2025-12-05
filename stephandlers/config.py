@@ -10,7 +10,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name, step_definition_creators_storage
-from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepDefinitionType, StepHandler, StepHandlerAdapterFactory, map_handler, only_from
+from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepDefinitionType, map_handler, only_from, step_handler_adapter, validated_data_to_any_data
 from shared.pipeline.logging import with_input_output_logging, with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.parse import parse_value
@@ -42,12 +42,14 @@ viber_api_config = _viber_api_config
 
 complete_step = config.complete_step
 
-def _handler_creator[TCfg](step_definition_type: StepDefinitionType[TCfg]) -> StepHandler[TCfg, Any]:
-    step_handler = config.step_handler(step_definition_type)
-    message_prefix = get_step_definition_name(step_definition_type)
-    step_handler_with_logs = with_input_output_logging(step_handler, message_prefix)
-    return step_handler_with_logs
-step_handler = StepHandlerAdapterFactory(_handler_creator, complete_step)
+def step_handler[TCfg, D](step_definition_type: StepDefinitionType[TCfg], data_validator: Callable[[Any], Result[D, Any]]):
+    def wrapper(func: Callable[[StepData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
+        step_handler = step_handler_adapter(func, config.complete_step)
+        message_prefix = get_step_definition_name(step_definition_type)
+        step_handler_with_logging = with_input_output_logging(step_handler, message_prefix)
+        config_step_handler = validated_data_to_any_data(step_handler_with_logging, data_validator)
+        return config.step_handler(step_definition_type, config_step_handler)
+    return wrapper
 
 def fetch_data(step_data: StepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
     metadata = Metadata()

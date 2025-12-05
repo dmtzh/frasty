@@ -1,4 +1,5 @@
 from collections.abc import Callable, Coroutine
+from functools import wraps
 import logging
 import os
 from typing import Any
@@ -14,7 +15,7 @@ from shared.customtypes import Metadata, RunIdValue, ScheduleIdValue, TaskIdValu
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.infrastructure.storage.inmemory import InMemory
-from shared.pipeline.handlers import StepHandlerAdapterFactory
+from shared.pipeline.handlers import step_handler_adapter, validated_data_to_any_data
 
 from scheduler import Scheduler
 from shared.pipeline.types import CompleteStepData, RunTaskData, StepData
@@ -31,23 +32,21 @@ def run_task(task_id: TaskIdValue, run_id: RunIdValue, schedule_id: ScheduleIdVa
     return config.run_task(data)
 
 def change_task_schedule_handler(func: Callable[[Command], Coroutine[Any, Any, Result | None]]):
-    class wrapper:
-        def __init__(self):
-            self.__name__ = func.__name__
-        async def __call__(self, data: StepData[None, Command]) -> CompletedResult | None:
-            opt_res = await func(data.data)
-            if opt_res is None:
-                return None
-            result_res = opt_res\
-                .map(lambda _: CompletedWith.Data(None))\
-                .map_error(lambda error: CompletedWith.Error(str(error)))
-            result = result_res.merge()
-            return result
+    @wraps(func)
+    async def func_adapter(input_data: StepData[None, Command]) -> CompletedResult | None:
+        opt_res = await func(input_data.data)
+        if opt_res is None:
+            return None
+        result_res = opt_res\
+            .map(lambda _: CompletedWith.Data(None))\
+            .map_error(lambda error: CompletedWith.Error(str(error)))
+        result = result_res.merge()
+        return result
     async def complete_step(data: CompleteStepData):
         return Result.Ok(None)
-    step_handler_adapter_factory = StepHandlerAdapterFactory(config.step_handler, complete_step)
-    step_handler_adapter = step_handler_adapter_factory(ChangeTaskSchedule, ChangeTaskSchedule.validate_input)
-    return step_handler_adapter(wrapper())
+    step_handler = step_handler_adapter(func_adapter, complete_step)
+    config_step_handler = validated_data_to_any_data(step_handler, ChangeTaskSchedule.validate_input)
+    return config.step_handler(ChangeTaskSchedule, config_step_handler)
 
 app = config.create_faststream_app()
 
