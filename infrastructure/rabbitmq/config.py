@@ -7,7 +7,7 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
-from shared.action import ActionDataDto, ActionHandler
+from shared.pipeline.actionhandler import ActionDataDto, ActionHandler
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition

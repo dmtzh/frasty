@@ -6,8 +6,8 @@ from expression import Result
 from faststream.broker.message import StreamMessage
 from faststream.rabbit import RabbitMessage
 
+from shared.pipeline.actionhandler import ActionDataDto, ActionHandler
 from shared.customtypes import Error
-from shared.action import ActionDataDto, ActionHandler
 from shared.utils.parse import parse_from_dict
 
 from .client import RabbitMQClient
