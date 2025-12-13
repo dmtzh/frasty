@@ -7,6 +7,7 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
+from shared.action import ActionDataDto, ActionHandler
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
@@ -17,6 +18,7 @@ from shared.utils.asyncresult import async_ex_to_error_result
 from . import rabbitcompletestep as rabbit_complete_step
 from . import rabbitrundefinition as rabbit_definition
 from . import rabbitdefinitioncompleted as rabbit_definition_completed
+from . import rabbitrunaction as rabbit_action
 from . import rabbitrunstep as rabbit_step
 from . import rabbitruntask as rabbit_task
 from .broker import RabbitMQBroker, RabbitMQConfig
@@ -32,6 +34,13 @@ _log_fmt = '%(asctime)s %(levelname)-8s - %(exchange)-4s | %(queue)-10s | %(mess
 _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbitmqconfig.publisher_confirms, log_fmt=_log_fmt)
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 _rabbit_client = RabbitMQClient(_rabbit_broker)
+
+def run_action(action_name: str, data: ActionDataDto) -> Coroutine[Any, Any, Result[None, Any]]:
+    rabbit_run_action = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_action.run)
+    return rabbit_run_action(_rabbit_client, action_name, data)
+
+def action_handler(action_name: str, action_handler: ActionHandler):
+    return rabbit_action.handler(_rabbit_client, action_name)(action_handler)
 
 def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)

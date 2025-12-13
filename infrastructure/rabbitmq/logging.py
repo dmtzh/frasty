@@ -45,7 +45,7 @@ class RabbitMessageLoggerCreator():
         self._extra = {"exchange": rabbit_msg.exchange, "queue": queue_name or rabbit_msg.routing_key}
         self._message_prefix = message_prefix
     
-    def create(self, opt_task_id: IdValue | None, run_id: IdValue, step_id: IdValue):
+    def create(self, opt_task_id: IdValue | None | str, run_id: IdValue | str, step_id: IdValue | str):
         logger = logging.getLogger("rabbit_message_logger")
         logger.setLevel(logging.INFO)
         if not logger.hasHandlers():
