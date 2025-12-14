@@ -1,3 +1,4 @@
+from collections.abc import Callable, Coroutine
 from logging import LoggerAdapter
 import pickle
 from typing import Any
@@ -6,7 +7,7 @@ from expression import Result
 from faststream.broker.message import StreamMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.pipeline.actionhandler import ActionDataDto, ActionHandler
+from shared.pipeline.actionhandler import ActionDataDto
 from shared.customtypes import Error
 from shared.utils.parse import parse_from_dict
 
@@ -66,7 +67,7 @@ class _python_pickle:
             if "data" not in decoded:
                 return Result.Error(rabbit_msg_err(ParseError, f"'data' key not found in {decoded}"))
             data_unvalidated = decoded["data"]
-            if not isinstance(data_unvalidated, dict) or not isinstance(data_unvalidated, list):
+            if not isinstance(data_unvalidated, dict) and not isinstance(data_unvalidated, list):
                 return Result.Error(rabbit_msg_err(ParseError, f"'data' should be {dict.__name__} or {list.__name__} value, got {type(data_unvalidated).__name__}"))
 
             if "metadata" not in decoded:
@@ -95,7 +96,7 @@ class _python_pickle:
         if not isinstance(decoded, dict):
             return "N/A", "N/A", "N/A"
         metadata_res = parse_from_dict(decoded, "metadata", lambda m: m if isinstance(m, dict) else None)
-        task_id_res = metadata_res.map(lambda m: str(m.get(task_id, "N/A")))
+        task_id_res = metadata_res.map(lambda m: str(m.get("task_id", "N/A")))
         task_id = task_id_res.default_value("N/A")
         run_id = str(decoded.get("run_id", "N/A"))
         step_id = str(decoded.get("step_id", "N/A"))
@@ -117,7 +118,7 @@ class handler:
         self._rabbit_client = rabbit_client
         self._action_name = action_name
     
-    def __call__(self, func: ActionHandler):
+    def __call__(self, func: Callable[[Result[ActionDataDto, Any]], Coroutine]):
         decoder = _python_pickle.decoder(self._action_name)
         middlewares = (
             error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),
