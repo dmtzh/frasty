@@ -7,19 +7,57 @@ from expression import Result
 from fastapi import FastAPI
 
 from infrastructure.rabbitmq import config
-from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue
+from shared.action import Action, ActionName, ActionType
+from shared.completedresult import CompletedResult
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
+from shared.definition import Definition, DefinitionAdapter
 from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
+from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionHandlerFactory
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from
 from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, StepData
+from shared.utils.parse import parse_value
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
 from stepdefinitions.viber import SendToViberChannel
 from stephandlers.getcontentfromjson.definition import GetContentFromJson
+
+EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
+
+class ExecuteDefinitionData(ActionData[None, Definition]):
+    def to_dto(self) -> ActionDataDto:
+        run_id_str = self.run_id.to_value_with_checksum()
+        step_id_str = self.step_id.to_value_with_checksum()
+        config_dto = None
+        data_dto = DefinitionAdapter.to_list(self.data)
+        metadata_dict = self.metadata.to_dict()
+        return ActionDataDto(run_id_str, step_id_str, config_dto, data_dto, metadata_dict)
+    
+    @staticmethod
+    def validate_input(data: dict | list):
+        list_data_res = parse_value(data, "data", lambda lst: lst if isinstance(lst, list) else None)
+        definition_res = list_data_res.bind(lambda lst: DefinitionAdapter.from_list(lst).map_error(str))
+        return definition_res
+
+def run_execute_definition_action(definition: Definition):
+    metadata = Metadata()
+    metadata.set_from("action manual run webapi")
+    run_id = RunIdValue.new_id()
+    step_id = StepIdValue.new_id()
+    data = ExecuteDefinitionData(run_id, step_id, None, definition, metadata)
+    action_name = EXECUTE_DEFINITION_ACTION.get_name()
+    dto_data = data.to_dto()
+    return config.run_action(action_name, dto_data)
+
+def execute_definition_handler(func: Callable[[ActionData[None, Definition]], Coroutine[Any, Any, CompletedResult | None]]):
+    return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
+        EXECUTE_DEFINITION_ACTION,
+        ExecuteDefinitionData.validate_input
+    )(func)
 
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,

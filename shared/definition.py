@@ -13,17 +13,9 @@ from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 class ActionDefinition(Action):
     config: dict | None
 
+@dataclass(frozen=True)
 class Definition:
-    def __init__(self, steps: tuple[ActionDefinition, ...]):
-        if not isinstance(steps, tuple):
-            raise TypeError("steps must be a tuple")
-        if not steps:
-            raise ValueError("steps must not be empty")
-        self._steps = steps
-    
-    @property
-    def steps(self):
-        return self._steps
+    steps: tuple[ActionDefinition, ...]
 
 type ActionValidationError = ValueMissing | ValueInvalid
 
@@ -50,11 +42,11 @@ class ActionDefinitionAdapter:
     
     @staticmethod   
     def to_dict(action_def: ActionDefinition) -> dict[str, Any]:
-        config = action_def.config if action_def.config else {}
-        return config | {
-            "action": str(action_def.name),
-            "type": str(action_def.type)
-        }
+        config_dict = action_def.config if action_def.config else {}
+        type_dict = {"type": str(action_def.type)} if action_def.type != ActionType.CUSTOM else {}
+        return config_dict | {
+            "action": str(action_def.name)
+        } | type_dict
 
 @dataclass(frozen=True)
 class StepsMissing:
