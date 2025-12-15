@@ -21,8 +21,7 @@ class _python_pickle:
     @staticmethod
     def data_to_message(data: ActionDataDto) -> PythonPickleMessage:
         ids_dict = {"run_id": data.run_id, "step_id": data.step_id}
-        config_dict = {"config": data.config} if data.config is not None else {}
-        action_data = ids_dict | config_dict | {"data": data.data, "metadata": data.metadata}
+        action_data = ids_dict | {"data": data.data, "metadata": data.metadata}
         correlation_id = ids_dict["run_id"]
         data_with_correlation_id = DataWithCorrelationId(action_data, correlation_id)
         return PythonPickleMessage(data_with_correlation_id)
@@ -60,10 +59,6 @@ class _python_pickle:
             if not isinstance(step_id_unvalidated, str):
                 return Result.Error(rabbit_msg_err(ParseError, f"'step_id' should be string value, got {type(step_id_unvalidated).__name__}"))
             
-            config_unvalidated = decoded.get("config", None)
-            if config_unvalidated is not None and not isinstance(config_unvalidated, dict):
-                return Result.Error(rabbit_msg_err(ParseError, f"'config' should be {dict.__name__} value, got {type(config_unvalidated).__name__}"))
-            
             if "data" not in decoded:
                 return Result.Error(rabbit_msg_err(ParseError, f"'data' key not found in {decoded}"))
             data_unvalidated = decoded["data"]
@@ -76,7 +71,7 @@ class _python_pickle:
             if not isinstance(metadata_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
 
-            parsed_data = ActionDataDto(run_id_unvalidated, step_id_unvalidated, config_unvalidated, data_unvalidated, metadata_unvalidated)
+            parsed_data = ActionDataDto(run_id_unvalidated, step_id_unvalidated, data_unvalidated, metadata_unvalidated)
             return Result.Ok(parsed_data)
         
         def __call__(self, message):

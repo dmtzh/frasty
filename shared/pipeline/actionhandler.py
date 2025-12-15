@@ -14,7 +14,6 @@ from shared.utils.parse import parse_value
 class ActionDataDto:
     run_id: str
     step_id: str
-    config: dict | None
     data: dict | list
     metadata: dict
 
@@ -61,11 +60,11 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
 
 type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
-def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict | None], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]) -> DtoActionHandler:
+def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict | list], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]) -> DtoActionHandler:
     def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], str]:
         run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
-        config_res = config_validator(dto.config).map_error(str)
+        config_res = config_validator(dto.data).map_error(str)
         data_res = data_validator(dto.data).map_error(str)
         metadata = Metadata(dto.metadata)
         errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), config_res.swap().default_value(None), data_res.swap().default_value(None)]
@@ -91,12 +90,12 @@ class ActionHandlerFactory:
             step_id_str = data.step_id.to_value_with_checksum()
             result_dto = CompletedResultAdapter.to_dict(data.result)
             metadata_dict = data.metadata.to_dict()
-            dto = ActionDataDto(run_id_str, step_id_str, None, result_dto, metadata_dict)
+            dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
             return run_action(action_name, dto)
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict | None], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict | list], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name

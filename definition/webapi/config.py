@@ -32,10 +32,9 @@ class ExecuteDefinitionData(ActionData[None, Definition]):
     def to_dto(self) -> ActionDataDto:
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
-        config_dto = None
         data_dto = DefinitionAdapter.to_list(self.data)
         metadata_dict = self.metadata.to_dict()
-        return ActionDataDto(run_id_str, step_id_str, config_dto, data_dto, metadata_dict)
+        return ActionDataDto(run_id_str, step_id_str, data_dto, metadata_dict)
     
     @staticmethod
     def validate_input(data: dict | list):
