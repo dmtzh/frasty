@@ -11,16 +11,14 @@ from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 @dataclass(frozen=True)
 class ActionDefinition(Action):
-    config: dict | None
+    data: dict | None
 
 @dataclass(frozen=True)
 class Definition:
     steps: tuple[ActionDefinition, ...]
 
-type ActionValidationError = ValueMissing | ValueInvalid
-
 class ActionDefinitionAdapter:
-    @effect.result[ActionDefinition, list[ActionValidationError]]()
+    @effect.result[ActionDefinition, list[ValueErr]]()
     @staticmethod
     def from_dict(data: dict[str, Any]) -> Generator[Any, Any, ActionDefinition]:
         def parse_name() -> Result[ActionName, list[ValueErr]]:
@@ -32,19 +30,19 @@ class ActionDefinitionAdapter:
             raw_type = str(data.get("type", ActionType.CUSTOM) or "")
             opt_type = ActionType.parse(raw_type)
             return Result.Ok(opt_type) if opt_type is not None else Result.Error([ValueInvalid("type")])
-        def parse_config():
-            raw_config = {k: v for k, v in data.items() if k not in ["action", "type"] and v is not None}
-            return raw_config if raw_config else None
+        def parse_data():
+            raw_data = {k: v for k, v in data.items() if k not in ["action", "type"] and v is not None}
+            return raw_data if raw_data else None
         parsed_name = yield from parse_name()
         parsed_type = yield from parse_type()
-        parsed_config = parse_config()
-        return ActionDefinition(parsed_name, parsed_type, parsed_config)
+        parsed_data = parse_data()
+        return ActionDefinition(parsed_name, parsed_type, parsed_data)
     
     @staticmethod   
     def to_dict(action_def: ActionDefinition) -> dict[str, Any]:
-        config_dict = action_def.config if action_def.config else {}
+        data_dict = action_def.data if action_def.data else {}
         type_dict = {"type": str(action_def.type)} if action_def.type != ActionType.CUSTOM else {}
-        return config_dict | {
+        return data_dict | {
             "action": str(action_def.name)
         } | type_dict
 
@@ -53,12 +51,12 @@ class StepsMissing:
     '''Definition has no steps'''
 
 class DefinitionAdapter:
-    @effect.result[Definition, StepsMissing | list[ActionValidationError]]()
+    @effect.result[Definition, StepsMissing | list[ValueErr]]()
     @staticmethod
     def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, Definition]:
         yield from Result.Ok(None) if data else Result.Error(StepsMissing())
-        steps = list((yield from traverse(ActionDefinitionAdapter.from_dict, Block(data))))
-        definition = Definition(tuple(steps))
+        steps = tuple((yield from traverse(ActionDefinitionAdapter.from_dict, Block(data))))
+        definition = Definition(steps)
         return definition
     
     @staticmethod
