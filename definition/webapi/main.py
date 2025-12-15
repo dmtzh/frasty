@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, RunIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.definition import Definition, DefinitionAdapter as DefinitionActionAdapter
 from shared.definitionsstore import definitions_storage
 from shared.dtodefinition import DefinitionAdapter
@@ -19,7 +19,7 @@ from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result
 from shared.utils.result import ResultTag
 
 import adddefinitionapihandler
-from config import app, execute_definition_handler, manual_run_definition_completed_subscriber, run_execute_definition_action, run_first_step_manually
+from config import ExecuteDefinitionData, ExecuteDefinitionInput, app, execute_definition_handler, manual_run_definition_completed_subscriber, run_execute_definition_action, run_first_step_manually
 import manualrunapihandler
 
 @app.get("/tickets")
@@ -82,20 +82,29 @@ async def complete_manual_run_state_with_result(data: CompletedDefinitionData):
         case _:
             return complete_manual_run_res
 
-@app.post("/definition/actiton-manual-run", status_code=201)
+@app.post("/definition/action-manual-run", status_code=201)
 async def action_manual_run(request: manualrunapihandler.ManualRunRequest):
-    raw_definition = request.resource
-    def_res = DefinitionActionAdapter.from_list(raw_definition)
+    def to_action_data_dto(definition: Definition):
+        run_id = RunIdValue.new_id()
+        step_id = StepIdValue.new_id()
+        input = ExecuteDefinitionInput(None, definition)
+        metadata = Metadata()
+        metadata.set_from("action manual run webapi")
+        return ExecuteDefinitionData(run_id, step_id, None, input, metadata)
     async def err_to_http(err):
         errors = [{"loc": ["body", "resource"], "type": "value_error", "msg": str(err)}]
         raise RequestValidationError(errors)
-    run_res = def_res\
+    
+    raw_definition = request.resource
+    run_res = DefinitionActionAdapter\
+        .from_list(raw_definition)\
+        .map(to_action_data_dto)\
         .map(run_execute_definition_action)\
         .default_with(err_to_http)
     return await run_res
 
 @execute_definition_handler
-async def execute_definition(input: ActionData[None, Definition]):
+async def execute_definition(data: ActionData[None, Definition]):
     definition_id = DefinitionIdValue.new_id()
     @async_catch_ex
     @running_action_definitions_storage.with_storage
@@ -108,6 +117,6 @@ async def execute_definition(input: ActionData[None, Definition]):
         if type(evt) is not RunningDefinitionState.Events.StepRunning:
             raise RuntimeError("expected step running event")
         return (evt, state)
-    res = await apply_run_first_step(input.run_id, definition_id, input.input)
+    res = await apply_run_first_step(data.run_id, definition_id, data.input)
     print(res)
     return None

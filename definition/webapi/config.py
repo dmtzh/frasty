@@ -1,5 +1,6 @@
 from collections.abc import Callable, Coroutine
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 import os
 from typing import Any
 
@@ -9,7 +10,7 @@ from fastapi import FastAPI
 from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue
 from shared.definition import Definition, DefinitionAdapter
 from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
@@ -28,13 +29,20 @@ from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
 EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
 
-class ExecuteDefinitionData(ActionData[None, Definition]):
+@dataclass(frozen=True)
+class ExecuteDefinitionInput:
+    opt_definition_id: DefinitionIdValue | None
+    definition: Definition
+class ExecuteDefinitionData(ActionData[None, ExecuteDefinitionInput]):
     def to_dto(self) -> ActionDataDto:
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
-        data_dto = DefinitionAdapter.to_list(self.input)
+        opt_def_id = self.input.opt_definition_id
+        definition_id_dict = {"definition_id": opt_def_id.to_value_with_checksum()} if opt_def_id is not None else {}
+        definition_dict = {"definition": DefinitionAdapter.to_list(self.input.definition)}
+        data_dict = definition_id_dict | definition_dict
         metadata_dict = self.metadata.to_dict()
-        return ActionDataDto(run_id_str, step_id_str, data_dto, metadata_dict)
+        return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
     
     @staticmethod
     def validate_input(data: dict | list):
@@ -42,15 +50,8 @@ class ExecuteDefinitionData(ActionData[None, Definition]):
         definition_res = list_data_res.bind(lambda lst: DefinitionAdapter.from_list(lst).map_error(str))
         return definition_res
 
-def run_execute_definition_action(definition: Definition):
-    metadata = Metadata()
-    metadata.set_from("action manual run webapi")
-    run_id = RunIdValue.new_id()
-    step_id = StepIdValue.new_id()
-    data = ExecuteDefinitionData(run_id, step_id, None, definition, metadata)
-    action_name = EXECUTE_DEFINITION_ACTION.get_name()
-    dto_data = data.to_dto()
-    return config.run_action(action_name, dto_data)
+def run_execute_definition_action(data: ExecuteDefinitionData):
+    return config.run_action(EXECUTE_DEFINITION_ACTION.get_name(), data.to_dto())
 
 def execute_definition_handler(func: Callable[[ActionData[None, Definition]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
