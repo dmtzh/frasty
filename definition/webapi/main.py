@@ -108,6 +108,6 @@ async def execute_definition(input: ActionData[None, Definition]):
         if type(evt) is not RunningDefinitionState.Events.StepRunning:
             raise RuntimeError("expected step running event")
         return (evt, state)
-    res = await apply_run_first_step(input.run_id, definition_id, input.data)
+    res = await apply_run_first_step(input.run_id, definition_id, input.input)
     print(res)
     return None

@@ -26,7 +26,7 @@ class ActionData[TCfg, D]:
     run_id: RunIdValue
     step_id: StepIdValue
     config: TCfg
-    data: D
+    input: D
     metadata: Metadata
 
 @dataclass(frozen=True)
@@ -60,18 +60,18 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
 
 type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
-def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict | list], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]) -> DtoActionHandler:
+def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict | list], Result[TCfg, Any]], input_validator: Callable[[dict | list], Result[D, Any]]) -> DtoActionHandler:
     def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], str]:
         run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
         config_res = config_validator(dto.data).map_error(str)
-        data_res = data_validator(dto.data).map_error(str)
+        input_res = input_validator(dto.data).map_error(str)
         metadata = Metadata(dto.metadata)
-        errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), config_res.swap().default_value(None), data_res.swap().default_value(None)]
+        errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), config_res.swap().default_value(None), input_res.swap().default_value(None)]
         errors = [err for err in errors_with_none if err is not None]
         match errors:
             case []:
-                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, data_res.ok, metadata))
+                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, input_res.ok, metadata))
             case _:
                 err = ", ".join(errors)
                 return Result.Error(err)
@@ -95,20 +95,20 @@ class ActionHandlerFactory:
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict | list], Result[TCfg, Any]], data_validator: Callable[[dict | list], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict | list], Result[TCfg, Any]], input_validator: Callable[[dict | list], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator, data_validator)
+            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator, input_validator)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
     
-    def create_without_config[D](self, action: Action, data_validator: Callable[[dict | list], Result[D, Any]]):
+    def create_without_config[D](self, action: Action, input_validator: Callable[[dict | list], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[None, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), data_validator)
+            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper

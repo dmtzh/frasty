@@ -32,7 +32,7 @@ class ExecuteDefinitionData(ActionData[None, Definition]):
     def to_dto(self) -> ActionDataDto:
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
-        data_dto = DefinitionAdapter.to_list(self.data)
+        data_dto = DefinitionAdapter.to_list(self.input)
         metadata_dict = self.metadata.to_dict()
         return ActionDataDto(run_id_str, step_id_str, data_dto, metadata_dict)
     
