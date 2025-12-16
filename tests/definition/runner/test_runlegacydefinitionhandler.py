@@ -7,7 +7,7 @@ from shared.definitionsstore import definitions_storage
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
-from runner import rundefinitionhandler
+from runner import runlegacydefinitionhandler
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue
 from shared.domaindefinition import Definition
 from stepdefinitions.html import GetContentFromHtml, GetContentFromHtmlConfig, GetLinksFromHtml, GetLinksFromHtmlConfig
@@ -58,12 +58,12 @@ def run_id():
 
 @pytest.fixture
 def cmd1(existing_definition_id1, run_id):
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id1, run_id=run_id)
+    cmd = runlegacydefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id1, run_id=run_id)
     return cmd
 
 @pytest.fixture
 def cmd2(existing_definition_id2, run_id):
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id2, run_id=run_id)
+    cmd = runlegacydefinitionhandler.RunDefinitionCommand(definition_id=existing_definition_id2, run_id=run_id)
     return cmd
 
 FIRST_STEP_INPUT_DATA = {"url": "http://localhost", "http_method": "GET"}
@@ -72,7 +72,7 @@ FIRST_STEP_DEFINITION = RequestUrl()
 
 
 async def test_handle_returns_first_step_running_event(run_first_step_handler, cmd1):
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(handle_res) is Result
     assert handle_res.is_ok()
@@ -93,7 +93,7 @@ async def test_handle_returns_new_first_step_running_event_when_first_step_alrea
         return (evt, new_state)
     
     running_evt = await running_definitions_storage.with_storage(run_first_step)(cmd1.run_id, cmd1.definition_id)
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(running_evt) is RunningDefinitionState.Events.StepRunning
     assert type(handle_res) is Result
@@ -115,7 +115,7 @@ async def test_handle_returns_first_step_running_event_when_first_step_canceled(
         return (evt, new_state)
     
     canceled_evt = await running_definitions_storage.with_storage(run_first_step_then_cancel)(cmd1.run_id, cmd1.definition_id)
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(canceled_evt) is RunningDefinitionState.Events.StepCanceled
     assert type(handle_res) is Result
@@ -137,7 +137,7 @@ async def test_handle_returns_first_step_running_event_when_first_step_failed(cm
         return (evt, new_state)
     
     failed_evt = await running_definitions_storage.with_storage(run_first_step_then_fail)(cmd1.run_id, cmd1.definition_id)
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(failed_evt) is RunningDefinitionState.Events.StepFailed
     assert type(handle_res) is Result
@@ -159,7 +159,7 @@ async def test_handle_returns_no_event_when_first_step_already_completed(cmd1, d
         return (evt, new_state)
     
     completed_evt = await running_definitions_storage.with_storage(run_first_step_then_complete)(cmd1.run_id, cmd1.definition_id)
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(completed_evt) is RunningDefinitionState.Events.StepCompleted
     assert type(handle_res) is Result
@@ -172,9 +172,9 @@ async def test_handle_returns_no_event_when_first_step_already_completed(cmd1, d
 async def test_handle_returns_NotFoundError_when_definition_id_does_not_exist(run_first_step_handler):
     def_id = DefinitionIdValue.new_id()
     run_id = RunIdValue.new_id()
-    cmd = rundefinitionhandler.RunDefinitionCommand(definition_id=def_id, run_id=run_id)
+    cmd = runlegacydefinitionhandler.RunDefinitionCommand(definition_id=def_id, run_id=run_id)
     
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
@@ -190,7 +190,7 @@ async def test_handle_passes_correct_data_to_run_first_step_handler(cmd1):
         passed_data["def_ver"] = def_ver
         return Result.Ok(None)
     
-    await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert FIRST_STEP_INPUT_DATA == passed_data["input_data"]
     assert type(FIRST_STEP_DEFINITION) is type(passed_data["step_definition"])
@@ -203,7 +203,7 @@ async def test_handle_returns_error_when_run_first_step_handler_error(cmd1):
     async def run_first_step_handler_with_err(cmd, evt):
         return Result.Error(expected_error)
     
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler_with_err, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler_with_err, cmd1)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
@@ -217,7 +217,7 @@ async def test_handle_raises_exception_when_run_first_step_handler_exception(cmd
         raise expected_ex
     
     try:
-        await rundefinitionhandler.handle(run_first_step_handler_with_ex, cmd1)
+        await runlegacydefinitionhandler.handle(run_first_step_handler_with_ex, cmd1)
         assert False
     except Exception as e:
         actual_ex = e
@@ -242,7 +242,7 @@ async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_alr
         return (evt, new_state)
     
     await running_definitions_storage.with_storage(run_then_complete_first_step)(cmd1.run_id, cmd1.definition_id)
-    await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert len(run_first_step_handler_calls) == 0
 
@@ -251,7 +251,7 @@ async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_alr
 async def test_handle_returns_error_when_running_definitions_storage_exception(run_first_step_handler, cmd1, set_running_definitions_storage_error):
     set_running_definitions_storage_error(RuntimeError("Running definitions storage error"))
 
-    handle_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
@@ -261,7 +261,7 @@ async def test_handle_returns_error_when_running_definitions_storage_exception(r
 async def test_handle_returns_error_when_definitions_storage_exception(run_first_step_handler, cmd1, set_definitions_storage_error):
     set_definitions_storage_error(RuntimeError("Definitions storage error"))
 
-    res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
+    res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
 
     assert type(res) is Result
     assert res.is_error()
@@ -269,8 +269,8 @@ async def test_handle_returns_error_when_definitions_storage_exception(run_first
 
 
 async def test_handle_returns_two_different_first_step_running_events_when_invoked_with_same_run_id_but_different_definition_id(run_first_step_handler, cmd1, cmd2):
-    handle1_res = await rundefinitionhandler.handle(run_first_step_handler, cmd1)
-    handle2_res = await rundefinitionhandler.handle(run_first_step_handler, cmd2)
+    handle1_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd1)
+    handle2_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd2)
 
     assert cmd1.run_id == cmd2.run_id
     assert type(handle1_res) is Result

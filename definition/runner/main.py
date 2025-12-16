@@ -17,21 +17,21 @@ from shared.utils.result import ResultTag
 
 from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step, CompleteStepData
 import completestephandler
-import rundefinitionhandler
+import runlegacydefinitionhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
 @run_definition_handler
 async def handle_run_definition_command(data: RunDefinitionData):
-    def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: rundefinitionhandler.DefinitionVersion):
+    def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: runlegacydefinitionhandler.DefinitionVersion):
         metadata = data.metadata.clone()
         metadata.set_definition_id(data.definition_id)
         metadata.set("definition_version", str(definition_version))
         step_data = StepData(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
         return run_step(step_data)
     
-    cmd = rundefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
-    run_definition_res = await rundefinitionhandler.handle(run_first_step_handler, cmd)
+    cmd = runlegacydefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
+    run_definition_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd)
     match run_definition_res:
         case Result(tag=ResultTag.ERROR, error=NotFoundError()):
             return None
