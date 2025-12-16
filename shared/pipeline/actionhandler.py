@@ -14,7 +14,7 @@ from shared.utils.parse import parse_value
 class ActionDataDto:
     run_id: str
     step_id: str
-    data: dict | list
+    data: dict
     metadata: dict
 
 class CompleteAction(Action):
@@ -60,7 +60,7 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
 
 type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
-def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict | list], Result[TCfg, Any]], input_validator: Callable[[dict | list], Result[D, Any]]) -> DtoActionHandler:
+def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]) -> DtoActionHandler:
     def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], str]:
         run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
@@ -95,7 +95,7 @@ class ActionHandlerFactory:
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict | list], Result[TCfg, Any]], input_validator: Callable[[dict | list], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
@@ -104,7 +104,7 @@ class ActionHandlerFactory:
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
     
-    def create_without_config[D](self, action: Action, input_validator: Callable[[dict | list], Result[D, Any]]):
+    def create_without_config[D](self, action: Action, input_validator: Callable[[dict], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[None, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name

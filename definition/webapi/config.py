@@ -19,7 +19,7 @@ from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionHandl
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from
 from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, StepData
-from shared.utils.parse import parse_value
+from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -45,8 +45,8 @@ class ExecuteDefinitionData(ActionData[None, ExecuteDefinitionInput]):
         return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
     
     @staticmethod
-    def validate_input(data: dict | list):
-        list_data_res = parse_value(data, "data", lambda lst: lst if isinstance(lst, list) else None)
+    def validate_input(data: dict):
+        list_data_res = parse_from_dict(data, "definition", lambda lst: lst if isinstance(lst, list) else None)
         definition_res = list_data_res.bind(lambda lst: DefinitionAdapter.from_list(lst).map_error(str))
         return definition_res
 

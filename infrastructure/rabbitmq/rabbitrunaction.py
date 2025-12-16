@@ -62,8 +62,8 @@ class _python_pickle:
             if "data" not in decoded:
                 return Result.Error(rabbit_msg_err(ParseError, f"'data' key not found in {decoded}"))
             data_unvalidated = decoded["data"]
-            if not isinstance(data_unvalidated, dict) and not isinstance(data_unvalidated, list):
-                return Result.Error(rabbit_msg_err(ParseError, f"'data' should be {dict.__name__} or {list.__name__} value, got {type(data_unvalidated).__name__}"))
+            if not isinstance(data_unvalidated, dict):
+                return Result.Error(rabbit_msg_err(ParseError, f"'data' should be {dict.__name__} value, got {type(data_unvalidated).__name__}"))
 
             if "metadata" not in decoded:
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' key not found in {decoded}"))
