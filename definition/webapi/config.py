@@ -15,7 +15,7 @@ from shared.definition import Definition, DefinitionAdapter
 from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
-from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionHandlerFactory
+from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionHandlerFactory, run_action_adapter
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, only_from
 from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, StepData
@@ -51,7 +51,7 @@ class ExecuteDefinitionData(ActionData[None, ExecuteDefinitionInput]):
         return definition_res
 
 def run_execute_definition_action(data: ExecuteDefinitionData):
-    return config.run_action(EXECUTE_DEFINITION_ACTION.get_name(), data.to_dto())
+    return run_action_adapter(config.run_action)(EXECUTE_DEFINITION_ACTION, data)
 
 def execute_definition_handler(func: Callable[[ActionData[None, Definition]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(

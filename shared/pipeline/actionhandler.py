@@ -17,9 +17,7 @@ class ActionDataDto:
     data: dict
     metadata: dict
 
-class CompleteAction(Action):
-    def __init__(self):
-        super().__init__(ActionName("complete_action"), ActionType.CORE)
+COMPLETE_ACTION = Action(ActionName("complete_action"), ActionType.CORE)
 
 @dataclass(frozen=True)
 class ActionData[TCfg, D]:
@@ -28,6 +26,10 @@ class ActionData[TCfg, D]:
     config: TCfg
     input: D
     metadata: Metadata
+
+    def to_dto(self) -> ActionDataDto:
+        '''Convert ActionData to ActionDataDto. Should be overridden in subclasses.'''
+        raise NotImplementedError()
 
 @dataclass(frozen=True)
 class CompleteActionData:
@@ -85,7 +87,7 @@ def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], conf
 class ActionHandlerFactory:
     def __init__(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]], action_handler: Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]):
         def complete_action(data: CompleteActionData):
-            action_name = CompleteAction().get_name()
+            action_name = COMPLETE_ACTION.get_name()
             run_id_str = data.run_id.to_value_with_checksum()
             step_id_str = data.step_id.to_value_with_checksum()
             result_dto = CompletedResultAdapter.to_dict(data.result)
@@ -112,3 +114,10 @@ class ActionHandlerFactory:
             dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
+
+def run_action_adapter(run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]):
+    def wrapper[TCfg, D](action: Action, action_data: ActionData[TCfg, D]):
+        action_name = action.get_name()
+        action_data_dto = action_data.to_dto()
+        return run_action(action_name, action_data_dto)
+    return wrapper
