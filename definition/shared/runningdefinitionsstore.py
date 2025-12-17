@@ -8,7 +8,7 @@ import config
 from .domainrunning import RunningDefinitionState
 from .dtorunning import RunningDefinitionStateAdapter
 from . import runningdefinition
-from shared.customtypes import IdValue
+from shared.customtypes import DefinitionIdValue, IdValue, RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
@@ -31,7 +31,7 @@ class RunningDefinitionsStore[T]:
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
     
     def with_storage(self, func: Callable[Concatenate[T | None, P], tuple[R, T]]):
-        def wrapper(run_id: IdValue, definition_id: IdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
+        def wrapper(run_id: RunIdValue, definition_id: DefinitionIdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
             id_str = f"{run_id}_{definition_id}"
             return self._item_action(func)(id_str, *args, **kwargs)
         return wrapper
