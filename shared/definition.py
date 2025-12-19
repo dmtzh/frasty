@@ -11,11 +11,18 @@ from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 @dataclass(frozen=True)
 class ActionDefinition(Action):
-    data: dict | None
+    config: dict[str, Any] | None
 
 @dataclass(frozen=True)
 class Definition:
+    input_data: dict[str, Any] | list[dict[str, Any]]
     steps: tuple[ActionDefinition, ...]
+
+class ActionDefinitionConfigAdapter:
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> dict[str, Any] | None:
+        config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
+        return config_dict if config_dict else None
 
 class ActionDefinitionAdapter:
     @effect.result[ActionDefinition, list[ValueErr]]()
@@ -30,19 +37,16 @@ class ActionDefinitionAdapter:
             raw_type = str(data.get("type", ActionType.CUSTOM) or "")
             opt_type = ActionType.parse(raw_type)
             return Result.Ok(opt_type) if opt_type is not None else Result.Error([ValueInvalid("type")])
-        def parse_data():
-            raw_data = {k: v for k, v in data.items() if k not in ["action", "type"] and v is not None}
-            return raw_data if raw_data else None
         parsed_name = yield from parse_name()
         parsed_type = yield from parse_type()
-        parsed_data = parse_data()
-        return ActionDefinition(parsed_name, parsed_type, parsed_data)
+        parsed_config = ActionDefinitionConfigAdapter.from_dict(data)
+        return ActionDefinition(parsed_name, parsed_type, parsed_config)
     
     @staticmethod   
     def to_dict(action_def: ActionDefinition) -> dict[str, Any]:
-        data_dict = action_def.data if action_def.data else {}
-        type_dict = {"type": str(action_def.type)} if action_def.type != ActionType.CUSTOM else {}
-        return data_dict | {
+        config_dict = action_def.config if action_def.config else {}
+        type_dict = {"type": action_def.type.value} if action_def.type != ActionType.CUSTOM else {}
+        return config_dict | {
             "action": str(action_def.name)
         } | type_dict
 
@@ -50,16 +54,51 @@ class ActionDefinitionAdapter:
 class StepsMissing:
     '''Definition has no steps'''
 
+class InputDataAdapter:
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> Result[dict[str, Any] | list[dict[str, Any]], list[ValueErr]]:
+        if "input_data" in data:
+            match data["input_data"]:
+                case []:
+                    return Result.Error([ValueMissing("input_data")])
+                case [*list_data]:
+                    return traverse(
+                        lambda dict_data: Result.Ok(dict_data) if dict_data else Result.Error(list[ValueErr]((ValueInvalid("input_data"),))),
+                        Block(list_data)
+                    ).map(list)
+                case _:
+                    return Result.Error([ValueInvalid("input_data")])
+        else:
+            config = ActionDefinitionConfigAdapter.from_dict(data)
+            match config:
+                case None:
+                    return Result.Error([ValueMissing("input_data")])
+                case dict_data:
+                    return Result.Ok(dict_data)
+    
+    @staticmethod
+    def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
+        match input_data:
+            case {**dict_data}:
+                return dict_data
+            case [*list_data]:
+                return {"input_data": list_data}
+
 class DefinitionAdapter:
     @effect.result[Definition, StepsMissing | list[ValueErr]]()
     @staticmethod
     def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, Definition]:
-        yield from Result.Ok(None) if data else Result.Error(StepsMissing())
+        first_step_data = yield from Result.Ok(data[0]) if data else Result.Error(StepsMissing())
+        input_data = yield from InputDataAdapter.from_dict(first_step_data)
         steps = tuple((yield from traverse(ActionDefinitionAdapter.from_dict, Block(data))))
-        definition = Definition(steps)
+        definition = Definition(input_data, steps)
         return definition
     
     @staticmethod
     def to_list(definition: Definition) -> list[dict[str, Any]]:
+        input_data_dict = InputDataAdapter.to_dict(definition.input_data)
         steps = list(map(ActionDefinitionAdapter.to_dict, definition.steps))
-        return steps
+        first_step_dict = [input_data_dict | steps[0]]
+        next_steps_dict = steps[1:]
+        definition_dict = first_step_dict + next_steps_dict
+        return definition_dict
