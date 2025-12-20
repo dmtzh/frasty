@@ -23,6 +23,10 @@ class ActionDefinitionConfigAdapter:
     def from_dict(data: dict[str, Any]) -> dict[str, Any] | None:
         config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
         return config_dict if config_dict else None
+    
+    @staticmethod
+    def to_dict(config: dict[str, Any] | None) -> dict[str, Any]:
+        return config or {}
 
 class ActionDefinitionAdapter:
     @effect.result[ActionDefinition, list[ValueErr]]()

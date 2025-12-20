@@ -1,17 +1,17 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import os
 from typing import Any
 
-from expression import Result
+from expression import Result, effect
 from fastapi import FastAPI
 
 from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue
-from shared.definition import Definition, DefinitionAdapter
+from shared.definition import Definition, DefinitionAdapter, InputDataAdapter
 from shared.domaindefinition import StepDefinition
 from shared.domainrunning import RunningDefinitionState
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
@@ -40,20 +40,30 @@ class ExecuteDefinitionData(ActionData[None, ExecuteDefinitionInput]):
         opt_def_id = self.input.opt_definition_id
         definition_id_dict = {"definition_id": opt_def_id.to_value_with_checksum()} if opt_def_id is not None else {}
         definition_dict = {"definition": DefinitionAdapter.to_list(self.input.definition)}
-        data_dict = definition_id_dict | definition_dict
+        input_data = definition_id_dict | definition_dict
+        input_data_dict = InputDataAdapter.to_dict(input_data)
         metadata_dict = self.metadata.to_dict()
-        return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
+        return ActionDataDto(run_id_str, step_id_str, input_data_dict, metadata_dict)
     
+    @effect.result[ExecuteDefinitionInput, str]()
     @staticmethod
-    def validate_input(data: dict):
-        list_data_res = parse_from_dict(data, "definition", lambda lst: lst if isinstance(lst, list) else None)
-        definition_res = list_data_res.bind(lambda lst: DefinitionAdapter.from_list(lst).map_error(str))
-        return definition_res
+    def validate_input(data: dict) -> Generator[Any, Any, ExecuteDefinitionInput]:
+        input_data = yield from InputDataAdapter.from_dict(data).map_error(str)
+        input_data_dict = input_data if isinstance(input_data, dict) else input_data[0]
+        if "definition_id" in input_data_dict:
+            opt_definition_id = yield from parse_from_dict(input_data_dict, "definition_id", DefinitionIdValue.from_value_with_checksum)
+        else:
+            opt_definition_id = None
+        list_definition = yield from parse_from_dict(input_data_dict, "definition", lambda lst: lst if isinstance(lst, list) else None)
+        definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
+        return ExecuteDefinitionInput(opt_definition_id, definition)
+
+run_action = config.run_action
 
 def run_execute_definition_action(data: ExecuteDefinitionData):
     return run_action_adapter(config.run_action)(EXECUTE_DEFINITION_ACTION, data)
 
-def execute_definition_handler(func: Callable[[ActionData[None, Definition]], Coroutine[Any, Any, CompletedResult | None]]):
+def execute_definition_handler(func: Callable[[ActionData[None, ExecuteDefinitionInput]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
         EXECUTE_DEFINITION_ACTION,
         ExecuteDefinitionData.validate_input

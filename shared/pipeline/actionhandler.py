@@ -6,7 +6,7 @@ from expression import Result
 
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter
-from shared.customtypes import Metadata, RunIdValue, StepIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
 from shared.utils.parse import parse_value
 
@@ -37,6 +37,14 @@ class CompleteActionData:
     step_id: StepIdValue
     result: CompletedResult
     metadata: Metadata
+
+@dataclass(frozen=True)
+class CompletedDefinitionData:
+    definition_id: DefinitionIdValue
+    result: CompletedResult
+
+    def to_dict(self) -> dict:
+        return {"definition_id": self.definition_id.to_value_with_checksum(), "result": CompletedResultAdapter.to_dict(self.result)}
 
 type ActionHandler[TCfg, D] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
