@@ -188,6 +188,7 @@ async def test_handle_returns_error_when_run_first_step_handler_error(convert_to
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
+    assert type(handle_res.error) is executedefinitionhandler.RunFirstStepError
     assert handle_res.error.error == expected_error
 
 

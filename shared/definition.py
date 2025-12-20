@@ -65,7 +65,7 @@ class InputDataAdapter:
                     return traverse(
                         lambda dict_data: Result.Ok(dict_data) if dict_data else Result.Error(list[ValueErr]((ValueInvalid("input_data"),))),
                         Block(list_data)
-                    ).map(list)
+                    ).map(lambda block: list(block) if len(block) > 1 else block.head())
                 case _:
                     return Result.Error([ValueInvalid("input_data")])
         else:
@@ -80,7 +80,7 @@ class InputDataAdapter:
     def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
         match input_data:
             case {**dict_data}:
-                return dict_data
+                return {"input_data": [dict_data]}
             case [*list_data]:
                 return {"input_data": list_data}
 

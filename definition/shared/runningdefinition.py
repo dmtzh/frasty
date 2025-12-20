@@ -100,7 +100,7 @@ class RunningDefinitionState:
                 step_id = StepIdValue.new_id()
                 apply_evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], None)
                 RunningDefinitionState.apply(self, apply_evt)
-                evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], None)
+                evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], definition.input_data)
                 return evt
             case RunningDefinitionState.Commands.CancelRunningStep():
                 running_step_id = self.running_step_id()
