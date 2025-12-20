@@ -2,7 +2,6 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import functools
 from typing import Any
-# from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from expression import Result
 
@@ -12,13 +11,7 @@ from shared.infrastructure.storage.repository import StorageError
 from shared.runningdefinition import RunningDefinitionState
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
-# P = ParamSpec("P")
-# R = TypeVar("R")
-# TCfg = TypeVar("TCfg")
-# D = TypeVar("D")
-
 ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
-# ToStorageActionConverter = Callable[[Callable[Concatenate[RunningDefinitionState | None, P], tuple[R, RunningDefinitionState]]], Callable[Concatenate[RunIdValue, DefinitionIdValue, P], Coroutine[Any, Any, R]]]
 
 @dataclass(frozen=True)
 class ExecuteDefinitionCommand:
