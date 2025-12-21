@@ -82,7 +82,7 @@ async def handle(
         match error:
             case RunFirstStepError(step_id=step_id, error=error):
                 fail_run_first_step = functools.partial(_fail_run_first_step, step_id, error)
-                apply_fail_run_first_step = async_result(async_ex_to_error_result(StorageError.from_exception)(convert_to_storage_action(fail_run_first_step)))
+                apply_fail_run_first_step = async_ex_to_error_result(StorageError.from_exception)(convert_to_storage_action(fail_run_first_step))
                 await apply_fail_run_first_step(cmd.run_id, cmd.definition_id)
     
     res = await execute_definition_workflow()
