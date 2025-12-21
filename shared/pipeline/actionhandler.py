@@ -38,6 +38,15 @@ class CompleteActionData:
     result: CompletedResult
     metadata: Metadata
 
+    def run_complete(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]):
+        action_name = COMPLETE_ACTION.get_name()
+        run_id_str = self.run_id.to_value_with_checksum()
+        step_id_str = self.step_id.to_value_with_checksum()
+        result_dto = CompletedResultAdapter.to_dict(self.result)
+        metadata_dict = self.metadata.to_dict()
+        dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
+        return run_action(action_name, dto)
+
 @dataclass(frozen=True)
 class CompletedDefinitionData:
     definition_id: DefinitionIdValue

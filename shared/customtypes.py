@@ -94,5 +94,8 @@ class Metadata(dict):
     def get_task_id(self) -> TaskIdValue | None:
         return TaskIdValue.from_value_with_checksum(self.get("task_id", ""))
     
+    def get_definition_id(self) -> DefinitionIdValue | None:
+        return DefinitionIdValue.from_value_with_checksum(self.get("definition_id", ""))
+    
     def get_id(self, key: str, id_type: type[IdVal]):
         return id_type.from_value_with_checksum(self.get(key, ""))
