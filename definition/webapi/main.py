@@ -21,8 +21,8 @@ from shared.utils.result import ResultTag
 
 import adddefinitionapihandler
 from config import ExecuteDefinitionData, ExecuteDefinitionInput, app, execute_definition_handler, manual_run_definition_completed_subscriber, run_action, run_execute_definition_action, run_first_step_manually
-import executedefinitionhandler
 import manualrunapihandler
+import runner.executedefinitionhandler as executedefinitionhandler
 
 @app.get("/tickets")
 def tickets():

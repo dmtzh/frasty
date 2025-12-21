@@ -1,15 +1,16 @@
 from collections.abc import Callable
 from typing import Concatenate, ParamSpec, TypeVar
+
 from expression import Result
 import pytest
 
+from runner import executedefinitionhandler
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue
 from shared.definition import ActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
-from webapi import executedefinitionhandler
 
 @pytest.fixture
 def convert_to_storage_action():
