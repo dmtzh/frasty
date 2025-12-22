@@ -457,9 +457,11 @@ async def test_handle_returns_error_when_running_definitions_storage_exception(c
 
 
 
-async def test_handle_returns_error_when_event_handler_error(create_complete_step_cmd, handle, two_step_definition):
+async def test_handle_returns_run_next_step_error_when_event_handler_error(create_complete_step_cmd, handle, two_step_definition):
     event_handler_error = Error("Event handler error")
-    async def error_event_handler(evt):
+    passed_data = {}
+    async def error_event_handler(evt: RunningDefinitionState.Events.StepRunning):
+        passed_data["step_id"] = evt.step_id
         return Result.Error(event_handler_error)
     def apply_set_first_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
         state = RunningDefinitionState()
@@ -473,7 +475,34 @@ async def test_handle_returns_error_when_event_handler_error(create_complete_ste
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
-    assert handle_res.error == event_handler_error
+    assert type(handle_res.error) is completeactionhandler.RunNextStepError
+    assert handle_res.error.step_id == passed_data["step_id"]
+    assert handle_res.error.error == event_handler_error
+
+
+
+async def test_handle_returns_complete_definition_error_when_event_handler_error(create_complete_step_cmd, handle, two_step_definition, html_response_result):
+    event_handler_error = Error("Event handler error")
+    async def error_event_handler(evt):
+        return Result.Error(event_handler_error)
+    def apply_set_second_step_running(state: RunningDefinitionState | None, cmd_dict: dict):
+        state = RunningDefinitionState()
+        state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
+        state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+        cmd_dict["step_id"] = state.running_step_id()
+        cmd_dict["result"] = CompletedWith.Data("test html content")
+        return (evt, state)
+    
+    _, cmd = await create_complete_step_cmd(apply_set_second_step_running)
+
+    handle_res = await handle(error_event_handler, cmd)
+
+    assert type(handle_res) is Result
+    assert handle_res.is_error()
+    assert type(handle_res.error) is completeactionhandler.CompleteDefinitionError
+    assert handle_res.error.error == event_handler_error
 
 
 
