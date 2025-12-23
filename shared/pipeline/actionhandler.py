@@ -5,7 +5,7 @@ from typing import Any
 from expression import Result
 
 from shared.action import Action, ActionName, ActionType
-from shared.completedresult import CompletedResult, CompletedResultAdapter
+from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
 from shared.utils.parse import parse_value
@@ -57,6 +57,13 @@ class CompletedDefinitionData:
 
 type ActionHandler[TCfg, D] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
+@dataclass(frozen=True)
+class _ValidateActionError:
+    error: str
+    run_id: RunIdValue
+    step_id: StepIdValue
+    metadata: Metadata
+
 def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_action_func: Callable[[CompleteActionData], Coroutine[Any, Any, Result]]) -> ActionHandler[TCfg, D]:
     async def process_action_data(input_data: ActionData[TCfg, D]):
         opt_completed_res = await func(input_data)
@@ -68,38 +75,51 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
                 complete_step_res = await complete_action_func(data)
                 return complete_step_res.map(lambda _: completed_res)
     def wrapper(action_data_res: Result[ActionData[TCfg, D], Any]):
-        async def err_to_none(_):
-            return None
+        async def err_to_complete_action_or_none(err):
+            match err:
+                case _ValidateActionError():
+                    completed_err = CompletedWith.Error(err.error)
+                    data = CompleteActionData(err.run_id, err.step_id, completed_err, err.metadata)
+                    complete_step_res = await complete_action_func(data)
+                    return complete_step_res.map(lambda _: completed_err)
+                case _:
+                    return None
+        # async def err_to_none(_):
+        #     return None
         return action_data_res\
             .map(process_action_data)\
-            .map_error(err_to_none)\
+            .map_error(err_to_complete_action_or_none)\
             .merge()
+            # .map_error(err_to_none)\
+            # .merge()
     wrapper.__name__ = func.__name__
     return wrapper
 
 type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
 def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]) -> DtoActionHandler:
-    def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], str]:
+    def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
         run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
         config_res = config_validator(dto.data).map_error(str)
         input_res = input_validator(dto.data).map_error(str)
         metadata = Metadata(dto.metadata)
-        errors_with_none = [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None), config_res.swap().default_value(None), input_res.swap().default_value(None)]
-        errors = [err for err in errors_with_none if err is not None]
-        match errors:
-            case []:
+        parse_errors = [parse_err for parse_err in [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None)] if parse_err is not None]
+        validate_errors = [validate_err for validate_err in [config_res.swap().default_value(None), input_res.swap().default_value(None)] if validate_err is not None]
+        match parse_errors, validate_errors:
+            case [], []:
                 return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, input_res.ok, metadata))
+            case [], [*v_errs]:
+                err = _ValidateActionError(", ".join(v_errs), run_id_res.ok, step_id_res.ok, metadata)
+                return Result.Error(err)
             case _:
-                err = ", ".join(errors)
+                err = ", ".join(parse_errors + validate_errors)
                 return Result.Error(err)
     async def wrapper(action_data_res: Result[ActionDataDto, Any]):
         validated_action_data_res = action_data_res.bind(validate_dto)
         return await action_handler(validated_action_data_res)
     wrapper.__name__ = action_handler.__name__
     return wrapper
-
 
 class ActionHandlerFactory:
     def __init__(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]], action_handler: Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]):
