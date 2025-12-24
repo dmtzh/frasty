@@ -29,6 +29,7 @@ class ActionData[TCfg, D]:
     metadata: Metadata
 
 type RunAsyncAction = Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]
+type AsyncActionHandler = Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]
 
 @dataclass(frozen=True)
 class CompleteActionData:
@@ -113,7 +114,7 @@ def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], conf
     return wrapper
 
 class ActionHandlerFactory:
-    def __init__(self, run_action: RunAsyncAction, action_handler: Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]):
+    def __init__(self, run_action: RunAsyncAction, action_handler: AsyncActionHandler):
         def complete_action(data: CompleteActionData):
             action_name = COMPLETE_ACTION.get_name()
             run_id_str = data.run_id.to_value_with_checksum()
