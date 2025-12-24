@@ -15,9 +15,14 @@ from shared.utils.asyncresult import coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import app, complete_step_handler, publish_completed_definition, run_definition_handler, run_step, CompleteStepData
+from config import action_handler, app, complete_step_handler, publish_completed_definition, run_action, run_definition_handler, run_step, CompleteStepData
 import completestephandler
+import executedefinitionhandler
 import runlegacydefinitionhandler
+
+# ------------------------------------------------------------------------------------------------------------
+
+executedefinitionhandler.register_execute_definition_action_handler(run_action, action_handler)
 
 # ------------------------------------------------------------------------------------------------------------
 

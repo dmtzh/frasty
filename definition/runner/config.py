@@ -17,6 +17,9 @@ from stepdefinitions.task import FetchNewData
 from stepdefinitions.viber import SendToViberChannel
 from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
+run_action = config.run_action
+action_handler = config.action_handler
+
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,

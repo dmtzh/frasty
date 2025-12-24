@@ -1,17 +1,101 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from dataclasses import dataclass
 import functools
 from typing import Any
 
-from expression import Result
+from expression import effect, Result
 
-from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
-from shared.definition import Definition
+from shared.action import Action, ActionName, ActionType
+from shared.completedresult import CompletedResultAdapter, CompletedWith
+from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
+from shared.definition import ActionDefinitionConfigAdapter, Definition, DefinitionAdapter, InputDataAdapter
 from shared.infrastructure.storage.repository import StorageError
+from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionDataInput, ActionHandlerFactory, AsyncActionHandler, RunAsyncAction, run_action_adapter
 from shared.runningdefinition import RunningDefinitionState
+from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.parse import parse_from_dict
 
-ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
+from .runningparentaction import RunningParentAction
+
+EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
+
+@dataclass(frozen=True)
+class ExecuteDefinitionInput:
+    opt_definition_id: DefinitionIdValue | None
+    definition: Definition
+    def to_dict(self):
+        definition_id_dict = {"definition_id": self.opt_definition_id.to_value_with_checksum()} if self.opt_definition_id is not None else {}
+        definition_dict = {"definition": DefinitionAdapter.to_list(self.definition)}
+        return definition_id_dict | definition_dict
+
+def run_execute_definition_action(run_action: RunAsyncAction, data: ActionData[None, ExecuteDefinitionInput]):
+    input = _ExecuteDefinitionInputAdapter(data.input)
+    execute_definition_data = ActionData(data.run_id, data.step_id, data.config, input, data.metadata)
+    return run_action_adapter(run_action)(EXECUTE_DEFINITION_ACTION, execute_definition_data)
+
+def register_execute_definition_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):
+    def handle_execute_definition_action(data: ActionData[None, ExecuteDefinitionInput]):
+        return _handle_execute_definition_action(running_action_definitions_storage.with_storage, run_action, data)
+    return ActionHandlerFactory(run_action, action_handler).create_without_config(
+        EXECUTE_DEFINITION_ACTION,
+        _ExecuteDefinitionInputAdapter.from_dict
+    )(handle_execute_definition_action)
+
+type ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
+
+@dataclass(frozen=True)
+class _ExecuteDefinitionInputAdapter(ActionDataInput, ExecuteDefinitionInput):
+    def __init__(self, input: ExecuteDefinitionInput):
+        super().__init__(input.opt_definition_id, input.definition)
+    def to_dict(self):
+        return InputDataAdapter.to_dict(ExecuteDefinitionInput.to_dict(self))
+    @effect.result['ExecuteDefinitionInput', str]()
+    @staticmethod
+    def from_dict(data: dict) -> Generator[Any, Any, 'ExecuteDefinitionInput']:
+        input_data = yield from InputDataAdapter.from_dict(data).map_error(str)
+        input_data_dict = input_data if isinstance(input_data, dict) else input_data[0]
+        if "definition_id" in input_data_dict:
+            opt_definition_id = yield from parse_from_dict(input_data_dict, "definition_id", DefinitionIdValue.from_value_with_checksum)
+        else:
+            opt_definition_id = None
+        list_definition = yield from parse_from_dict(input_data_dict, "definition", lambda lst: lst if isinstance(lst, list) else None)
+        definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
+        return ExecuteDefinitionInput(opt_definition_id, definition)
+
+async def _handle_execute_definition_action(
+        convert_to_storage_action: ToStorageActionConverter,
+        run_action: RunAsyncAction,
+        data: ActionData[None, ExecuteDefinitionInput]):
+    definition_id = data.input.opt_definition_id or DefinitionIdValue.new_id()
+    def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
+        data_dict = InputDataAdapter.to_dict(evt.input_data) | ActionDefinitionConfigAdapter.to_dict(evt.step_definition.config)
+        metadata = Metadata()
+        metadata.set_from("execute definition action")
+        metadata.set_definition_id(definition_id)
+        parent_action = RunningParentAction(data.run_id, data.step_id, data.metadata)
+        parent_action.add_to_metadata(metadata)
+        metadata_dict = metadata.to_dict()
+        action_data = ActionDataDto(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, metadata_dict)
+        return run_action(evt.step_definition.get_name(), action_data)
+    cmd = ExecuteDefinitionCommand(data.run_id, definition_id, data.input.definition)
+    execute_definition_res = await _handle(
+        convert_to_storage_action,
+        run_first_step_handler,
+        cmd
+    )
+    def ok_to_none(_):
+        # Definition started and will complete eventually. Return None to properly handle ongoing execute definition action.
+        return None
+    def err_to_completed_result(err):
+        # Definition failed to start. Return CompletedWith.Data result to complete execute definition action.
+        error_result_dict = CompletedResultAdapter.to_dict(CompletedWith.Error(str(err)))
+        return CompletedWith.Data(error_result_dict)
+        
+    return execute_definition_res\
+        .map(ok_to_none)\
+        .map_error(err_to_completed_result)\
+        .merge()
 
 @dataclass(frozen=True)
 class ExecuteDefinitionCommand:
@@ -66,7 +150,7 @@ class RunFirstStepError:
     step_id: StepIdValue
     error: Any
 
-async def handle(
+async def _handle(
         convert_to_storage_action: ToStorageActionConverter,
         run_first_step_handler: Callable[[RunningDefinitionState.Events.StepRunning], Coroutine[Any, Any, Result]],
         cmd: ExecuteDefinitionCommand):
