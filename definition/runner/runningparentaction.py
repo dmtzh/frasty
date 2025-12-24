@@ -1,12 +1,10 @@
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any
 
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
-from shared.pipeline.actionhandler import ActionDataDto, CompleteActionData
+from shared.pipeline.actionhandler import CompleteActionData, RunAsyncAction
 from shared.utils.parse import parse_from_dict
 
 @dataclass(frozen=True)
@@ -15,7 +13,7 @@ class RunningParentAction:
     step_id: StepIdValue
     metadata: Metadata
 
-    async def run_complete_definition(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]], result: CompletedResult):
+    async def run_complete_definition(self, run_action: RunAsyncAction, result: CompletedResult):
         if self.metadata.get_definition_id() is None:
             return Result[None, str].Error("metadata does not have definition id")
         result_dict = CompletedResultAdapter.to_dict(result)

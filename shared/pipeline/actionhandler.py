@@ -28,6 +28,8 @@ class ActionData[TCfg, D]:
     input: D
     metadata: Metadata
 
+type RunAsyncAction = Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]
+
 @dataclass(frozen=True)
 class CompleteActionData:
     run_id: RunIdValue
@@ -35,7 +37,7 @@ class CompleteActionData:
     result: CompletedResult
     metadata: Metadata
 
-    def run_complete(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]):
+    def run_complete(self, run_action: RunAsyncAction):
         action_name = COMPLETE_ACTION.get_name()
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
@@ -111,7 +113,7 @@ def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], conf
     return wrapper
 
 class ActionHandlerFactory:
-    def __init__(self, run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]], action_handler: Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]):
+    def __init__(self, run_action: RunAsyncAction, action_handler: Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]):
         def complete_action(data: CompleteActionData):
             action_name = COMPLETE_ACTION.get_name()
             run_id_str = data.run_id.to_value_with_checksum()
@@ -147,7 +149,7 @@ class ActionDataInput(ABC):
         '''Serialize ActionDataInput. Should be overridden in subclasses.'''
         raise NotImplementedError()
 
-def run_action_adapter(run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]):
+def run_action_adapter(run_action: RunAsyncAction):
     def wrapper[TCfg, D: ActionDataInput](action: Action, action_data: ActionData[TCfg, D]):
         def to_dto() -> ActionDataDto:
             run_id_str = action_data.run_id.to_value_with_checksum()
