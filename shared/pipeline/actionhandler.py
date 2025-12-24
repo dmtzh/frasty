@@ -20,26 +20,13 @@ class ActionDataDto:
 
 COMPLETE_ACTION = Action(ActionName("complete_action"), ActionType.CORE)
 
-class ActionDataInput(ABC):
-    @abstractmethod
-    def to_dict(self) -> dict[str, Any]:
-        '''Serialize ActionDataInput. Should be overridden in subclasses.'''
-        raise NotImplementedError()
-
 @dataclass(frozen=True)
-class ActionData[TCfg, D: ActionDataInput]:
+class ActionData[TCfg, D]:
     run_id: RunIdValue
     step_id: StepIdValue
     config: TCfg
     input: D
     metadata: Metadata
-
-    def to_dto(self) -> ActionDataDto:
-        run_id_str = self.run_id.to_value_with_checksum()
-        step_id_str = self.step_id.to_value_with_checksum()
-        data_dict = self.input.to_dict()
-        metadata_dict = self.metadata.to_dict()
-        return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
 
 @dataclass(frozen=True)
 class CompleteActionData:
@@ -57,7 +44,7 @@ class CompleteActionData:
         dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
         return run_action(action_name, dto)
 
-type ActionHandler[TCfg, D: ActionDataInput] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
+type ActionHandler[TCfg, D] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
 @dataclass(frozen=True)
 class _ValidateActionError:
@@ -66,7 +53,7 @@ class _ValidateActionError:
     step_id: StepIdValue
     metadata: Metadata
 
-def _action_handler_adapter[TCfg, D: ActionDataInput](func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_action_func: Callable[[CompleteActionData], Coroutine[Any, Any, Result]]) -> ActionHandler[TCfg, D]:
+def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_action_func: Callable[[CompleteActionData], Coroutine[Any, Any, Result]]) -> ActionHandler[TCfg, D]:
     async def process_action_data(input_data: ActionData[TCfg, D]):
         opt_completed_res = await func(input_data)
         match opt_completed_res:
@@ -99,7 +86,7 @@ def _action_handler_adapter[TCfg, D: ActionDataInput](func: Callable[[ActionData
 
 type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
-def _validated_data_to_dto[TCfg, D: ActionDataInput](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]) -> DtoActionHandler:
+def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]) -> DtoActionHandler:
     def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
         run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
@@ -136,7 +123,7 @@ class ActionHandlerFactory:
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D: ActionDataInput](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
@@ -145,7 +132,7 @@ class ActionHandlerFactory:
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
     
-    def create_without_config[D: ActionDataInput](self, action: Action, input_validator: Callable[[dict], Result[D, Any]]):
+    def create_without_config[D](self, action: Action, input_validator: Callable[[dict], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[None, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
@@ -154,9 +141,21 @@ class ActionHandlerFactory:
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
 
+class ActionDataInput(ABC):
+    @abstractmethod
+    def to_dict(self) -> dict[str, Any]:
+        '''Serialize ActionDataInput. Should be overridden in subclasses.'''
+        raise NotImplementedError()
+
 def run_action_adapter(run_action: Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]):
     def wrapper[TCfg, D: ActionDataInput](action: Action, action_data: ActionData[TCfg, D]):
+        def to_dto() -> ActionDataDto:
+            run_id_str = action_data.run_id.to_value_with_checksum()
+            step_id_str = action_data.step_id.to_value_with_checksum()
+            data_dict = action_data.input.to_dict()
+            metadata_dict = action_data.metadata.to_dict()
+            return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()
-        action_data_dto = action_data.to_dto()
+        action_data_dto = to_dto()
         return run_action(action_name, action_data_dto)
     return wrapper
