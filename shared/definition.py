@@ -51,6 +51,51 @@ class ActionDefinitionAdapter:
 class StepsMissing:
     '''Definition has no steps'''
 
+class DefinitionAdapter:
+    @effect.result[Definition, StepsMissing | list[ValueErr]]()
+    @staticmethod
+    def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, Definition]:
+        def parse_list_data_item(item) -> Result[dict[str, Any], list[ValueErr]]:
+            match item:
+                case {**item_dict} if item_dict:
+                    all_keys_are_strings = all(isinstance(k, str) for k in item_dict)
+                    return Result.Ok(item_dict) if all_keys_are_strings else Result.Error([ValueInvalid("input_data")])
+                case _:
+                    return Result.Error([ValueInvalid("input_data")])
+        def parse_input_data(data: dict[str, Any]) -> Result[dict[str, Any] | list[dict[str, Any]], list[ValueErr]]:
+            if "input_data" in data:
+                match data["input_data"]:
+                    case []:
+                        return Result.Error([ValueMissing("input_data")])
+                    case [*list_data]:
+                        return traverse(
+                            parse_list_data_item,
+                            Block(list_data)
+                        ).map(lambda block: list(block) if len(block) > 1 else block.head())
+                    case _:
+                        return Result.Error([ValueInvalid("input_data")])
+            else:
+                data_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
+                return Result.Ok(data_dict) if data_dict else Result.Error([ValueMissing("input_data")])
+        first_step_data = yield from Result.Ok(data[0]) if data else Result.Error(StepsMissing())
+        input_data = yield from parse_input_data(first_step_data)
+        steps = tuple((yield from traverse(ActionDefinitionAdapter.from_dict, Block(data))))
+        definition = Definition(input_data, steps)
+        return definition
+    
+    @staticmethod
+    def to_list(definition: Definition) -> list[dict[str, Any]]:
+        match definition.input_data:
+            case {**dict_data}:
+                input_data_dict = dict_data
+            case [*list_data]:
+                input_data_dict = {"input_data": list_data}
+        steps = list(map(ActionDefinitionAdapter.to_dict, definition.steps))
+        first_step_dict = [input_data_dict | steps[0]]
+        next_steps_dict = steps[1:]
+        definition_dict = first_step_dict + next_steps_dict
+        return definition_dict
+
 class InputDataAdapter:
     @staticmethod
     def from_dict(data: dict[str, Any]) -> Result[dict[str, Any] | list[dict[str, Any]], list[ValueErr]]:
@@ -76,22 +121,3 @@ class InputDataAdapter:
                 return {"input_data": [dict_data]}
             case [*list_data]:
                 return {"input_data": list_data}
-
-class DefinitionAdapter:
-    @effect.result[Definition, StepsMissing | list[ValueErr]]()
-    @staticmethod
-    def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, Definition]:
-        first_step_data = yield from Result.Ok(data[0]) if data else Result.Error(StepsMissing())
-        input_data = yield from InputDataAdapter.from_dict(first_step_data)
-        steps = tuple((yield from traverse(ActionDefinitionAdapter.from_dict, Block(data))))
-        definition = Definition(input_data, steps)
-        return definition
-    
-    @staticmethod
-    def to_list(definition: Definition) -> list[dict[str, Any]]:
-        input_data_dict = InputDataAdapter.to_dict(definition.input_data)
-        steps = list(map(ActionDefinitionAdapter.to_dict, definition.steps))
-        first_step_dict = [input_data_dict | steps[0]]
-        next_steps_dict = steps[1:]
-        definition_dict = first_step_dict + next_steps_dict
-        return definition_dict

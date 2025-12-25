@@ -26,7 +26,7 @@ def run_first_step_handler():
 def cmd1():
     run_id = RunIdValue.new_id()
     definition_id = DefinitionIdValue.new_id()
-    input_data = {"url": "http://localhost", "http_method": "GET"}
+    input_data = [{"url": "http://localhost", "http_method": "GET"}, {"url": "http://localhost", "http_method": "GET"}]
     first_step_definition = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, None)
     second_step_definition = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
     definition = Definition(input_data, (first_step_definition, second_step_definition))

@@ -196,7 +196,7 @@ def test_to_list_with_dict_input_data():
         {"action": "filterhtmlresponse"}
     ]
     expected_list_data = [
-        {"action": "requesturl", "type": "core", **input_data_dict, "input_data": [input_data_dict]},
+        {"action": "requesturl", "type": "core", **input_data_dict},
         {"action": "filtersuccessresponse"},
         {"action": "filterhtmlresponse"}
     ]
