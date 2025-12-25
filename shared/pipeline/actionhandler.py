@@ -4,12 +4,15 @@ from dataclasses import dataclass
 from typing import Any
 
 from expression import Result
+from expression.collections.block import Block
+from expression.extra.result.traversable import traverse
 
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
 from shared.utils.parse import parse_value
+from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 @dataclass(frozen=True)
 class ActionDataDto:
@@ -42,7 +45,7 @@ class CompleteActionData:
         action_name = COMPLETE_ACTION.get_name()
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
-        result_dto = CompletedResultAdapter.to_dict(self.result)
+        result_dto = InputDataAdapter.to_dict(CompletedResultAdapter.to_dict(self.result))
         metadata_dict = self.metadata.to_dict()
         dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
         return run_action(action_name, dto)
@@ -113,40 +116,70 @@ def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], conf
     wrapper.__name__ = action_handler.__name__
     return wrapper
 
+class InputDataAdapter:
+    @staticmethod
+    def from_dict(data: dict) -> Result[list[dict[str, Any]], list[ValueErr]]:
+        def parse_list_data_item(item) -> Result[dict[str, Any], list[ValueErr]]:
+            match item:
+                case {**item_dict} if item_dict:
+                    all_keys_are_strings = all(isinstance(k, str) for k in item_dict)
+                    return Result.Ok(item_dict) if all_keys_are_strings else Result.Error([ValueInvalid("input_data")])
+                case _:
+                    return Result.Error([ValueInvalid("input_data")])
+        if "input_data" in data:
+            match data["input_data"]:
+                case []:
+                    return Result.Error([ValueMissing("input_data")])
+                case [*list_data]:
+                    return traverse(
+                        parse_list_data_item,
+                        Block(list_data)
+                    ).map(list)
+                case _:
+                    return Result.Error([ValueInvalid("input_data")])
+        else:
+            return Result.Error([ValueMissing("input_data")])
+    
+    @staticmethod
+    def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+        match input_data:
+            case {**dict_data}:
+                return {"input_data": [dict_data]}
+            case [*list_data]:
+                return {"input_data": list_data}
+
 class ActionHandlerFactory:
     def __init__(self, run_action: RunAsyncAction, action_handler: AsyncActionHandler):
         def complete_action(data: CompleteActionData):
-            action_name = COMPLETE_ACTION.get_name()
-            run_id_str = data.run_id.to_value_with_checksum()
-            step_id_str = data.step_id.to_value_with_checksum()
-            result_dto = CompletedResultAdapter.to_dict(data.result)
-            metadata_dict = data.metadata.to_dict()
-            dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
-            return run_action(action_name, dto)
+            return data.run_complete(run_action)
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[list[dict[str, Any]]], Result[D, Any]]):
+        def input_validator_wrapper(data: dict) -> Result[D, Any]:
+            return InputDataAdapter.from_dict(data).bind(input_validator)
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator, input_validator)
+            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator, input_validator_wrapper)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
     
-    def create_without_config[D](self, action: Action, input_validator: Callable[[dict], Result[D, Any]]):
+    def create_without_config[D](self, action: Action, input_validator: Callable[[list[dict[str, Any]]], Result[D, Any]]):
+        def input_validator_wrapper(data: dict) -> Result[D, Any]:
+            return InputDataAdapter.from_dict(data).bind(input_validator)
         def wrapper(func: Callable[[ActionData[None, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator)
+            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator_wrapper)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
 
 class ActionDataInput(ABC):
     @abstractmethod
-    def to_dict(self) -> dict[str, Any]:
+    def serialize(self) -> list[dict[str, Any]]:
         '''Serialize ActionDataInput. Should be overridden in subclasses.'''
         raise NotImplementedError()
 
@@ -155,7 +188,7 @@ def run_action_adapter(run_action: RunAsyncAction):
         def to_dto() -> ActionDataDto:
             run_id_str = action_data.run_id.to_value_with_checksum()
             step_id_str = action_data.step_id.to_value_with_checksum()
-            data_dict = action_data.input.to_dict()
+            data_dict = InputDataAdapter.to_dict(action_data.input.serialize())
             metadata_dict = action_data.metadata.to_dict()
             return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()

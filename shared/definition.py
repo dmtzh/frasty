@@ -95,29 +95,3 @@ class DefinitionAdapter:
         next_steps_dict = steps[1:]
         definition_dict = first_step_dict + next_steps_dict
         return definition_dict
-
-class InputDataAdapter:
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> Result[dict[str, Any] | list[dict[str, Any]], list[ValueErr]]:
-        if "input_data" in data:
-            match data["input_data"]:
-                case []:
-                    return Result.Error([ValueMissing("input_data")])
-                case [*list_data]:
-                    return traverse(
-                        lambda dict_data: Result.Ok(dict_data) if dict_data else Result.Error(list[ValueErr]((ValueInvalid("input_data"),))),
-                        Block(list_data)
-                    ).map(lambda block: list(block) if len(block) > 1 else block.head())
-                case _:
-                    return Result.Error([ValueInvalid("input_data")])
-        else:
-            data_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
-            return Result.Ok(data_dict) if data_dict else Result.Error([ValueMissing("input_data")])
-    
-    @staticmethod
-    def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:
-        match input_data:
-            case {**dict_data}:
-                return {"input_data": [dict_data]}
-            case [*list_data]:
-                return {"input_data": list_data}

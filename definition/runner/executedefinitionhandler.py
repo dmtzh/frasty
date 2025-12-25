@@ -8,9 +8,9 @@ from expression import effect, Result
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
-from shared.definition import Definition, DefinitionAdapter, InputDataAdapter
+from shared.definition import Definition, DefinitionAdapter
 from shared.infrastructure.storage.repository import StorageError
-from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionDataInput, ActionHandlerFactory, AsyncActionHandler, RunAsyncAction, run_action_adapter
+from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionDataInput, ActionHandlerFactory, AsyncActionHandler, InputDataAdapter, RunAsyncAction, run_action_adapter
 from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result
@@ -39,7 +39,7 @@ def register_execute_definition_action_handler(run_action: RunAsyncAction, actio
         return _handle_execute_definition_action(running_action_definitions_storage.with_storage, run_action, data)
     return ActionHandlerFactory(run_action, action_handler).create_without_config(
         EXECUTE_DEFINITION_ACTION,
-        _ExecuteDefinitionInputAdapter.from_dict
+        _ExecuteDefinitionInputAdapter.from_list
     )(handle_execute_definition_action)
 
 type ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
@@ -48,18 +48,19 @@ type ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | Non
 class _ExecuteDefinitionInputAdapter(ActionDataInput, ExecuteDefinitionInput):
     def __init__(self, input: ExecuteDefinitionInput):
         super().__init__(input.opt_definition_id, input.definition)
-    def to_dict(self):
-        return InputDataAdapter.to_dict(ExecuteDefinitionInput.to_dict(self))
+    def serialize(self):
+        return [
+            ExecuteDefinitionInput.to_dict(self)
+        ]
     @effect.result['ExecuteDefinitionInput', str]()
     @staticmethod
-    def from_dict(data: dict) -> Generator[Any, Any, 'ExecuteDefinitionInput']:
-        input_data = yield from InputDataAdapter.from_dict(data).map_error(str)
-        input_data_dict = input_data if isinstance(input_data, dict) else input_data[0]
-        if "definition_id" in input_data_dict:
-            opt_definition_id = yield from parse_from_dict(input_data_dict, "definition_id", DefinitionIdValue.from_value_with_checksum)
+    def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, 'ExecuteDefinitionInput']:
+        data_dict = data[0]
+        if "definition_id" in data_dict:
+            opt_definition_id = yield from parse_from_dict(data_dict, "definition_id", DefinitionIdValue.from_value_with_checksum)
         else:
             opt_definition_id = None
-        list_definition = yield from parse_from_dict(input_data_dict, "definition", lambda lst: lst if isinstance(lst, list) else None)
+        list_definition = yield from parse_from_dict(data_dict, "definition", lambda lst: lst if isinstance(lst, list) else None)
         definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
         return ExecuteDefinitionInput(opt_definition_id, definition)
 
