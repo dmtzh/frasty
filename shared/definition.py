@@ -18,16 +18,6 @@ class Definition:
     input_data: dict[str, Any] | list[dict[str, Any]]
     steps: tuple[ActionDefinition, ...]
 
-class ActionDefinitionConfigAdapter:
-    @staticmethod
-    def from_dict(data: dict[str, Any]) -> dict[str, Any] | None:
-        config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
-        return config_dict if config_dict else None
-    
-    @staticmethod
-    def to_dict(config: dict[str, Any] | None) -> dict[str, Any]:
-        return config or {}
-
 class ActionDefinitionAdapter:
     @effect.result[ActionDefinition, list[ValueErr]]()
     @staticmethod
@@ -41,9 +31,12 @@ class ActionDefinitionAdapter:
             raw_type = str(data.get("type", ActionType.CUSTOM) or "")
             opt_type = ActionType.parse(raw_type)
             return Result.Ok(opt_type) if opt_type is not None else Result.Error([ValueInvalid("type")])
+        def parse_config():
+            config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
+            return config_dict if config_dict else None
         parsed_name = yield from parse_name()
         parsed_type = yield from parse_type()
-        parsed_config = ActionDefinitionConfigAdapter.from_dict(data)
+        parsed_config = parse_config()
         return ActionDefinition(parsed_name, parsed_type, parsed_config)
     
     @staticmethod   
@@ -73,12 +66,8 @@ class InputDataAdapter:
                 case _:
                     return Result.Error([ValueInvalid("input_data")])
         else:
-            config = ActionDefinitionConfigAdapter.from_dict(data)
-            match config:
-                case None:
-                    return Result.Error([ValueMissing("input_data")])
-                case dict_data:
-                    return Result.Ok(dict_data)
+            data_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
+            return Result.Ok(data_dict) if data_dict else Result.Error([ValueMissing("input_data")])
     
     @staticmethod
     def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, Any]:

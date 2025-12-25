@@ -8,7 +8,7 @@ from expression import effect, Result
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
-from shared.definition import ActionDefinitionConfigAdapter, Definition, DefinitionAdapter, InputDataAdapter
+from shared.definition import Definition, DefinitionAdapter, InputDataAdapter
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionDataInput, ActionHandlerFactory, AsyncActionHandler, RunAsyncAction, run_action_adapter
 from shared.runningdefinition import RunningDefinitionState
@@ -69,7 +69,7 @@ async def _handle_execute_definition_action(
         data: ActionData[None, ExecuteDefinitionInput]):
     definition_id = data.input.opt_definition_id or DefinitionIdValue.new_id()
     def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
-        data_dict = InputDataAdapter.to_dict(evt.input_data) | ActionDefinitionConfigAdapter.to_dict(evt.step_definition.config)
+        data_dict = InputDataAdapter.to_dict(evt.input_data) | (evt.step_definition.config or {})
         metadata = Metadata()
         metadata.set_from("execute definition action")
         metadata.set_definition_id(definition_id)
