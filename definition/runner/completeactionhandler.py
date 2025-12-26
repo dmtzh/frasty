@@ -13,7 +13,7 @@ from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
-from .runningparentaction import RunningParentAction
+from runningparentaction import RunningParentAction
 
 type CompleteInput = CompletedResult
 

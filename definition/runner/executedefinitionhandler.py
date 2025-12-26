@@ -16,7 +16,7 @@ from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.parse import parse_from_dict
 
-from .runningparentaction import RunningParentAction
+from runningparentaction import RunningParentAction
 
 EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
 
