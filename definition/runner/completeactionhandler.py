@@ -5,11 +5,68 @@ from typing import Any
 
 from expression import Result
 
-from shared.completedresult import CompletedResult
+from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
+from shared.pipeline.actionhandler import COMPLETE_ACTION, ActionData, ActionDataDto, ActionHandlerFactory, AsyncActionHandler, InputDataAdapter, RunAsyncAction
 from shared.runningdefinition import RunningDefinitionState
+from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+
+from .runningparentaction import RunningParentAction
+
+type CompleteInput = CompletedResult
+
+def register_complete_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):
+    def handle_complete_action(data: ActionData[None, CompleteInput]):
+        return _handle_complete_action(running_action_definitions_storage.with_storage, run_action, data)
+    async def do_nothing_when_run_action(action_name: str, data: ActionDataDto):
+        return Result.Ok(None)
+    return ActionHandlerFactory(do_nothing_when_run_action, action_handler).create_without_config(
+        COMPLETE_ACTION,
+        lambda data: CompletedResultAdapter.from_dict(data[0])
+    )(handle_complete_action)
+
+ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
+
+async def _handle_complete_action(
+        convert_to_storage_action: ToStorageActionConverter,
+        run_action: RunAsyncAction,
+        data: ActionData[None, CompleteInput]):
+    async def event_handler(evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
+        match evt:
+            case RunningDefinitionState.Events.StepRunning():
+                data_dict = InputDataAdapter.to_dict(evt.input_data) | (evt.step_definition.config or {})
+                action_data = ActionDataDto(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, data.metadata.to_dict())
+                return await run_action(evt.step_definition.get_name(), action_data)
+            case RunningDefinitionState.Events.DefinitionCompleted():
+                opt_parent_action = RunningParentAction.parse(data.metadata)
+                match opt_parent_action:
+                    case None:
+                        return Result.Ok(None)
+                    case parent_action_no_def_id if parent_action_no_def_id.metadata.get_definition_id() is None:
+                        return Result.Ok(None)
+                    case parent_action_with_def_id:
+                        return await parent_action_with_def_id.run_complete_definition(run_action, evt.result)
+    definition_id = data.metadata.get_definition_id()
+    if definition_id is None:
+        # definition id is required for complete action
+        return None
+    cmd = CompleteActionCommand(data.run_id, definition_id, data.step_id, data.input)
+    complete_action_res = await handle(
+        convert_to_storage_action,
+        event_handler,
+        cmd
+    )
+    
+    opt_error = complete_action_res.swap().default_value(None)
+    if opt_error is not None:
+        opt_parent_action = RunningParentAction.parse(data.metadata)
+        if opt_parent_action is not None:
+            error_result = CompletedWith.Error(str(opt_error))
+            await opt_parent_action.run_complete_definition(run_action, error_result)
+    
+    return None
 
 @dataclass(frozen=True)
 class CompleteActionCommand:
@@ -17,8 +74,6 @@ class CompleteActionCommand:
     definition_id: DefinitionIdValue
     step_id: StepIdValue
     result: CompletedResult
-
-ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
 
 def _run_next_step(completed_step_id: StepIdValue, completed_step_result: CompletedResult, state: RunningDefinitionState | None):
     if state is None:

@@ -16,6 +16,7 @@ from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
 from config import action_handler, app, complete_step_handler, publish_completed_definition, run_action, run_definition_handler, run_step, CompleteStepData
+import completeactionhandler
 import completestephandler
 import executedefinitionhandler
 import runlegacydefinitionhandler
@@ -23,6 +24,10 @@ import runlegacydefinitionhandler
 # ------------------------------------------------------------------------------------------------------------
 
 executedefinitionhandler.register_execute_definition_action_handler(run_action, action_handler)
+
+# ------------------------------------------------------------------------------------------------------------
+
+completeactionhandler.register_complete_action_handler(run_action, action_handler)
 
 # ------------------------------------------------------------------------------------------------------------
 
