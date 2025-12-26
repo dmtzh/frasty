@@ -156,13 +156,16 @@ class ActionHandlerFactory:
         self._action_handler = action_handler
     
     def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[list[dict[str, Any]]], Result[D, Any]]):
+        def config_validator_wrapper(data: dict) -> Result[TCfg, Any]:
+            config_dict = {k: v for k, v in data.items() if k not in ["input_data"]}
+            return config_validator(config_dict)
         def input_validator_wrapper(data: dict) -> Result[D, Any]:
             return InputDataAdapter.from_dict(data).bind(input_validator)
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator, input_validator_wrapper)
+            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator_wrapper, input_validator_wrapper)
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
     
