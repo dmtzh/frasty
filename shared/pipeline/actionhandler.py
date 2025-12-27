@@ -44,10 +44,10 @@ class CompleteActionData:
         action_name = COMPLETE_ACTION.get_name()
         run_id_str = self.run_id.to_value_with_checksum()
         step_id_str = self.step_id.to_value_with_checksum()
-        result_dto = InputDataAdapter.to_dict(CompletedResultAdapter.to_dict(self.result))
+        data_dict = DataDtoAdapter.to_input_data(CompletedResultAdapter.to_dict(self.result))
         metadata_dict = self.metadata.to_dict()
-        dto = ActionDataDto(run_id_str, step_id_str, result_dto, metadata_dict)
-        return run_action(action_name, dto)
+        action_input = ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
+        return run_action(action_name, action_input)
 
 type ActionHandler[TCfg, D] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
@@ -89,35 +89,11 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
     wrapper.__name__ = func.__name__
     return wrapper
 
-type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
+type DataDto = dict[str, Any]
 
-def _validated_data_to_dto[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[dict], Result[D, Any]]) -> DtoActionHandler:
-    def validate_dto(dto: ActionDataDto) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
-        run_id_res = parse_value(dto.run_id, "run_id", RunIdValue.from_value_with_checksum)
-        step_id_res = parse_value(dto.step_id, "step_id", StepIdValue.from_value_with_checksum)
-        config_res = config_validator(dto.data).map_error(str)
-        input_res = input_validator(dto.data).map_error(str)
-        metadata = Metadata(dto.metadata)
-        parse_errors = [parse_err for parse_err in [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None)] if parse_err is not None]
-        validate_errors = [validate_err for validate_err in [config_res.swap().default_value(None), input_res.swap().default_value(None)] if validate_err is not None]
-        match parse_errors, validate_errors:
-            case [], []:
-                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, input_res.ok, metadata))
-            case [], [*v_errs]:
-                err = _ValidateActionError(", ".join(v_errs), run_id_res.ok, step_id_res.ok, metadata)
-                return Result.Error(err)
-            case _:
-                err = ", ".join(parse_errors + validate_errors)
-                return Result.Error(err)
-    async def wrapper(action_data_res: Result[ActionDataDto, Any]):
-        validated_action_data_res = action_data_res.bind(validate_dto)
-        return await action_handler(validated_action_data_res)
-    wrapper.__name__ = action_handler.__name__
-    return wrapper
-
-class InputDataAdapter:
+class DataDtoAdapter:
     @staticmethod
-    def from_dict(data: dict) -> Result[list[dict[str, Any]], list[ValueErr]]:
+    def from_input_data(input: dict) -> Result[list[DataDto], list[ValueErr]]:
         def parse_list_data_item(item) -> Result[dict[str, Any], list[ValueErr]]:
             match item:
                 case {**item_dict} if item_dict:
@@ -125,8 +101,8 @@ class InputDataAdapter:
                     return Result.Ok(item_dict) if all_keys_are_strings else Result.Error([ValueInvalid("input_data")])
                 case _:
                     return Result.Error([ValueInvalid("input_data")])
-        if "input_data" in data:
-            match data["input_data"]:
+        if "input_data" in input:
+            match input["input_data"]:
                 case []:
                     return Result.Error([ValueMissing("input_data")])
                 case [*list_data]:
@@ -140,12 +116,39 @@ class InputDataAdapter:
             return Result.Error([ValueMissing("input_data")])
     
     @staticmethod
-    def to_dict(input_data: dict[str, Any] | list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-        match input_data:
+    def to_input_data(dto: DataDto | list[DataDto]) -> dict:
+        match dto:
             case {**dict_data}:
                 return {"input_data": [dict_data]}
             case [*list_data]:
                 return {"input_data": list_data}
+
+type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
+
+def _validated_data_to_action_input[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[list[DataDto]], Result[D, Any]]) -> DtoActionHandler:
+    def parse_and_validate_action_input(action_input: ActionDataDto) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
+        run_id_res = parse_value(action_input.run_id, "run_id", RunIdValue.from_value_with_checksum)
+        step_id_res = parse_value(action_input.step_id, "step_id", StepIdValue.from_value_with_checksum)
+        config_dict = {k: v for k, v in action_input.data.items() if k not in ["input_data"] and isinstance(k, str)}
+        config_res = config_validator(config_dict).map_error(str)
+        input_res = DataDtoAdapter.from_input_data(action_input.data).bind(input_validator).map_error(str)
+        metadata = Metadata(action_input.metadata)
+        parse_errors = [parse_err for parse_err in [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None)] if parse_err is not None]
+        validate_errors = [validate_err for validate_err in [config_res.swap().default_value(None), input_res.swap().default_value(None)] if validate_err is not None]
+        match parse_errors, validate_errors:
+            case [], []:
+                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, input_res.ok, metadata))
+            case [], [*v_errs]:
+                err = _ValidateActionError(", ".join(v_errs), run_id_res.ok, step_id_res.ok, metadata)
+                return Result.Error(err)
+            case _:
+                err = ", ".join(parse_errors + validate_errors)
+                return Result.Error(err)
+    async def wrapper(action_input_res: Result[ActionDataDto, Any]):
+        validated_action_data_res = action_input_res.bind(parse_and_validate_action_input)
+        return await action_handler(validated_action_data_res)
+    wrapper.__name__ = action_handler.__name__
+    return wrapper
 
 class ActionHandlerFactory:
     def __init__(self, run_action: RunAsyncAction, action_handler: AsyncActionHandler):
@@ -154,40 +157,33 @@ class ActionHandlerFactory:
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict], Result[TCfg, Any]], input_validator: Callable[[list[dict[str, Any]]], Result[D, Any]]):
-        def config_validator_wrapper(data: dict) -> Result[TCfg, Any]:
-            config_dict = {k: v for k, v in data.items() if k not in ["input_data"]}
-            return config_validator(config_dict)
-        def input_validator_wrapper(data: dict) -> Result[D, Any]:
-            return InputDataAdapter.from_dict(data).bind(input_validator)
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[list[DataDto]], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging, config_validator_wrapper, input_validator_wrapper)
-            return self._action_handler(action.get_name(), dto_data_action_handler)
+            action_input_handler = _validated_data_to_action_input(action_handler_with_logging, config_validator, input_validator)
+            return self._action_handler(action.get_name(), action_input_handler)
         return wrapper
     
-    def create_without_config[D](self, action: Action, input_validator: Callable[[list[dict[str, Any]]], Result[D, Any]]):
-        def input_validator_wrapper(data: dict) -> Result[D, Any]:
-            return InputDataAdapter.from_dict(data).bind(input_validator)
+    def create_without_config[D](self, action: Action, input_validator: Callable[[list[DataDto]], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[None, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            dto_data_action_handler = _validated_data_to_dto(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator_wrapper)
-            return self._action_handler(action.get_name(), dto_data_action_handler)
+            action_input_handler = _validated_data_to_action_input(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator)
+            return self._action_handler(action.get_name(), action_input_handler)
         return wrapper
 
 def run_action_adapter(run_action: RunAsyncAction):
-    def wrapper[TCfg, D: dict[str, Any] | list[dict[str, Any]]](action: Action, action_data: ActionData[TCfg, D]):
-        def to_dto() -> ActionDataDto:
+    def wrapper[TCfg: dict[str, Any] | None, D: DataDto | list[DataDto]](action: Action, action_data: ActionData[TCfg, D]):
+        def to_action_input() -> ActionDataDto:
             run_id_str = action_data.run_id.to_value_with_checksum()
             step_id_str = action_data.step_id.to_value_with_checksum()
-            data_dict = InputDataAdapter.to_dict(action_data.input)
+            data_dict = DataDtoAdapter.to_input_data(action_data.input) | (action_data.config or {})
             metadata_dict = action_data.metadata.to_dict()
             return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()
-        action_data_dto = to_dto()
-        return run_action(action_name, action_data_dto)
+        action_input = to_action_input()
+        return run_action(action_name, action_input)
     return wrapper
