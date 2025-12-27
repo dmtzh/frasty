@@ -8,7 +8,7 @@ from expression import Result
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
-from shared.pipeline.actionhandler import COMPLETE_ACTION, ActionData, ActionDataDto, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
+from shared.pipeline.actionhandler import COMPLETE_ACTION, ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
 from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
@@ -20,7 +20,7 @@ type CompleteInput = CompletedResult
 def register_complete_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):
     def handle_complete_action(data: ActionData[None, CompleteInput]):
         return _handle_complete_action(running_action_definitions_storage.with_storage, run_action, data)
-    async def do_nothing_when_run_action(action_name: str, action_input: ActionDataDto):
+    async def do_nothing_when_run_action(action_name: str, action_input: ActionInput):
         return Result.Ok(None)
     return ActionHandlerFactory(do_nothing_when_run_action, action_handler).create_without_config(
         COMPLETE_ACTION,
@@ -37,7 +37,7 @@ async def _handle_complete_action(
         match evt:
             case RunningDefinitionState.Events.StepRunning():
                 data_dict = DataDtoAdapter.to_input_data(evt.input_data) | (evt.step_definition.config or {})
-                action_input = ActionDataDto(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, data.metadata.to_dict())
+                action_input = ActionInput(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, data.metadata.to_dict())
                 return await run_action(evt.step_definition.get_name(), action_input)
             case RunningDefinitionState.Events.DefinitionCompleted():
                 opt_parent_action = RunningParentAction.parse(data.metadata)

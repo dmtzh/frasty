@@ -10,7 +10,7 @@ from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, S
 from shared.definition import Definition
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import StorageError
-from shared.pipeline.actionhandler import ActionData, ActionDataDto, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
+from shared.pipeline.actionhandler import ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
 from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result
@@ -40,7 +40,7 @@ async def _handle_execute_definition_action(
         parent_action.add_to_metadata(metadata)
         data_dict = DataDtoAdapter.to_input_data(evt.input_data) | (evt.step_definition.config or {})
         metadata_dict = metadata.to_dict()
-        action_input = ActionDataDto(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, metadata_dict)
+        action_input = ActionInput(data.run_id.to_value_with_checksum(), evt.step_id.to_value_with_checksum(), data_dict, metadata_dict)
         return run_action(evt.step_definition.get_name(), action_input)
     cmd = ExecuteDefinitionCommand(data.run_id, definition_id, data.input.definition)
     execute_definition_res = await _handle(

@@ -14,7 +14,7 @@ from shared.utils.parse import parse_value
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 @dataclass(frozen=True)
-class ActionDataDto:
+class ActionInput:
     run_id: str
     step_id: str
     data: dict
@@ -30,8 +30,8 @@ class ActionData[TCfg, D]:
     input: D
     metadata: Metadata
 
-type RunAsyncAction = Callable[[str, ActionDataDto], Coroutine[Any, Any, Result[None, Any]]]
-type AsyncActionHandler = Callable[[str, Callable[[Result[ActionDataDto, Any]], Coroutine]], Any]
+type RunAsyncAction = Callable[[str, ActionInput], Coroutine[Any, Any, Result[None, Any]]]
+type AsyncActionHandler = Callable[[str, Callable[[Result[ActionInput, Any]], Coroutine]], Any]
 
 @dataclass(frozen=True)
 class CompleteActionData:
@@ -46,7 +46,7 @@ class CompleteActionData:
         step_id_str = self.step_id.to_value_with_checksum()
         data_dict = DataDtoAdapter.to_input_data(CompletedResultAdapter.to_dict(self.result))
         metadata_dict = self.metadata.to_dict()
-        action_input = ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
+        action_input = ActionInput(run_id_str, step_id_str, data_dict, metadata_dict)
         return run_action(action_name, action_input)
 
 type ActionHandler[TCfg, D] = Callable[[Result[ActionData[TCfg, D], Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
@@ -123,10 +123,10 @@ class DataDtoAdapter:
             case [*list_data]:
                 return {"input_data": list_data}
 
-type DtoActionHandler = Callable[[Result[ActionDataDto, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
+type DtoActionHandler = Callable[[Result[ActionInput, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
 def _validated_data_to_action_input[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[list[DataDto]], Result[D, Any]]) -> DtoActionHandler:
-    def parse_and_validate_action_input(action_input: ActionDataDto) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
+    def parse_and_validate_action_input(action_input: ActionInput) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
         run_id_res = parse_value(action_input.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(action_input.step_id, "step_id", StepIdValue.from_value_with_checksum)
         config_dict = {k: v for k, v in action_input.data.items() if k not in ["input_data"] and isinstance(k, str)}
@@ -144,7 +144,7 @@ def _validated_data_to_action_input[TCfg, D](action_handler: ActionHandler[TCfg,
             case _:
                 err = ", ".join(parse_errors + validate_errors)
                 return Result.Error(err)
-    async def wrapper(action_input_res: Result[ActionDataDto, Any]):
+    async def wrapper(action_input_res: Result[ActionInput, Any]):
         validated_action_data_res = action_input_res.bind(parse_and_validate_action_input)
         return await action_handler(validated_action_data_res)
     wrapper.__name__ = action_handler.__name__
@@ -177,12 +177,12 @@ class ActionHandlerFactory:
 
 def run_action_adapter(run_action: RunAsyncAction):
     def wrapper[TCfg: dict[str, Any] | None, D: DataDto | list[DataDto]](action: Action, action_data: ActionData[TCfg, D]):
-        def to_action_input() -> ActionDataDto:
+        def to_action_input() -> ActionInput:
             run_id_str = action_data.run_id.to_value_with_checksum()
             step_id_str = action_data.step_id.to_value_with_checksum()
             data_dict = DataDtoAdapter.to_input_data(action_data.input) | (action_data.config or {})
             metadata_dict = action_data.metadata.to_dict()
-            return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
+            return ActionInput(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()
         action_input = to_action_input()
         return run_action(action_name, action_input)

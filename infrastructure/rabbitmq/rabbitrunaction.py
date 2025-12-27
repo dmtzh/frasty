@@ -7,7 +7,7 @@ from expression import Result
 from faststream.broker.message import StreamMessage
 from faststream.rabbit import RabbitMessage
 
-from shared.pipeline.actionhandler import ActionDataDto
+from shared.pipeline.actionhandler import ActionInput
 from shared.customtypes import Error
 from shared.utils.parse import parse_from_dict
 
@@ -19,7 +19,7 @@ from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, 
 
 class _python_pickle:
     @staticmethod
-    def data_to_message(data: ActionDataDto) -> PythonPickleMessage:
+    def data_to_message(data: ActionInput) -> PythonPickleMessage:
         ids_dict = {"run_id": data.run_id, "step_id": data.step_id}
         action_data = ids_dict | {"data": data.data, "metadata": data.metadata}
         correlation_id = ids_dict["run_id"]
@@ -31,7 +31,7 @@ class _python_pickle:
             self._action_name = action_name
         
         @staticmethod
-        def _parse_rabbitmq_msg_python_pickle(rabbit_msg_err: RabbitMessageErrorCreator, msg: RabbitMessage) -> Result[ActionDataDto, RabbitMessageError]:
+        def _parse_rabbitmq_msg_python_pickle(rabbit_msg_err: RabbitMessageErrorCreator, msg: RabbitMessage) -> Result[ActionInput, RabbitMessageError]:
             correlation_id = msg.correlation_id
             if correlation_id is None:
                 return Result.Error(rabbit_msg_err(ValidationError, "Invalid 'correlation_id'"))
@@ -71,7 +71,7 @@ class _python_pickle:
             if not isinstance(metadata_unvalidated, dict):
                 return Result.Error(rabbit_msg_err(ParseError, f"'metadata' should be {dict.__name__} value, got {type(metadata_unvalidated).__name__}"))
 
-            parsed_data = ActionDataDto(run_id_unvalidated, step_id_unvalidated, data_unvalidated, metadata_unvalidated)
+            parsed_data = ActionInput(run_id_unvalidated, step_id_unvalidated, data_unvalidated, metadata_unvalidated)
             return Result.Ok(parsed_data)
         
         def __call__(self, message):
@@ -103,9 +103,9 @@ class _python_pickle:
         ids = _python_pickle.parse_task_id_run_id_step_id(msg)
         return logger_creator.create(*ids)
 
-def run(rabbit_client: RabbitMQClient, action_name: str, data: ActionDataDto):
+def run(rabbit_client: RabbitMQClient, action_name: str, action_input: ActionInput):
     command = action_name
-    message = _python_pickle.data_to_message(data)
+    message = _python_pickle.data_to_message(action_input)
     return rabbit_client.send_command(command, message)
 
 class handler:
@@ -113,7 +113,7 @@ class handler:
         self._rabbit_client = rabbit_client
         self._action_name = action_name
     
-    def __call__(self, func: Callable[[Result[ActionDataDto, Any]], Coroutine]):
+    def __call__(self, func: Callable[[Result[ActionInput, Any]], Coroutine]):
         decoder = _python_pickle.decoder(self._action_name)
         middlewares = (
             error_result_to_negative_acknowledge_middleware(RequeueChance.FIFTY_FIFTY),

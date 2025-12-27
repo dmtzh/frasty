@@ -7,7 +7,7 @@ from expression import Result
 from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
-from shared.pipeline.actionhandler import ActionDataDto
+from shared.pipeline.actionhandler import ActionInput
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.domaindefinition import StepDefinition
@@ -35,11 +35,11 @@ _broker = RabbitBroker(url=_rabbitmqconfig.url.value, publisher_confirms=_rabbit
 _rabbit_broker = RabbitMQBroker(_broker.subscriber)
 _rabbit_client = RabbitMQClient(_rabbit_broker)
 
-def run_action(action_name: str, data: ActionDataDto) -> Coroutine[Any, Any, Result[None, Any]]:
+def run_action(action_name: str, action_input: ActionInput) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_action = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_action.run)
-    return rabbit_run_action(_rabbit_client, action_name, data)
+    return rabbit_run_action(_rabbit_client, action_name, action_input)
 
-def action_handler(action_name: str, action_handler: Callable[[Result[ActionDataDto, Any]], Coroutine]):
+def action_handler(action_name: str, action_handler: Callable[[Result[ActionInput, Any]], Coroutine]):
     return rabbit_action.handler(_rabbit_client, action_name)(action_handler)
 
 def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
