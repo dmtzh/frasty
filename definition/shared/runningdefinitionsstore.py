@@ -47,7 +47,7 @@ running_definitions_storage = RunningDefinitionsStore(
 )
 
 running_action_definitions_storage = RunningDefinitionsStore(
-    f"{runningdefinition.RunningDefinitionState.__name__}Action",
+    runningdefinition.RunningDefinitionState.__name__,
     runningdefinition.RunningDefinitionStateAdapter.to_list,
     runningdefinition.RunningDefinitionStateAdapter.from_list
 )
