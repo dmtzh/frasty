@@ -182,7 +182,7 @@ class ActionHandlerFactory:
 
 class ActionDataInput(ABC):
     @abstractmethod
-    def serialize(self) -> list[dict[str, Any]]:
+    def to_list(self) -> list[dict[str, Any]]:
         '''Serialize ActionDataInput. Should be overridden in subclasses.'''
         raise NotImplementedError()
 
@@ -191,7 +191,7 @@ def run_action_adapter(run_action: RunAsyncAction):
         def to_dto() -> ActionDataDto:
             run_id_str = action_data.run_id.to_value_with_checksum()
             step_id_str = action_data.step_id.to_value_with_checksum()
-            data_dict = InputDataAdapter.to_dict(action_data.input.serialize())
+            data_dict = InputDataAdapter.to_dict(action_data.input.to_list())
             metadata_dict = action_data.metadata.to_dict()
             return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()
