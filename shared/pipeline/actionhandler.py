@@ -1,4 +1,3 @@
-from abc import ABC, abstractmethod
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any
@@ -180,18 +179,12 @@ class ActionHandlerFactory:
             return self._action_handler(action.get_name(), dto_data_action_handler)
         return wrapper
 
-class ActionDataInput(ABC):
-    @abstractmethod
-    def to_list(self) -> list[dict[str, Any]]:
-        '''Serialize ActionDataInput. Should be overridden in subclasses.'''
-        raise NotImplementedError()
-
 def run_action_adapter(run_action: RunAsyncAction):
-    def wrapper[TCfg, D: ActionDataInput](action: Action, action_data: ActionData[TCfg, D]):
+    def wrapper[TCfg, D: dict[str, Any] | list[dict[str, Any]]](action: Action, action_data: ActionData[TCfg, D]):
         def to_dto() -> ActionDataDto:
             run_id_str = action_data.run_id.to_value_with_checksum()
             step_id_str = action_data.step_id.to_value_with_checksum()
-            data_dict = InputDataAdapter.to_dict(action_data.input.to_list())
+            data_dict = InputDataAdapter.to_dict(action_data.input)
             metadata_dict = action_data.metadata.to_dict()
             return ActionDataDto(run_id_str, step_id_str, data_dict, metadata_dict)
         action_name = action.get_name()

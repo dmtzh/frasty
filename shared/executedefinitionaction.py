@@ -7,13 +7,13 @@ from expression import effect
 from shared.action import Action, ActionName, ActionType
 from shared.customtypes import DefinitionIdValue
 from shared.definition import Definition, DefinitionAdapter
-from shared.pipeline.actionhandler import ActionData, ActionDataInput, RunAsyncAction, run_action_adapter
+from shared.pipeline.actionhandler import ActionData, RunAsyncAction, run_action_adapter
 from shared.utils.parse import parse_from_dict
 
 EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
 
 @dataclass(frozen=True)
-class ExecuteDefinitionInput(ActionDataInput):
+class ExecuteDefinitionInput:
     opt_definition_id: DefinitionIdValue | None
     definition: Definition
     
@@ -21,9 +21,6 @@ class ExecuteDefinitionInput(ActionDataInput):
         definition_id_dict = {"definition_id": self.opt_definition_id.to_value_with_checksum()} if self.opt_definition_id is not None else {}
         definition_dict = {"definition": DefinitionAdapter.to_list(self.definition)}
         return definition_id_dict | definition_dict
-    
-    def to_list(self):
-        return [self.to_dict()]
     
     @effect.result['ExecuteDefinitionInput', str]()
     @staticmethod
@@ -37,4 +34,5 @@ class ExecuteDefinitionInput(ActionDataInput):
         return ExecuteDefinitionInput(opt_definition_id, definition)
 
 def run_execute_definition_action(run_action: RunAsyncAction, data: ActionData[None, ExecuteDefinitionInput]):
-    return run_action_adapter(run_action)(EXECUTE_DEFINITION_ACTION, data)
+    execute_definition_dto = ActionData(data.run_id, data.step_id, data.config, data.input.to_dict(), data.metadata)
+    return run_action_adapter(run_action)(EXECUTE_DEFINITION_ACTION, execute_definition_dto)
