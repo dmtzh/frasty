@@ -41,7 +41,7 @@ class RunningDefinitionsStore[T]:
         return self._file_repo_with_ver.delete(id_str)
 
 running_definitions_storage = RunningDefinitionsStore(
-    RunningDefinitionState.__name__,
+    f"Legacy{RunningDefinitionState.__name__}",
     RunningDefinitionStateAdapter.to_list,
     RunningDefinitionStateAdapter.from_list
 )
