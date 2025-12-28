@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel
 
-from shared.definitionsstore import definitions_storage
-from shared.customtypes import IdValue
+from shared.definitionsstore import legacy_definitions_storage
+from shared.customtypes import DefinitionIdValue, IdValue
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
@@ -38,13 +38,13 @@ def request_to_definition(raw_definition: list[dict[str, Any]]):
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
-def apply_add_definition(id: IdValue, definition: shdomaindef.Definition):
-    return definitions_storage.add(id, definition)
+def apply_add_definition(id: DefinitionIdValue, definition: shdomaindef.Definition):
+    return legacy_definitions_storage.add(id, definition)
 
 @coroutine_result[WorkflowError]()
 async def add_definition_workflow(raw_definition: list[dict[str, Any]]):
     definition = await request_to_definition(raw_definition)
-    id = IdValue.new_id()
+    id = DefinitionIdValue.new_id()
     await apply_add_definition(id, definition)
     return id
 

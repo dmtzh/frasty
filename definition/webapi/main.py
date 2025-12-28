@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.definition import ActionDefinition, Definition, DefinitionAdapter, StepsMissing
-from shared.definitionsstore import definitions_storage
+from shared.definitionsstore import legacy_definitions_storage
 from shared.dtodefinition import DefinitionAdapter as LegacyDefinitionAdapter
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
@@ -28,8 +28,8 @@ from manualrunstore import manual_run_storage
 def tickets():
     return FileResponse("./html_sources/get_ticket.html")
 
-@app.post("/definitions")
-async def add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
+@app.post("/definitions/legacy")
+async def legacy_add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
     return await adddefinitionapihandler.handle(request)
 
 @app.get("/definitions/legacy/{id}")
@@ -37,7 +37,7 @@ async def legacy_get_definition(id: str):
     opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
     if opt_def_id is None:
         raise HTTPException(status_code=404)
-    opt_definition_with_ver_res = await async_catch_ex(definitions_storage.get_with_ver)(opt_def_id)
+    opt_definition_with_ver_res = await async_catch_ex(legacy_definitions_storage.get_with_ver)(opt_def_id)
     match opt_definition_with_ver_res:
         case Result(ResultTag.OK, ok=None):
             raise HTTPException(status_code=404)

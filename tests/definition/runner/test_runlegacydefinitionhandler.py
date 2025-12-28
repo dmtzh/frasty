@@ -3,7 +3,7 @@ import pytest
 import pytest_asyncio
 
 from shared.domainrunning import RunningDefinitionState
-from shared.definitionsstore import definitions_storage
+from shared.definitionsstore import legacy_definitions_storage
 from shared.infrastructure.storage.repository import NotFoundError
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.completedresult import CompletedWith
@@ -43,13 +43,13 @@ def definition2():
 @pytest_asyncio.fixture(scope="session")
 async def existing_definition_id1(definition1: Definition):
     definition_id = DefinitionIdValue.new_id()
-    await definitions_storage.add(definition_id, definition1)
+    await legacy_definitions_storage.add(definition_id, definition1)
     yield definition_id
 
 @pytest_asyncio.fixture(scope="session")
 async def existing_definition_id2(definition2: Definition):
     definition_id = DefinitionIdValue.new_id()
-    await definitions_storage.add(definition_id, definition2)
+    await legacy_definitions_storage.add(definition_id, definition2)
     yield definition_id
 
 @pytest.fixture

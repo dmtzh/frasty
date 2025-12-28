@@ -4,7 +4,7 @@ from typing import Any
 
 from expression import Result
 
-from shared.definitionsstore import definitions_storage
+from shared.definitionsstore import legacy_definitions_storage
 from shared.domainrunning import RunningDefinitionState
 from shared.runningdefinitionsstore import running_definitions_storage
 from shared.customtypes import DefinitionIdValue, IdValue, Error, RunIdValue
@@ -29,7 +29,7 @@ class RunDefinitionHandlerStorageError(StorageError):
 @async_result
 @async_ex_to_error_result(RunDefinitionHandlerStorageError.from_exception)
 async def get_definition_with_ver(id: DefinitionIdValue) -> Result[tuple[Definition, int], NotFoundError]:
-    opt_definition_with_ver = await definitions_storage.get_with_ver(id)
+    opt_definition_with_ver = await legacy_definitions_storage.get_with_ver(id)
     match opt_definition_with_ver:
         case None:
             return Result.Error(NotFoundError(f"Definition {id} not found"))
