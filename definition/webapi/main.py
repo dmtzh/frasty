@@ -21,7 +21,7 @@ from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, manual_run_handler, run_action, run_manual_run_action
 import adddefinitionapihandler
-from manualrunstate import ManualRunState
+from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 
 @app.get("/tickets")
@@ -85,6 +85,23 @@ async def manual_run(request: ManualRunRequest):
     manual_run_data_res = definition_res.map(to_manual_run_data).map_error(InputValidationError)
     manual_run_res = await lift_param(run_manual_run_action)(manual_run_data_res)
     return manual_run_res.map(lambda data: {"id": data.run_id.to_value_with_checksum()}).default_with(err_to_http)
+
+# ------------------------------------------------------------------------------------------------------------
+
+@app.get("/definition/manual-run/{id}")
+async def get_status(id: str):
+    opt_run_id = RunIdValue.from_value_with_checksum(id)
+    if opt_run_id is None:
+        raise HTTPException(status_code=404)
+    opt_state_res = await async_catch_ex(manual_run_storage.get)(opt_run_id)
+    match opt_state_res:
+        case Result(ResultTag.OK, ok=None):
+            raise HTTPException(status_code=404)
+        case Result(ResultTag.OK, ok=state):
+            state_dto = ManualRunStateAdapter.to_dict(state)
+            return state_dto
+        case _:
+            raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
 
 # ------------------------------------------------------------------------------------------------------------
 
