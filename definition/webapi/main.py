@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import functools
 from typing import Any
 
 from expression import Result
@@ -10,7 +11,7 @@ from pydantic import BaseModel
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.definition import ActionDefinition, Definition, DefinitionAdapter, StepsMissing
-from shared.definitionsstore import legacy_definitions_storage
+from shared.definitionsstore import definitions_storage, legacy_definitions_storage
 from shared.dtodefinition import DefinitionAdapter as LegacyDefinitionAdapter
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
@@ -49,11 +50,41 @@ async def legacy_get_definition(id: str):
 
 # ------------------------------------------------------------------------------------------------------------
 
-class ManualRunRequest(BaseModel):
-    resource: list[dict[str, Any]]
 @dataclass(frozen=True)
 class InputValidationError:
     error: StepsMissing | list[ValueErr]
+class AddDefinitionRequest(BaseModel):
+    resource: list[dict[str, Any]]
+@app.post("/definitions")
+async def add_definition(request: AddDefinitionRequest):
+    def err_to_http(error: StorageError | InputValidationError):
+        match error:
+            case InputValidationError(error=StepsMissing()):
+                errors = [{"loc": ["body", "resource"], "type": "missing", "msg": "steps missing"}]
+                raise RequestValidationError(errors)
+            case InputValidationError(error=[*step_validation_errors]):
+                errors = [{"loc": ["body", "resource"], "type": "value_error", "msg": step_validation_error_to_string(err)} for err in step_validation_errors]
+                raise RequestValidationError(errors)
+            case other_error:
+                raise HTTPException(status_code=503, detail=f"Oops... {other_error}")
+    def step_validation_error_to_string(err: ValueErr) -> str:
+        match err:
+            case ValueMissing(name):
+                return f"'{name}' is missing"
+            case ValueInvalid(name):
+                return f"'{name}' value is invalid"
+            
+    raw_definition = request.resource
+    definition_res = DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError)
+    id = DefinitionIdValue.new_id()
+    apply_add_definition = functools.partial(async_ex_to_error_result(StorageError.from_exception)(definitions_storage.add), id)
+    add_definition_res = await lift_param(apply_add_definition)(definition_res)
+    return add_definition_res.map(lambda _: {"id": id.to_value_with_checksum()}).default_with(err_to_http)
+
+# ------------------------------------------------------------------------------------------------------------
+
+class ManualRunRequest(BaseModel):
+    resource: list[dict[str, Any]]
 @app.post("/definition/manual-run", status_code=202)
 async def manual_run(request: ManualRunRequest):
     def to_manual_run_data(definition: Definition):

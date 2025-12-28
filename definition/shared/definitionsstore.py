@@ -6,6 +6,7 @@ from expression import Result
 
 import config
 from shared.customtypes import DefinitionIdValue
+from shared.definition import Definition, DefinitionAdapter
 import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.infrastructure.serialization.json import JsonSerializer
@@ -44,4 +45,10 @@ legacy_definitions_storage = DefinitionsStore(
     f"Legacy{shdomaindef.Definition.__name__}",
     shdtodef.DefinitionAdapter.to_list,
     shdtodef.DefinitionAdapter.from_list
+)
+
+definitions_storage = DefinitionsStore(
+    Definition.__name__,
+    DefinitionAdapter.to_list,
+    DefinitionAdapter.from_list
 )
