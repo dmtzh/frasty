@@ -4,7 +4,7 @@ from typing import Any, Concatenate, ParamSpec, TypeVar
 
 import config
 from manualrunstate import ManualRunState, ManualRunStateAdapter
-from shared.customtypes import IdValue
+from shared.customtypes import RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
@@ -19,7 +19,7 @@ class ManualRunStore:
         self.__class__.__init__ = lambda self: None
 
         folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "DefinitionsStorage")
-        file_repo_with_ver = FileWithVersion[IdValue, ManualRunState, dict[str, Any]](
+        file_repo_with_ver = FileWithVersion[RunIdValue, ManualRunState, dict[str, Any]](
             ManualRunState.__name__,
             ManualRunStateAdapter.to_dict,
             ManualRunStateAdapter.from_dict,
@@ -31,14 +31,14 @@ class ManualRunStore:
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
     
     def with_storage(self, func: Callable[Concatenate[ManualRunState | None, P], tuple[R, ManualRunState]]):
-        def wrapper(manual_run_id: IdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
+        def wrapper(manual_run_id: RunIdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
             return self._item_action(func)(manual_run_id, *args, **kwargs)
         return wrapper
     
-    def delete(self, manual_run_id: IdValue):
+    def delete(self, manual_run_id: RunIdValue):
         return self._file_repo_with_ver.delete(manual_run_id)
     
-    async def get(self, manual_run_id: IdValue):
+    async def get(self, manual_run_id: RunIdValue):
         opt_ver_with_state = await self._file_repo_with_ver.get(manual_run_id)
         match opt_ver_with_state:
             case (_, state):

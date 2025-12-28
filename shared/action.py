@@ -11,6 +11,7 @@ class ActionName(str):
 
 class ActionType(StrEnum):
     CORE = "core"
+    SERVICE = "service"
     CUSTOM = "custom"
 
     @staticmethod
@@ -20,6 +21,8 @@ class ActionType(StrEnum):
         match strip_and_lowercase(action_type):
             case ActionType.CORE:
                 return ActionType.CORE
+            case ActionType.SERVICE:
+                return ActionType.SERVICE
             case ActionType.CUSTOM:
                 return ActionType.CUSTOM
             case _:
