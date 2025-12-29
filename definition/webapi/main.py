@@ -21,17 +21,12 @@ from shared.utils.result import ResultTag, lift_param
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, manual_run_handler, run_action, run_manual_run_action
-import adddefinitionapihandler
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 
 @app.get("/tickets")
 def tickets():
     return FileResponse("./html_sources/get_ticket.html")
-
-@app.post("/definitions/legacy")
-async def legacy_add_definition(request: adddefinitionapihandler.AddDefinitionRequest):
-    return await adddefinitionapihandler.handle(request)
 
 @app.get("/definitions/legacy/{id}")
 async def legacy_get_definition(id: str):
