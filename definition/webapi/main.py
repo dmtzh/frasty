@@ -83,6 +83,26 @@ async def add_definition(request: AddDefinitionRequest):
 
 # ------------------------------------------------------------------------------------------------------------
 
+@app.get("/definitions/{id}")
+async def get_definition(id: str):
+    def opt_definition_to_response(opt_definition_with_ver: tuple[Definition, int] | None):
+        match opt_definition_with_ver:
+            case None:
+                raise HTTPException(status_code=404)
+            case (definition, _):
+                definition_dto = DefinitionAdapter.to_list(definition)
+                return definition_dto
+    def err_to_response(err):
+        raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
+    
+    opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
+    if opt_def_id is None:
+        raise HTTPException(status_code=404)
+    opt_definition_with_ver_res = await async_catch_ex(definitions_storage.get_with_ver)(opt_def_id)
+    return opt_definition_with_ver_res.map(opt_definition_to_response).default_with(err_to_response)
+
+# ------------------------------------------------------------------------------------------------------------
+
 class ManualRunRequest(BaseModel):
     resource: list[dict[str, Any]]
 @app.post("/definition/manual-run", status_code=202)
