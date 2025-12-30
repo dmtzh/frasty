@@ -14,24 +14,24 @@ from webapitaskrunstate import WebApiTaskRunState
 from webapitaskrunstore import web_api_task_run_storage
 from config import CompletedTaskData, app, run_webapi_task, webapi_task_completed_subscriber
 
-@app.post("/tasks")
-async def add_task(request: addtaskapihandler.AddTaskRequest):
+@app.post("/tasks/legacy")
+async def add_legacy_task(request: addtaskapihandler.AddTaskRequest):
     return await addtaskapihandler.handle(request)
 
-@app.post("/tasks/{id}/run", status_code=202)
-async def run(id: str):
+@app.post("/tasks/legacy/{id}/run", status_code=202)
+async def run_legacy(id: str):
     return await runtaskapihandler.handle(lambda cmd: run_webapi_task(cmd.task_id, cmd.run_id), id)
 
-@app.get("/tasks/{id}/run/{run_id}")
-async def get_run_state(id: str, run_id: str):
+@app.get("/tasks/legacy/{id}/run/{run_id}")
+async def get_legacy_run_state(id: str, run_id: str):
     return await getrunstateapihandler.handle(id, run_id)
 
-@app.post("/tasks/{id}/schedule", status_code=202)
-async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
+@app.post("/tasks/legacy/{id}/schedule", status_code=202)
+async def set_legacy_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
     return await settaskscheduleapihandler.handle(id, request)
 
-@app.delete("/tasks/{id}/schedule/{schedule_id}", status_code=202)
-async def clear_schedule(id: str, schedule_id: str):
+@app.delete("/tasks/legacy/{id}/schedule/{schedule_id}", status_code=202)
+async def clear_legacy_schedule(id: str, schedule_id: str):
     return await cleartaskscheduleapihandler.handle(id, schedule_id)
 
 @webapi_task_completed_subscriber

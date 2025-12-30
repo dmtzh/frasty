@@ -30,7 +30,7 @@ def wrap_func_with_error_condition(func: Callable[P, R], err_key: str) -> Callab
         return func(*args, **kwargs)
     return wrapper
 
-tasksstore.tasks_storage.add = wrap_func_with_error_condition(
-        tasksstore.tasks_storage.add,
+tasksstore.legacy_tasks_storage.add = wrap_func_with_error_condition(
+        tasksstore.legacy_tasks_storage.add,
         _TASKS_STORAGE_ERROR_KEY
     )

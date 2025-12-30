@@ -1,6 +1,6 @@
 from collections.abc import Callable
 import os
-from typing import Concatenate, ParamSpec, TypeVar
+from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
@@ -14,13 +14,13 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 class TasksStore:
-    def __init__(self):
+    def __init__(self, items_sub_folder_name: str):
         folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "TasksStorage")
-        file_repo_with_ver = FileWithVersion[TaskIdValue, Task, dict[str, str]](
-            Task.__name__,
+        file_repo_with_ver = FileWithVersion[TaskIdValue, Task, dict[str, Any]](
+            items_sub_folder_name,
             TaskAdapter.to_dict,
             TaskAdapter.from_dict,
-            JsonSerializer[dict[str, str]](),
+            JsonSerializer[dict[str, Any]](),
             "json",
             folder_path
         )
@@ -47,4 +47,4 @@ class TasksStore:
     def with_storage(self, func: Callable[Concatenate[Task | None, P], tuple[R, Task]]):
         return self._item_action(func)
     
-tasks_storage = TasksStore()
+legacy_tasks_storage = TasksStore(f"Legacy{Task.__name__}")

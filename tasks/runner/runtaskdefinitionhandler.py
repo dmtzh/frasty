@@ -7,7 +7,7 @@ from expression import Result
 from shared.customtypes import RunIdValue, TaskIdValue, DefinitionIdValue
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.task import Task
-from shared.tasksstore import tasks_storage
+from shared.tasksstore import legacy_tasks_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class RunTaskDefinitionCommand:
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
 async def get_task(task_id: TaskIdValue) -> Result[Task, NotFoundError]:
-    opt_task = await tasks_storage.get(task_id)
+    opt_task = await legacy_tasks_storage.get(task_id)
     match opt_task:
         case None:
             return Result.Error(NotFoundError(f"Task {task_id} not found"))

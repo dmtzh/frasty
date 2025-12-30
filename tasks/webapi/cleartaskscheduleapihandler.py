@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from shared.customtypes import ScheduleIdValue, TaskIdValue, Error
 from shared.infrastructure.storage.repository import NotFoundError, StorageError, NotFoundException
 from shared.task import Task
-from shared.tasksstore import tasks_storage
+from shared.tasksstore import legacy_tasks_storage
 from shared.utils.asyncresult import AsyncResult, coroutine_result, async_ex_to_error_result, async_result
 from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
@@ -45,7 +45,7 @@ def parse_schedule_id(raw_schedule_id_with_checksum: str) -> Result[ScheduleIdVa
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
 async def get_task_with_schedule_id(task_id: TaskIdValue, schedule_id: ScheduleIdValue) -> Result[Task, NotFoundError]:
-    opt_task = await tasks_storage.get(task_id)
+    opt_task = await legacy_tasks_storage.get(task_id)
     match opt_task:
         case None:
             return Result.Error(NotFoundError(f"Task {task_id} not found"))
@@ -57,7 +57,7 @@ async def get_task_with_schedule_id(task_id: TaskIdValue, schedule_id: ScheduleI
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)
 @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
-@tasks_storage.with_storage
+@legacy_tasks_storage.with_storage
 def apply_clear_schedule_id(task: Task | None, schedule_id: ScheduleIdValue):
     if task is None:
         raise NotFoundException()

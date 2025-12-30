@@ -7,7 +7,7 @@ from expression import Result
 from shared.customtypes import DefinitionIdValue, Error, TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task, TaskName
-from shared.tasksstore import tasks_storage
+from shared.tasksstore import legacy_tasks_storage
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
@@ -52,7 +52,7 @@ def validate_task_name(raw_task_name: str) -> Result[TaskName, TaskNameMissing]:
 @async_result
 @async_ex_to_error_result(TasksStorageError.from_exception)
 def apply_add_task(id: TaskIdValue, task: Task):
-    return tasks_storage.add(id, task)
+    return legacy_tasks_storage.add(id, task)
 
 @coroutine_result[WorkflowError]()
 async def add_task_workflow(add_definition_handler: Callable[[list[dict[str, str]]], Coroutine[Any, Any, Result[DefinitionIdValue, DefinitionValidationError | AddDefinitionError]]], resource: AddTaskResource):
