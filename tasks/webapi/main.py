@@ -5,7 +5,7 @@ from shared.infrastructure.storage.repository import NotFoundError, NotFoundExce
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
-import addtaskapihandler
+import addlegacytaskapihandler
 import cleartaskscheduleapihandler
 import getrunstateapihandler
 import runtaskapihandler
@@ -15,8 +15,8 @@ from webapitaskrunstore import web_api_task_run_storage
 from config import CompletedTaskData, app, run_webapi_task, webapi_task_completed_subscriber
 
 @app.post("/tasks/legacy")
-async def add_legacy_task(request: addtaskapihandler.AddTaskRequest):
-    return await addtaskapihandler.handle(request)
+async def add_legacy_task(request: addlegacytaskapihandler.AddTaskRequest):
+    return await addlegacytaskapihandler.handle(request)
 
 @app.post("/tasks/legacy/{id}/run", status_code=202)
 async def run_legacy(id: str):
