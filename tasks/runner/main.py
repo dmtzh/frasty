@@ -9,7 +9,7 @@ from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, Ru
 from shared.utils.result import ResultTag
 
 from config import app, publish_completed_definition, run_definition, run_task_handler
-import runtaskdefinitionhandler
+import runlegacytaskdefinitionhandler
 
 @run_task_handler
 async def handle_run_task_definition_command(data: RunTaskData):
@@ -19,8 +19,8 @@ async def handle_run_task_definition_command(data: RunTaskData):
         run_def_data = RunDefinitionData(data.run_id, definition_id, metadata)
         return run_definition(run_def_data)
     
-    cmd = runtaskdefinitionhandler.RunTaskDefinitionCommand(data.task_id, data.run_id)
-    run_task_definition_res = await runtaskdefinitionhandler.handle(run_definition_handler, cmd)
+    cmd = runlegacytaskdefinitionhandler.RunTaskDefinitionCommand(data.task_id, data.run_id)
+    run_task_definition_res = await runlegacytaskdefinitionhandler.handle(run_definition_handler, cmd)
     match run_task_definition_res:
         case Result(tag=ResultTag.ERROR, error=NotFoundError()):
             return None
