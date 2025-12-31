@@ -48,3 +48,5 @@ class TasksStore:
         return self._item_action(func)
     
 legacy_tasks_storage = TasksStore(f"Legacy{Task.__name__}")
+
+tasks_storage = TasksStore(Task.__name__)
