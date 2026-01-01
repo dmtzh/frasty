@@ -14,7 +14,6 @@ from shared.tasksstore import tasks_storage
 from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import ResultTag
 
-import addlegacytaskapihandler
 import addtaskapihandler
 import cleartaskscheduleapihandler
 import getrunstateapihandler
@@ -23,10 +22,6 @@ import settaskscheduleapihandler
 from webapitaskrunstate import WebApiTaskRunState
 from webapitaskrunstore import web_api_task_run_storage
 from config import ADD_DEFINITION_URL, CompletedTaskData, app, run_webapi_task, webapi_task_completed_subscriber
-
-@app.post("/tasks/legacy")
-async def add_legacy_task(request: addlegacytaskapihandler.AddTaskRequest):
-    return await addlegacytaskapihandler.handle(request)
 
 @app.post("/tasks/legacy/{id}/run", status_code=202)
 async def run_legacy(id: str):
