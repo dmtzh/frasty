@@ -3,32 +3,36 @@ from functools import wraps
 import os
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
+from expression import Result
+
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-from shared.taskresulthistory import TaskResultHistoryItem, TaskResultHistoryItemAdapter
+from shared.taskresulthistory import TaskResultHistoryItemAdapter
 
 import config
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
-class TaskResultsHistoryStore:
-    def __init__(self):
-        self._folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "HistoryStorage", "TaskResults")
+class TaskResultsHistoryStore[T]:
+    def __init__(self, items_sub_folder_name: str, to_dict: Callable[[T], dict[str, Any]], from_dict: Callable[[dict[str, Any]], Result[T, Any]]):
+        self._folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "HistoryStorage", items_sub_folder_name)
+        self._to_dict = to_dict
+        self._from_dict = from_dict
     
     def _get_task_id_file_repo_with_ver(self, task_id: TaskIdValue):
-        return FileWithVersion[RunIdValue, TaskResultHistoryItem, dict[str, Any]](
+        return FileWithVersion[RunIdValue, T, dict[str, Any]](
             task_id,
-            TaskResultHistoryItemAdapter.to_dict,
-            TaskResultHistoryItemAdapter.from_dict,
+            self._to_dict,
+            self._from_dict,
             JsonSerializer[dict[str, Any]](),
             "json",
             self._folder_path
         )
     
-    def with_storage(self, func: Callable[Concatenate[TaskResultHistoryItem | None, P], tuple[R, TaskResultHistoryItem]]):
+    def with_storage(self, func: Callable[Concatenate[T | None, P], tuple[R, T]]):
         @wraps(func)
         def wrapper(task_id: TaskIdValue, run_id: RunIdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
             file_repo_with_ver = self._get_task_id_file_repo_with_ver(task_id)
@@ -45,4 +49,8 @@ class TaskResultsHistoryStore:
             case None:
                 return None
 
-taskresultshistory_storage = TaskResultsHistoryStore()
+legacy_taskresultshistory_storage = TaskResultsHistoryStore(
+    "LegacyTaskResults",
+    TaskResultHistoryItemAdapter.to_dict,
+    TaskResultHistoryItemAdapter.from_dict
+)

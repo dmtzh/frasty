@@ -5,7 +5,7 @@ from shared.infrastructure.storage.repository import StorageError
 from shared.taskpendingresultsqueue import CompletedTaskData, TaskPendingResultsQueue, TaskPendingResultsQueueItem
 from shared.taskpendingresultsqueuestore import taskpendingresultsqueue_storage
 from shared.taskresulthistory import TaskResultHistoryItem
-from shared.taskresultshistorystore import taskresultshistory_storage
+from shared.taskresultshistorystore import legacy_taskresultshistory_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
 class AddTaskResultToHistoryHandlerStorageError(StorageError):
@@ -35,7 +35,7 @@ def apply_remove_from_pending_results_queue(queue: TaskPendingResultsQueue | Non
 
 @async_result
 @async_ex_to_error_result(AddTaskResultToHistoryHandlerStorageError.from_exception)
-@taskresultshistory_storage.with_storage
+@legacy_taskresultshistory_storage.with_storage
 def apply_add_result_to_history(history_item: TaskResultHistoryItem | None, queue_item: TaskPendingResultsQueueItem):
     timestamp = int(datetime.datetime.now().timestamp())
     data = queue_item.data
