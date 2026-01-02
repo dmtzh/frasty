@@ -7,15 +7,19 @@ from expression import Result
 
 from shared.completedresult import CompletedWith
 from shared.customtypes import Error, DefinitionIdValue
+from shared.definition import Definition
+from shared.definitionsstore import definitions_storage
 from shared.domainrunning import RunningDefinitionState
-from shared.infrastructure.storage.repository import NotFoundError
+from shared.executedefinitionaction import ExecuteDefinitionInput
+from shared.infrastructure.storage.repository import NotFoundError, StorageError
+from shared.pipeline.actionhandler import ActionData
 from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, StepData
 from shared.utils.asynchronous import make_async
-from shared.utils.asyncresult import coroutine_result, async_result
+from shared.utils.asyncresult import async_ex_to_error_result, coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import action_handler, app, complete_step_handler, publish_completed_definition, run_action, run_definition_handler, run_step, CompleteStepData
+from config import GetDefinitionInput, action_handler, app, complete_step_handler, get_definition_handler, publish_completed_definition, run_action, run_definition_handler, run_step, CompleteStepData
 import completeactionhandler
 import completestephandler
 import executedefinitionhandler
@@ -28,6 +32,21 @@ executedefinitionhandler.register_execute_definition_action_handler(run_action, 
 # ------------------------------------------------------------------------------------------------------------
 
 completeactionhandler.register_complete_action_handler(run_action, action_handler)
+
+# ------------------------------------------------------------------------------------------------------------
+
+@get_definition_handler
+async def handle_get_definition_action(data: ActionData[None, GetDefinitionInput]):
+    def opt_definition_to_completed_result(opt_definition_with_ver: tuple[Definition, int] | None):
+        match opt_definition_with_ver:
+            case None:
+                return CompletedWith.NoData()
+            case (definition, _):
+                data_dict = ExecuteDefinitionInput(data.input.definition_id, definition).to_dict()
+                return CompletedWith.Data(data_dict)
+    get_definition_with_ver = async_ex_to_error_result(StorageError.from_exception)(definitions_storage.get_with_ver)
+    opt_definition_with_ver_res = await get_definition_with_ver(data.input.definition_id)
+    return opt_definition_with_ver_res.map(opt_definition_to_completed_result).default_with(lambda err: CompletedWith.Error(str(err)))
 
 # ------------------------------------------------------------------------------------------------------------
 

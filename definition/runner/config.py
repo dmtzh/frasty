@@ -1,15 +1,21 @@
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 import os
 from typing import Any
 
 from expression import Result
 
 from infrastructure.rabbitmq import config
+from shared.action import Action, ActionName, ActionType
+from shared.completedresult import CompletedResult
+from shared.customtypes import DefinitionIdValue
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
+from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
 from shared.pipeline.handlers import to_continuation
 from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import CompleteStepData, RunDefinitionData
+from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
@@ -19,6 +25,20 @@ from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
 run_action = config.run_action
 action_handler = config.action_handler
+
+GET_DEFINITION_ACTION = Action(ActionName("get_definition"), ActionType.SERVICE)
+@dataclass(frozen=True)
+class GetDefinitionInput:
+    definition_id: DefinitionIdValue
+    @staticmethod
+    def from_dto(dto: DataDto):
+        definition_id_res = parse_from_dict(dto, "definition_id", DefinitionIdValue.from_value_with_checksum)
+        return definition_id_res.map(GetDefinitionInput)
+def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]], Coroutine[Any, Any, CompletedResult | None]]):
+    return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
+        GET_DEFINITION_ACTION,
+        lambda dto_list: GetDefinitionInput.from_dto(dto_list[0])
+    )(func)
 
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
