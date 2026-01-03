@@ -31,7 +31,7 @@ async def _handle_execute_definition_action(
         convert_to_storage_action: ToStorageActionConverter,
         run_action: RunAsyncAction,
         data: ActionData[None, ExecuteDefinitionInput]):
-    definition_id = data.input.opt_definition_id or DefinitionIdValue.new_id()
+    definition_id = data.input.definition_id
     def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
         metadata = Metadata()
         metadata.set_from("execute definition action")
