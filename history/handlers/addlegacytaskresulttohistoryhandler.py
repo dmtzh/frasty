@@ -4,7 +4,7 @@ from shared.customtypes import RunIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.taskpendingresultsqueue import CompletedTaskData, TaskPendingResultsQueue, TaskPendingResultsQueueItem
 from shared.taskpendingresultsqueuestore import taskpendingresultsqueue_storage
-from shared.taskresulthistory import TaskResultHistoryItem
+from shared.taskresulthistory import LegacyTaskResultHistoryItem
 from shared.taskresultshistorystore import legacy_taskresultshistory_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 
@@ -36,15 +36,15 @@ def apply_remove_from_pending_results_queue(queue: TaskPendingResultsQueue | Non
 @async_result
 @async_ex_to_error_result(AddTaskResultToHistoryHandlerStorageError.from_exception)
 @legacy_taskresultshistory_storage.with_storage
-def apply_add_result_to_history(history_item: TaskResultHistoryItem | None, queue_item: TaskPendingResultsQueueItem):
+def apply_add_result_to_history(history_item: LegacyTaskResultHistoryItem | None, queue_item: TaskPendingResultsQueueItem):
     timestamp = int(datetime.datetime.now().timestamp())
     data = queue_item.data
     queue_item.prev_run_id
-    history_item = TaskResultHistoryItem(data.result, timestamp, data.opt_definition_version, queue_item.prev_run_id)
+    history_item = LegacyTaskResultHistoryItem(data.result, timestamp, data.opt_definition_version, queue_item.prev_run_id)
     return (history_item, history_item)
 
 @coroutine_result[AddTaskResultToHistoryHandlerStorageError]()
-async def handle(data: CompletedTaskData) -> list[TaskResultHistoryItem]:
+async def handle(data: CompletedTaskData) -> list[LegacyTaskResultHistoryItem]:
     next_pending_result = await apply_put_to_pending_results_queue(data.task_id, data)
     added_history_items = []
     while next_pending_result is not None:

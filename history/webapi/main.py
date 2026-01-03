@@ -2,7 +2,7 @@ from expression import Result
 from fastapi import HTTPException
 
 from shared.customtypes import RunIdValue, TaskIdValue
-from shared.taskresulthistory import TaskResultHistoryItemAdapter
+from shared.taskresulthistory import LegacyTaskResultHistoryItemAdapter
 from shared.taskresultshistorystore import legacy_taskresultshistory_storage
 from shared.utils.asyncresult import async_catch_ex
 from shared.utils.result import ResultTag
@@ -22,7 +22,7 @@ async def get_result(id: str, run_id: str):
         case Result(ResultTag.OK, ok=None):
             raise HTTPException(status_code=404)
         case Result(ResultTag.OK, ok=history_item):
-            history_item_dto = TaskResultHistoryItemAdapter.to_dict(history_item)
+            history_item_dto = LegacyTaskResultHistoryItemAdapter.to_dict(history_item)
             return history_item_dto
         case _:
             raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")

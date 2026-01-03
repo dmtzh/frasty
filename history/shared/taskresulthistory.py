@@ -21,16 +21,16 @@ class DefinitionVersion(int):
             return None
 
 @dataclass(frozen=True)
-class TaskResultHistoryItem:
+class LegacyTaskResultHistoryItem:
     result: CompletedResult
     timestamp: int
     definition_version: DefinitionVersion | None
     prev_run_id: RunIdValue | None
 
-class TaskResultHistoryItemAdapter:
-    @effect.result[TaskResultHistoryItem, str]()
+class LegacyTaskResultHistoryItemAdapter:
+    @effect.result[LegacyTaskResultHistoryItem, str]()
     @staticmethod
-    def from_dict(data: dict[str, Any]) -> Generator[Any, Any, TaskResultHistoryItem]:
+    def from_dict(data: dict[str, Any]) -> Generator[Any, Any, LegacyTaskResultHistoryItem]:
         raw_data = yield from Result.Ok(data) if isinstance(data, dict) and data else Result.Error("data is invalid")
         raw_result = yield from Result.Ok(raw_data["result"]) if "result" in raw_data else Result.Error("result is missing")
         result = yield from CompletedResultAdapter.from_dict(raw_result)
@@ -48,11 +48,11 @@ class TaskResultHistoryItemAdapter:
                 prev_run_id = None
             case raw_prev_run_id:
                 prev_run_id = yield from parse_value(raw_prev_run_id, "prev_run_id", RunIdValue.from_value)
-        return TaskResultHistoryItem(result=result, timestamp=timestamp, definition_version=definition_version, prev_run_id=prev_run_id)
+        return LegacyTaskResultHistoryItem(result=result, timestamp=timestamp, definition_version=definition_version, prev_run_id=prev_run_id)
         
     
     @staticmethod
-    def to_dict(item: TaskResultHistoryItem) -> dict[str, Any]:
+    def to_dict(item: LegacyTaskResultHistoryItem) -> dict[str, Any]:
         result_dict = {"result": CompletedResultAdapter.to_dict(item.result)}
         definition_version_dict = {"definition_version": item.definition_version} if item.definition_version is not None else {}
         prev_run_id_dict = {"prev_run_id": item.prev_run_id} if item.prev_run_id is not None else {}

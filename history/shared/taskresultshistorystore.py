@@ -9,7 +9,7 @@ from shared.customtypes import RunIdValue, TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-from shared.taskresulthistory import TaskResultHistoryItemAdapter
+from shared.taskresulthistory import LegacyTaskResultHistoryItemAdapter
 
 import config
 
@@ -51,6 +51,6 @@ class TaskResultsHistoryStore[T]:
 
 legacy_taskresultshistory_storage = TaskResultsHistoryStore(
     "LegacyTaskResults",
-    TaskResultHistoryItemAdapter.to_dict,
-    TaskResultHistoryItemAdapter.from_dict
+    LegacyTaskResultHistoryItemAdapter.to_dict,
+    LegacyTaskResultHistoryItemAdapter.from_dict
 )
