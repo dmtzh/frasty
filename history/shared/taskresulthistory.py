@@ -5,8 +5,8 @@ from typing import Any
 from expression import Result, effect
 
 from shared.completedresult import CompletedResult, CompletedResultAdapter
-from shared.customtypes import RunIdValue
-from shared.utils.parse import parse_value
+from shared.customtypes import DefinitionIdValue, RunIdValue
+from shared.utils.parse import parse_from_dict, parse_value
 
 class DefinitionVersion(int):
     def __new__(cls, value):
@@ -19,6 +19,39 @@ class DefinitionVersion(int):
             return DefinitionVersion(value)
         except (ValueError, TypeError):
             return None
+
+@dataclass(frozen=True)
+class TaskResultHistoryItem:
+    result: CompletedResult
+    timestamp: int
+    execution_id: DefinitionIdValue
+    prev_run_id: RunIdValue | None
+
+class TaskResultHistoryItemAdapter:
+    @effect.result[TaskResultHistoryItem, str]()
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> Generator[Any, Any, TaskResultHistoryItem]:
+        data_dict = yield from parse_value(data, "data", lambda data: data if isinstance(data, dict) and data else None)
+        raw_result = yield from parse_from_dict(data_dict, "result", lambda raw_result: raw_result if isinstance(raw_result, dict) and raw_result else None)
+        result = yield from CompletedResultAdapter.from_dict(raw_result)
+        timestamp = yield from parse_from_dict(data_dict, "timestamp", lambda raw_timestamp: raw_timestamp if isinstance(raw_timestamp, int) else None)
+        execution_id = yield from parse_from_dict(data_dict, "execution_id", DefinitionIdValue.from_value)
+        opt_raw_prev_run_id = data_dict.get("prev_run_id")
+        match opt_raw_prev_run_id:
+            case None:
+                prev_run_id = None
+            case raw_prev_run_id:
+                prev_run_id = yield from parse_value(raw_prev_run_id, "prev_run_id", RunIdValue.from_value)
+        return TaskResultHistoryItem(result, timestamp, execution_id, prev_run_id)
+    
+    @staticmethod
+    def to_dict(item: TaskResultHistoryItem) -> dict[str, Any]:
+        prev_run_id_dict = {"prev_run_id": item.prev_run_id} if item.prev_run_id is not None else {}
+        return {
+            "result": CompletedResultAdapter.to_dict(item.result),
+            "timestamp": item.timestamp,
+            "execution_id": item.execution_id
+        } | prev_run_id_dict
 
 @dataclass(frozen=True)
 class LegacyTaskResultHistoryItem:

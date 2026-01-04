@@ -1,16 +1,40 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
+from dataclasses import dataclass
 import os
 from typing import Any
 
-from expression import Result
+from expression import effect, Result
 
 from infrastructure.rabbitmq import config
-from shared.customtypes import Metadata
+from shared.action import Action, ActionName, ActionType
+from shared.completedresult import CompletedResult, CompletedResultAdapter
+from shared.customtypes import DefinitionIdValue, Metadata, TaskIdValue
+from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
 from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, HandlerContinuation, map_handler, with_middleware
 from shared.pipeline.logging import with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData
 from shared.taskpendingresultsqueue import DefinitionVersion, CompletedTaskData
-from shared.utils.parse import parse_value
+from shared.utils.parse import parse_from_dict, parse_value
+
+ADD_TASK_RESULT_TO_HISTORY_ACTION = Action(ActionName("add_task_result_to_history"), ActionType.SERVICE)
+@dataclass(frozen=True)
+class AddTaskResultToHistoryConfig:
+    task_id: TaskIdValue
+    execution_id: DefinitionIdValue
+    @effect.result['AddTaskResultToHistoryConfig', str]()
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> Generator[Any, Any, 'AddTaskResultToHistoryConfig']:
+        task_id = yield from parse_from_dict(data, "task_id", TaskIdValue.from_value_with_checksum)
+        execution_id = yield from parse_from_dict(data, "execution_id", DefinitionIdValue.from_value_with_checksum)
+        return AddTaskResultToHistoryConfig(task_id, execution_id)
+def add_task_result_to_history_input_validator(data: list[DataDto]):
+    return CompletedResultAdapter.from_dict(data[0])
+def add_task_result_to_history_handler(func: Callable[[ActionData[AddTaskResultToHistoryConfig, CompletedResult]], Coroutine[Any, Any, CompletedResult | None]]):
+    return ActionHandlerFactory(config.run_action, config.action_handler).create(
+        ADD_TASK_RESULT_TO_HISTORY_ACTION,
+        AddTaskResultToHistoryConfig.from_dict,
+        add_task_result_to_history_input_validator
+    )(func)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
