@@ -1,5 +1,6 @@
 import asyncio
 from dataclasses import dataclass
+import functools
 from typing import Any
 
 import aiohttp
@@ -7,12 +8,17 @@ from expression import Result
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 
-from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Error
+from shared.action import ActionName, ActionType
+from shared.completedresult import CompletedResult, CompletedWith
+from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue, TaskIdValue
+from shared.definition import ActionDefinition, Definition
+from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
+from shared.pipeline.actionhandler import ActionData
+from shared.task import Task
 from shared.tasksstore import tasks_storage
-from shared.utils.asyncresult import async_ex_to_error_result
-from shared.utils.result import ResultTag
+from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result
+from shared.utils.result import ResultTag, lift_param
 
 import addtaskapihandler
 import cleartaskscheduleapihandler
@@ -21,7 +27,7 @@ import runtaskapihandler
 import settaskscheduleapihandler
 from webapitaskrunstate import WebApiTaskRunState
 from webapitaskrunstore import web_api_task_run_storage
-from config import ADD_DEFINITION_URL, CompletedTaskData, app, run_webapi_task, webapi_task_completed_subscriber
+from config import ADD_DEFINITION_URL, run_action, CompletedTaskData, ExecuteTaskInput, app, execute_task_handler, run_execute_task_action, run_webapi_task, webapi_task_completed_subscriber
 
 @app.post("/tasks/legacy/{id}/run", status_code=202)
 async def run_legacy(id: str):
@@ -117,5 +123,68 @@ async def add_definition_handler(raw_definition: list[dict[str, Any]]) -> Result
             return Result.Error(AddDefinitionError(f"Request timeout {timeout_15_seconds.total} seconds when connect to {add_definition_url}"))
         except aiohttp.client_exceptions.ClientConnectorError:
             return Result.Error(AddDefinitionError(f"Cannot connect to {add_definition_url})"))
+
+# ------------------------------------------------------------------------------------------------------------
+
+@app.post("/tasks/{id}/run", status_code=202)
+async def run(id: str):
+    def to_execute_task_data(task_id: TaskIdValue, run_id: RunIdValue, task: Task):
+        step_id = StepIdValue.new_id()
+        input = ExecuteTaskInput(task_id, task.definition_id)
+        metadata = Metadata()
+        metadata.set_from("run task webapi")
+        return ActionData(run_id, step_id, None, input, metadata)
+    # def to_execute_definition_data(execute_task_data: ActionData[None, ExecuteTaskInput]):
+    #     definition_input_data = execute_task_data.input.to_dto()
+    #     definition_steps = (
+    #         ActionDefinition(EXECUTE_TASK_ACTION.name, EXECUTE_TASK_ACTION.type, None),
+    #         ActionDefinition(PRINT_RESULT_ACTION.name, PRINT_RESULT_ACTION.type, None),
+    #     )
+    #     definition = Definition(definition_input_data, definition_steps)
+    #     input = ExecuteDefinitionInput(DefinitionIdValue.new_id(), definition)
+    #     return ActionData(execute_task_data.run_id, execute_task_data.step_id, None, input, execute_task_data.metadata)
+    def err_to_response(error):
+        match error:
+            case NotFoundError():
+                raise HTTPException(status_code=404)
+            case _:
+                raise HTTPException(status_code=503, detail="Oops... Service temporary unavailable, please try again later.")
+    
+    opt_task_id = TaskIdValue.from_value_with_checksum(id)
+    if opt_task_id is None:
+        raise HTTPException(status_code=404)
+    opt_task_res = await async_catch_ex(tasks_storage.get)(opt_task_id)
+    task_res = opt_task_res.bind(lambda opt_task: Result.Ok(opt_task) if opt_task is not None else Result.Error(NotFoundError("Task not found")))
+    run_id = RunIdValue.new_id()
+    execute_task_data_res = task_res.map(functools.partial(to_execute_task_data, opt_task_id, run_id))
+    execute_task_res = await lift_param(run_execute_task_action)(execute_task_data_res)
+    return execute_task_res.map(lambda data: {"id": data.run_id.to_value_with_checksum()}).default_with(err_to_response)
+    # execute_def_data_res = execute_task_data_res.map(to_execute_definition_data)
+    # execute_task_res = await lift_param(functools.partial(run_execute_definition_action, run_action))(execute_def_data_res)
+    # return execute_task_res.map(lambda _: {"id": run_id.to_value_with_checksum()}).default_with(err_to_response)
+
+# ------------------------------------------------------------------------------------------------------------
+
+@execute_task_handler
+async def handle_execute_task_action(data: ActionData[None, ExecuteTaskInput]):
+    definition_input_data = {"definition_id": data.input.definition_id.to_value_with_checksum()}
+    execution_id = DefinitionIdValue.new_id()
+    add_task_result_to_history_config = {
+        "task_id": data.input.task_id.to_value_with_checksum(),
+        "execution_id": execution_id.to_value_with_checksum()
+    }
+    definition_steps = (
+        ActionDefinition(ActionName("get_definition"), ActionType.SERVICE, None),
+        ActionDefinition(EXECUTE_DEFINITION_ACTION.name, EXECUTE_DEFINITION_ACTION.type, None),
+        ActionDefinition(ActionName("add_task_result_to_history"), ActionType.SERVICE, add_task_result_to_history_config),
+    )
+    definition = Definition(definition_input_data, definition_steps)
+    input = ExecuteDefinitionInput(execution_id, definition)
+    execute_definition_data = ActionData(data.run_id, data.step_id, None, input, data.metadata)
+    execute_task_res = await run_execute_definition_action(run_action, execute_definition_data)
+    return execute_task_res\
+        .map(lambda _: None)\
+        .map_error(str).map_error(CompletedWith.Error)\
+        .merge()
 
 # ------------------------------------------------------------------------------------------------------------
