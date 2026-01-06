@@ -22,13 +22,8 @@ from shared.utils.result import lift_param
 
 import addtaskapihandler
 import cleartaskscheduleapihandler
-import getrunstateapihandler
 import settaskscheduleapihandler
 from config import ADD_DEFINITION_URL, run_action, ExecuteTaskInput, app, execute_task_handler, run_execute_task_action
-
-@app.get("/tasks/legacy/{id}/run/{run_id}")
-async def get_legacy_run_state(id: str, run_id: str):
-    return await getrunstateapihandler.handle(id, run_id)
 
 @app.post("/tasks/legacy/{id}/schedule", status_code=202)
 async def set_legacy_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
