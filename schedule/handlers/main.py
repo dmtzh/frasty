@@ -1,13 +1,12 @@
 # import asyncio
 import functools
 
-from expression import Result
-
 from shared.commands import Command, ClearCommand, SetCommand
 from shared.customtypes import TaskIdValue, RunIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
+from shared.utils.asyncresult import async_catch_ex
 
 import cleartaskschedulehandler
 import settaskschedulehandler
@@ -28,28 +27,24 @@ async def init_scheduled_tasks():
         logger.info(f"{task_id} with schedule {schedule} started")
     logger.info("Scheduled tasks initialized")
 
+@async_catch_ex
 @make_async
 def stop_scheduled_task(cmd: ClearCommand, cron: CronSchedule):
-    try:
-        scheduler.remove(cmd.schedule_id)
-        schedule = TaskSchedule(cmd.schedule_id, cron)
-        logger.warning(f"{cmd.task_id} with schedule {schedule} stopped")
-        return Result.Ok(None)
-    except:  # noqa: E722
-        return Result.Ok(None)
+    scheduler.remove(cmd.schedule_id)
+    schedule = TaskSchedule(cmd.schedule_id, cron)
+    logger.warning(f"{cmd.task_id} with schedule {schedule} stopped")
+    return None
 
+@async_catch_ex
 @make_async
 def restart_scheduled_task(task_id: TaskIdValue, old_schedule: TaskSchedule | None, new_schedule: TaskSchedule):
-    try:
-        if old_schedule is not None:
-            scheduler.remove(old_schedule.schedule_id)
-            logger.warning(f"{task_id} with schedule {old_schedule} stopped")
-        schedule_action_func = functools.partial(run_task_action, task_id, new_schedule)
-        scheduler.add(new_schedule.schedule_id, new_schedule.cron, schedule_action_func)
-        logger.info(f"{task_id} with schedule {new_schedule} started")
-        return Result.Ok(None)
-    except:  # noqa: E722
-        return Result.Ok(None)
+    if old_schedule is not None:
+        scheduler.remove(old_schedule.schedule_id)
+        logger.warning(f"{task_id} with schedule {old_schedule} stopped")
+    schedule_action_func = functools.partial(run_task_action, task_id, new_schedule)
+    scheduler.add(new_schedule.schedule_id, new_schedule.cron, schedule_action_func)
+    logger.info(f"{task_id} with schedule {new_schedule} started")
+    return None
 
 @change_task_schedule_handler
 async def handle_change_task_schedule_command(cmd: Command):
