@@ -10,12 +10,12 @@ from shared.utils.asyncresult import async_catch_ex
 
 import cleartaskschedulehandler
 import settaskschedulehandler
-from config import app, change_task_schedule_handler, logger, run_task, scheduler
+from config import app, change_task_schedule_handler, logger, run_legacy_task, run_task, scheduler
 
-def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
+async def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")
-    run_id = RunIdValue.new_id()
-    return run_task(task_id, run_id, schedule.schedule_id)
+    await run_task(task_id, schedule.schedule_id)
+    await run_legacy_task(task_id, RunIdValue.new_id(), schedule.schedule_id)
     
 @app.after_startup
 async def init_scheduled_tasks():
