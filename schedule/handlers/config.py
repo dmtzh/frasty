@@ -8,19 +8,15 @@ import aiocron
 from expression import Result
 
 from infrastructure.rabbitmq import config
-from shared.changetaskscheduledefinition import ChangeTaskSchedule
-from shared.commands import Command
-from shared.completedresult import CompletedResult, CompletedWith
+from shared.changetaskcheduleaction import CHANGE_TASK_SCHEDULE_ACTION
+from shared.commands import Command, CommandAdapter
 from shared.customtypes import Metadata, RunIdValue, ScheduleIdValue, TaskIdValue
 from shared.domainschedule import CronSchedule
-from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.infrastructure.storage.inmemory import InMemory
-from shared.pipeline.handlers import step_handler_adapter, validated_data_to_any_data
+from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, ActionInput
 
 from scheduler import Scheduler
-from shared.pipeline.types import CompleteStepData, RunTaskData, StepData
-
-step_definition_creators_storage.add(ChangeTaskSchedule)
+from shared.pipeline.types import RunTaskData
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
@@ -31,22 +27,17 @@ def run_task(task_id: TaskIdValue, run_id: RunIdValue, schedule_id: ScheduleIdVa
     data = RunTaskData(task_id, run_id, metadata)
     return config.run_task(data)
 
-def change_task_schedule_handler(func: Callable[[Command], Coroutine[Any, Any, Result | None]]):
-    @wraps(func)
-    async def func_adapter(input_data: StepData[None, Command]) -> CompletedResult | None:
-        opt_res = await func(input_data.data)
-        if opt_res is None:
-            return None
-        result_res = opt_res\
-            .map(lambda _: CompletedWith.Data(None))\
-            .map_error(lambda error: CompletedWith.Error(str(error)))
-        result = result_res.merge()
-        return result
-    async def complete_step(data: CompleteStepData):
+def change_task_schedule_handler(func: Callable[[Command], Coroutine]):
+    async def do_nothing_when_run_action(action_name: str, action_input: ActionInput):
         return Result.Ok(None)
-    step_handler = step_handler_adapter(func_adapter, complete_step)
-    config_step_handler = validated_data_to_any_data(step_handler, ChangeTaskSchedule.validate_input)
-    return config.step_handler(ChangeTaskSchedule, config_step_handler)
+    @wraps(func)
+    async def func_adapter(data: ActionData[None, Command]):
+        await func(data.input)
+        return None
+    return ActionHandlerFactory(do_nothing_when_run_action, config.action_handler).create_without_config(
+        CHANGE_TASK_SCHEDULE_ACTION,
+        lambda dto_list: CommandAdapter.from_dict(dto_list[0])
+    )(func_adapter)
 
 app = config.create_faststream_app()
 

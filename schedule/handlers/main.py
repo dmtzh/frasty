@@ -56,12 +56,10 @@ async def handle_change_task_schedule_command(cmd: Command):
     match cmd:
         case ClearCommand():
             clear_task_schedule_handler = functools.partial(stop_scheduled_task, cmd)
-            res = await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
-            return res
+            await cleartaskschedulehandler.handle(clear_task_schedule_handler, cmd)
         case SetCommand():
             set_task_schedule_handler = functools.partial(restart_scheduled_task, cmd.task_id)
-            res = await settaskschedulehandler.handle(set_task_schedule_handler, cmd)
-            return res
+            await settaskschedulehandler.handle(set_task_schedule_handler, cmd)
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())

@@ -45,7 +45,7 @@ class CommandDtoTypes(StrEnum):
 
 class CommandAdapter:
     @staticmethod
-    def to_dict(command: Command) -> dict:
+    def to_dict(command: Command) -> dict[str, str]:
         match command:
             case ClearCommand():
                 return {
@@ -93,7 +93,7 @@ class CommandAdapter:
     
     @effect.result[Command, list[ValueErr]]()
     @staticmethod
-    def from_dict(command_dto: dict) -> Generator[Any, Any, Command]:
+    def from_dict(command_dto: dict[str, Any]) -> Generator[Any, Any, Command]:
         def parse_command_type() -> Result[CommandDtoTypes, list[ValueErr]]:
             if "type" not in command_dto:
                 return Result.Error([ValueMissing("type")])
