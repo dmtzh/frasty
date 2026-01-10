@@ -3,10 +3,11 @@ import pytest
 
 from shared.customtypes import DefinitionIdValue, Error, TaskIdValue
 from shared.task import Task
-from tasks.webapi.addtaskapihandler import AddTaskResource, TaskNameMissing, add_task_workflow
+from tasks.webapi.addtaskapihandler import AddDefinitionError, AddTaskResource, AddToStorageError, TaskNameMissing, add_task_workflow
 
-class AddDefinitionError(Error):
+class TestAddDefinitionError(Error):
     '''Add definition error'''
+    __test__ = False  # Instruct pytest to ignore this class for test collection
 
 @pytest.fixture
 def add_definition_handler():
@@ -18,7 +19,7 @@ def add_definition_handler():
 @pytest.fixture
 def add_to_storage_handler():
     async def handler(task_id: TaskIdValue, task: Task):
-        return None
+        return Result.Ok(None)
     return handler
 
 
@@ -47,9 +48,9 @@ async def test_add_task_workflow_error_when_task_name_missing(add_definition_han
 
 
 async def test_add_task_workflow_error_when_add_definition_handler_error(add_to_storage_handler):
-    error_message = "Add definition error message"
+    expected_error = TestAddDefinitionError("Add definition error message")
     async def handler_with_error(raw_definiiton):
-        return Result.Error(AddDefinitionError(error_message))
+        return Result.Error(expected_error)
     resource = AddTaskResource(name='test_task', definition=[{'key': 'value'}])
     
     res = await add_task_workflow(handler_with_error, add_to_storage_handler, resource)
@@ -57,32 +58,32 @@ async def test_add_task_workflow_error_when_add_definition_handler_error(add_to_
     assert type(res) is Result
     assert res.is_error()
     assert type(res.error) is AddDefinitionError
-    assert res.error.message == error_message
+    assert res.error.error == expected_error
 
 
 
-async def test_add_task_workflow_error_when_add_to_storage_handler_exception(add_definition_handler):
-    tasks_storage_error_message = "Tasks storage error"
-    async def handler_with_exception(task_id: TaskIdValue, task: Task):
-        raise RuntimeError(tasks_storage_error_message)
+async def test_add_task_workflow_error_when_add_to_storage_handler_error(add_definition_handler):
+    expected_error = Error("Tasks storage error")
+    async def handler_with_error(task_id: TaskIdValue, task: Task):
+        return Result.Error(expected_error)
     resource = AddTaskResource(name='test_task', definition=[{'key': 'value'}])
 
-    res = await add_task_workflow(add_definition_handler, handler_with_exception, resource)
+    res = await add_task_workflow(add_definition_handler, handler_with_error, resource)
 
     assert type(res) is Result
     assert res.is_error()
-    assert isinstance(res.error, Error)
-    assert res.error.message == tasks_storage_error_message
+    assert type(res.error) is AddToStorageError
+    assert res.error.error == expected_error
 
 
 
 async def test_add_task_workflow_when_add_definition_handler_error_then_add_to_storage_handler_not_invoked():
     state = {}
     async def add_definition_handler(raw_definiiton):
-        return Result.Error(AddDefinitionError("Add definition error message"))
+        return Result.Error(TestAddDefinitionError("Add definition error message"))
     async def add_to_storage_handler(task_id: TaskIdValue, task: Task):
         state["actual_task_id"] = task_id
-        return None
+        return Result.Ok(None)
     resource = AddTaskResource(name='test_task', definition=[{'key': 'value'}])
     
     await add_task_workflow(add_definition_handler, add_to_storage_handler, resource)

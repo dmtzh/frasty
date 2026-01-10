@@ -1,15 +1,13 @@
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-import functools
 from typing import Any
 
 from expression import Result
 
 from shared.customtypes import DefinitionIdValue, TaskIdValue
-from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task, TaskName
-from shared.utils.asyncresult import async_ex_to_error_result
-from shared.utils.result import lift_param
+from shared.utils.asyncresult import AsyncResult, async_result, coroutine_result
+from shared.utils.parse import parse_value
 
 # ---------------------------
 # inputs
@@ -27,23 +25,29 @@ class AddTaskRequest():
 # ---------------------------
 class TaskNameMissing:
     '''Task name is missing'''
+@dataclass(frozen=True)
+class AddDefinitionError:
+    '''Add definition error'''
+    error: Any
+@dataclass(frozen=True)
+class AddToStorageError:
+    '''Add to storage error'''
+    error: Any
 
 # ==================================
 # Workflow implementation
 # ==================================
-async def add_task_workflow[TErr](
+@coroutine_result[TaskNameMissing | AddDefinitionError | AddToStorageError]()
+async def add_task_workflow[TErr, TErr1](
         add_definition_handler: Callable[[list[dict[str, Any]]], Coroutine[Any, Any, Result[DefinitionIdValue, TErr]]],
-        add_to_storage_handler: Callable[[TaskIdValue, Task], Coroutine[Any, Any, None]],
-        resource: AddTaskResource) -> Result[TaskIdValue, TaskNameMissing | TErr | StorageError]:
-    opt_task_name = TaskName.parse(resource.name)
-    if opt_task_name is None:
-        return Result.Error(TaskNameMissing())
-    definition_id_res = await add_definition_handler(resource.definition)
-    task_res = definition_id_res.map(lambda definition_id: Task(name=opt_task_name, definition_id=definition_id, schedule_id=None))
-    id = TaskIdValue.new_id()
-    apply_add_task = functools.partial(async_ex_to_error_result(StorageError.from_exception)(add_to_storage_handler), id)
-    add_task_res = await lift_param(apply_add_task)(task_res)
-    return add_task_res.map(lambda _: id)
+        add_to_storage_handler: Callable[[TaskIdValue, Task], Coroutine[Any, Any, Result[None, TErr1]]],
+        resource: AddTaskResource):
+    task_name = await AsyncResult.from_result(parse_value(resource.name, "name", TaskName.parse)).map_error(lambda _: TaskNameMissing())
+    definition_id = await async_result(add_definition_handler)(resource.definition).map_error(AddDefinitionError)
+    task_id = TaskIdValue.new_id()
+    task = Task(name=task_name, definition_id=definition_id, schedule_id=None)
+    await async_result(add_to_storage_handler)(task_id, task).map_error(AddToStorageError)
+    return task_id
 
 # ==================================
 # API endpoint handler
