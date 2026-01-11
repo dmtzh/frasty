@@ -4,7 +4,6 @@ import datetime
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData
-from shared.pipeline.types import StepError
 from shared.taskpendingresultsqueue import CompletedTaskData
 from shared.taskresulthistory import TaskResultHistoryItem
 from shared.taskresultshistorystore import taskresultshistory_storage
@@ -24,14 +23,13 @@ async def handle_add_task_result_to_history(data: ActionData[AddTaskResultToHist
     def ok_to_completed_result(_):
         data_dict = CompletedResultAdapter.to_dict(data.input)
         return CompletedWith.Data(data_dict)
-    def error_to_completed_result(err):
-        step_error = StepError(data.step_id, err)
-        return CompletedWith.Error(str(step_error))
+    def err_to_completed_result(err):
+        return CompletedWith.Error(str(err))
     
     task_id = data.config.task_id
     run_id = data.run_id
     add_res = await apply_add_result_to_history(task_id, run_id, data.config, data.input)
-    return add_res.map(ok_to_completed_result).default_with(error_to_completed_result)
+    return add_res.map(ok_to_completed_result).default_with(err_to_completed_result)
 
 @task_completed_subscriber
 async def add_task_result_to_history(data: CompletedTaskData):

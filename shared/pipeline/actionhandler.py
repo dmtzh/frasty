@@ -10,6 +10,7 @@ from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
+from shared.pipeline.types import StepError
 from shared.utils.parse import parse_value
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
@@ -64,15 +65,22 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
         match opt_completed_res:
             case None:
                 return None
+            case CompletedWith.Error(message=err_message):
+                step_err = StepError(input_data.step_id, err_message)
+                completed_err = CompletedWith.Error(str(step_err))
+                data = CompleteActionData(input_data.run_id, input_data.step_id, completed_err, input_data.metadata)
+                complete_step_res = await complete_action_func(data)
+                return complete_step_res.map(lambda _: completed_err)
             case completed_res:
                 data = CompleteActionData(input_data.run_id, input_data.step_id, completed_res, input_data.metadata)
                 complete_step_res = await complete_action_func(data)
                 return complete_step_res.map(lambda _: completed_res)
     def wrapper(action_data_res: Result[ActionData[TCfg, D], Any]):
-        async def err_to_complete_action_or_none(err):
+        async def validate_action_err_to_complete_action_or_none(err: Any):
             match err:
                 case _ValidateActionError():
-                    completed_err = CompletedWith.Error(err.error)
+                    step_err = StepError(err.step_id, err.error)
+                    completed_err = CompletedWith.Error(str(step_err))
                     data = CompleteActionData(err.run_id, err.step_id, completed_err, err.metadata)
                     complete_step_res = await complete_action_func(data)
                     return complete_step_res.map(lambda _: completed_err)
@@ -82,7 +90,7 @@ def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Corou
         #     return None
         return action_data_res\
             .map(process_action_data)\
-            .map_error(err_to_complete_action_or_none)\
+            .map_error(validate_action_err_to_complete_action_or_none)\
             .merge()
             # .map_error(err_to_none)\
             # .merge()
