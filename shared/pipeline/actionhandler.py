@@ -10,7 +10,6 @@ from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
-from shared.pipeline.types import StepError
 from shared.utils.parse import parse_value
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
@@ -58,6 +57,11 @@ class _ValidateActionError:
     run_id: RunIdValue
     step_id: StepIdValue
     metadata: Metadata
+
+@dataclass(frozen=True)
+class StepError:
+    step_id: StepIdValue
+    error: Any
 
 def _action_handler_adapter[TCfg, D](func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]], complete_action_func: Callable[[CompleteActionData], Coroutine[Any, Any, Result]]) -> ActionHandler[TCfg, D]:
     async def process_action_data(input_data: ActionData[TCfg, D]):

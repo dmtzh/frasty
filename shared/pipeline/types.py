@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from typing import Any
 
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
@@ -38,8 +37,3 @@ class CompletedDefinitionData:
     definition_id: DefinitionIdValue
     result: CompletedResult
     metadata: Metadata
-
-@dataclass(frozen=True)
-class StepError:
-    step_id: StepIdValue
-    error: Any
