@@ -29,7 +29,7 @@ def parse_bool_str(s: str) -> bool | None:
         >>> parse_bool_str("invalid")
         None
     """
-    if s is None:
+    if not isinstance(s, str):
         return None
     bool_map = {
         "true": True,
