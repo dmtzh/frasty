@@ -116,7 +116,7 @@ class DataDtoAdapter:
         if "input_data" in input:
             match input["input_data"]:
                 case []:
-                    return Result.Error([ValueMissing("input_data")])
+                    return Result.Ok([])
                 case [*list_data]:
                     return traverse(
                         parse_list_data_item,
