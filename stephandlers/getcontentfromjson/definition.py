@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from expression import Result
 
 from shared.domaindefinition import StepDefinition
-from shared.utils.parse import parse_non_empty_str
+from shared.utils.parse import parse_non_empty_str, parse_value
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid, ValueError as ValueErr
 from stepdefinitions.shared import ContentData, ListOfContentData
@@ -16,11 +16,11 @@ class GetContentFromJsonConfig:
     @staticmethod
     def create(query: str, output_name: str | None) -> Result["GetContentFromJsonConfig", list[ValueErr]]:
         def validate_query() -> Result[str, list[ValueErr]]:
-            return parse_non_empty_str(query, "query").map_error(lambda _: [ValueInvalid("query")])
+            return parse_value(query, "query", parse_non_empty_str).map_error(lambda _: [ValueInvalid("query")])
         def validate_output_name() -> Result[str | None, list[ValueErr]]:
             if not isinstance(output_name, str):
                 return Result.Ok(None)
-            return parse_non_empty_str(output_name, "output_name").map_error(lambda _: [ValueInvalid("output_name")])
+            return parse_value(output_name, "output_name", parse_non_empty_str).map_error(lambda _: [ValueInvalid("output_name")])
             
         query_res = validate_query()
         output_name_res = validate_output_name()

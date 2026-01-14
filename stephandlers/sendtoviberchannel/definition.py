@@ -23,7 +23,7 @@ class SendToViberChannelConfig:
             return parse_value(channel_id, "channel_id", ViberChannelIdValue.from_value_with_checksum)\
                 .map_error(lambda _: [ValueInvalid("channel_id")])
         def validate_title() -> Result[str, list[ValueErr]]:
-            return parse_non_empty_str(title, "title").map_error(lambda _: [ValueInvalid("title")])
+            return parse_value(title, "title", parse_non_empty_str).map_error(lambda _: [ValueInvalid("title")])
         channel_id_res = validate_channel_id()
         title_res = validate_title()
         match channel_id_res, title_res:
