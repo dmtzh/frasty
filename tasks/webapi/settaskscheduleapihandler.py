@@ -12,7 +12,7 @@ from fastapi.exceptions import RequestValidationError
 from shared.customtypes import ScheduleIdValue, TaskIdValue, Error
 from shared.infrastructure.storage.repository import NotFoundError, StorageError, NotFoundException
 from shared.task import Task
-from shared.tasksstore import legacy_tasks_storage
+from shared.tasksstore import TasksStore
 from shared.utils.asyncresult import AsyncResult, coroutine_result, async_ex_to_error_result, async_result
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId
@@ -50,28 +50,31 @@ def validate_id(raw_id_with_checksum: str) -> Result[TaskIdValue, InvalidId]:
         case id:
             return Result.Ok(id)
 
-@async_result
-@async_ex_to_error_result(StorageError.from_exception)
-async def get_task(task_id: TaskIdValue) -> Result[Task, NotFoundError]:
-    opt_task = await legacy_tasks_storage.get(task_id)
-    match opt_task:
-        case None:
-            return Result.Error(NotFoundError(f"Task {task_id} not found"))
-        case task:
-            return Result.Ok(task)
-
-@async_result
-@async_ex_to_error_result(StorageError.from_exception)
-@async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
-@legacy_tasks_storage.with_storage
-def apply_set_schedule_id(task: Task | None, schedule_id: ScheduleIdValue):
-    if task is None:
-        raise NotFoundException()
-    new_task = Task(task.name, task.definition_id, schedule_id)
-    return None, new_task
-
 @coroutine_result()
-async def set_schedule_workflow(set_schedule_handler: Callable[[TaskIdValue, SetScheduleResource], Coroutine[Any, Any, Result[ScheduleIdValue, ScheduleValidationError | SetScheduleUnexpectedError]]], raw_id_with_checksum: str, resource: SetScheduleResource):
+async def set_schedule_workflow(
+    set_schedule_handler: Callable[[TaskIdValue, SetScheduleResource], Coroutine[Any, Any, Result[ScheduleIdValue, ScheduleValidationError | SetScheduleUnexpectedError]]],
+    tasks_storage: TasksStore,
+    raw_id_with_checksum: str,
+    resource: SetScheduleResource):
+    @async_result
+    @async_ex_to_error_result(StorageError.from_exception)
+    async def get_task(task_id: TaskIdValue) -> Result[Task, NotFoundError]:
+        opt_task = await tasks_storage.get(task_id)
+        match opt_task:
+            case None:
+                return Result.Error(NotFoundError(f"Task {task_id} not found"))
+            case task:
+                return Result.Ok(task)
+    @async_result
+    @async_ex_to_error_result(StorageError.from_exception)
+    @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
+    @tasks_storage.with_storage
+    def apply_set_schedule_id(task: Task | None, schedule_id: ScheduleIdValue):
+        if task is None:
+            raise NotFoundException()
+        new_task = Task(task.name, task.definition_id, schedule_id)
+        return None, new_task
+    
     task_id = await AsyncResult.from_result(validate_id(raw_id_with_checksum))
     await get_task(task_id)
     schedule_id = await async_result(set_schedule_handler)(task_id, resource)
@@ -112,8 +115,8 @@ async def http_request_set_schedule_handler(id: TaskIdValue, resource: SetSchedu
         except aiohttp.client_exceptions.ClientConnectorError:
             return Result.Error(SetScheduleUnexpectedError(f"Cannot connect to {set_schedule_url})"))
 
-async def handle(raw_id_with_checksum: str, request: SetScheduleRequest):
-    res = await set_schedule_workflow(http_request_set_schedule_handler, raw_id_with_checksum, request.resource)
+async def handle(tasks_storage: TasksStore, raw_id_with_checksum: str, request: SetScheduleRequest):
+    res = await set_schedule_workflow(http_request_set_schedule_handler, tasks_storage, raw_id_with_checksum, request.resource)
     match res:
         case Result(tag=ResultTag.OK, ok=id) if type(id) is ScheduleIdValue:
             id_with_checksum = id.to_value_with_checksum()

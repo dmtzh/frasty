@@ -5,7 +5,7 @@ import runtaskapihandler
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task
-from shared.tasksstore import tasks_storage
+from shared.tasksstore import legacy_tasks_storage, tasks_storage
 from shared.utils.asyncresult import async_ex_to_error_result
 
 import addtaskapihandler
@@ -15,7 +15,7 @@ from config import DefinitionValidationError, add_definition, app, execute_task
 
 @app.post("/tasks/legacy/{id}/schedule", status_code=202)
 async def set_legacy_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
-    return await settaskscheduleapihandler.handle(id, request)
+    return await settaskscheduleapihandler.handle(legacy_tasks_storage, id, request)
 
 @app.delete("/tasks/legacy/{id}/schedule/{schedule_id}", status_code=202)
 async def clear_legacy_schedule(id: str, schedule_id: str):
@@ -65,5 +65,11 @@ async def run(id: str):
         execute_task_res = await execute_task(task_id)
         return execute_task_res.map(lambda action_data: action_data.run_id)
     return await runtaskapihandler.handle(run_task_handler, id)
+
+# ------------------------------------------------------------------------------------------------------------
+
+@app.post("/tasks/{id}/schedule", status_code=202)
+async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
+    return await settaskscheduleapihandler.handle(tasks_storage, id, request)
 
 # ------------------------------------------------------------------------------------------------------------
