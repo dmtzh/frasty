@@ -19,7 +19,7 @@ async def set_legacy_schedule(id: str, request: settaskscheduleapihandler.SetSch
 
 @app.delete("/tasks/legacy/{id}/schedule/{schedule_id}", status_code=202)
 async def clear_legacy_schedule(id: str, schedule_id: str):
-    return await cleartaskscheduleapihandler.handle(id, schedule_id)
+    return await cleartaskscheduleapihandler.handle(legacy_tasks_storage, id, schedule_id)
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -71,5 +71,11 @@ async def run(id: str):
 @app.post("/tasks/{id}/schedule", status_code=202)
 async def set_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
     return await settaskscheduleapihandler.handle(tasks_storage, id, request)
+
+# ------------------------------------------------------------------------------------------------------------
+
+@app.delete("/tasks/{id}/schedule/{schedule_id}", status_code=202)
+async def remove_schedule(id: str, schedule_id: str):
+    return await cleartaskscheduleapihandler.handle(tasks_storage, id, schedule_id)
 
 # ------------------------------------------------------------------------------------------------------------
