@@ -17,10 +17,6 @@ from config import DefinitionValidationError, add_definition, app, execute_task
 async def set_legacy_schedule(id: str, request: settaskscheduleapihandler.SetScheduleRequest):
     return await settaskscheduleapihandler.handle(legacy_tasks_storage, id, request)
 
-@app.delete("/tasks/legacy/{id}/schedule/{schedule_id}", status_code=202)
-async def clear_legacy_schedule(id: str, schedule_id: str):
-    return await cleartaskscheduleapihandler.handle(legacy_tasks_storage, id, schedule_id)
-
 # ------------------------------------------------------------------------------------------------------------
 
 @app.post("/tasks", status_code=201)
