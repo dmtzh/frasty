@@ -14,7 +14,7 @@ from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler, viber_api_config
+from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 import fetchnewdata.handler as fetchnewdatahandler
@@ -23,8 +23,6 @@ import getcontentfromjson.handler as getcontentfromjsonhandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
-from sendtoviberchannel.definition import SendToViberChannel, SendToViberChannelConfig
-import sendtoviberchannel.handler as sendtoviberchannelhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -34,17 +32,6 @@ def handle_get_content_from_json_command(step_data: StepData[GetContentFromJsonC
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.definition.config, step_data.data)
     res = getcontentfromjsonhandler.handle(cmd)
     return res
-
-# ------------------------------------------------------------------------------------------------------------
-
-@step_handler(SendToViberChannel, SendToViberChannel.validate_input)
-def handle_send_to_viber_channel_command(step_data: StepData[SendToViberChannelConfig, list]):
-    cmd = sendtoviberchannelhandler.SendToViberChannelCommand(
-        step_data.definition.config.channel_id,
-        step_data.definition.config.title,
-        step_data.data
-    )
-    return sendtoviberchannelhandler.handle(viber_api_config, cmd)
 
 # ------------------------------------------------------------------------------------------------------------
 

@@ -21,24 +21,16 @@ from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from fetchnewdata.fetchidvalue import FetchIdValue
 from getcontentfromjson.definition import GetContentFromJson
-from sendtoviberchannel.config import ViberApiConfig
-from sendtoviberchannel.definition import SendToViberChannel
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
-    SendToViberChannel,
     GetContentFromJson
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
-
-_viber_api_config = ViberApiConfig.parse(os.environ["VIBER_API_URL"], os.environ["VIBER_API_HTTP_METHOD"])
-if _viber_api_config is None:
-    raise ValueError("Invalid Viber API configuration")
-viber_api_config = _viber_api_config
 
 complete_step = config.complete_step
 

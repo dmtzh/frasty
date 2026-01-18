@@ -20,7 +20,6 @@ from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLink
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
-from stepdefinitions.viber import SendToViberChannel
 from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
 run_action = config.run_action
@@ -43,7 +42,7 @@ def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]]
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
-    FetchNewData, SendToViberChannel,
+    FetchNewData,
     GetContentFromJson
 ]
 for step_definition in step_definitions:

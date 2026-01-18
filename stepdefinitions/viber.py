@@ -1,1 +1,0 @@
-from stephandlers.sendtoviberchannel.definition import SendToViberChannel
