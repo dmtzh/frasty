@@ -9,14 +9,12 @@ from shared.definition import ActionDefinition, Definition
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.pipeline.actionhandler import ActionData
-from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, RunTaskData
 from shared.task import Task
 from shared.tasksstore import tasks_storage
 from shared.utils.asyncresult import async_ex_to_error_result
-from shared.utils.result import ResultTag, lift_param
+from shared.utils.result import lift_param
 
-from config import app, execute_definition, execute_task_handler, publish_completed_definition, run_definition, run_task_handler
-import runlegacytaskdefinitionhandler
+from config import app, execute_definition, execute_task_handler
 
 @execute_task_handler
 async def handle_execute_task_action(data: ActionData[None, TaskIdValue]):
@@ -51,28 +49,6 @@ async def handle_execute_task_action(data: ActionData[None, TaskIdValue]):
     execute_definition_data_res = task_res.map(to_execute_definition_data)
     execute_definition_res = await lift_param(execute_definition)(execute_definition_data_res)
     return execute_definition_res.map(ok_to_none).default_with(error_to_completed_result)
-
-@run_task_handler
-async def handle_run_legacy_task_definition_command(data: RunTaskData):
-    def run_definition_handler(definition_id: DefinitionIdValue):
-        metadata = data.metadata.clone()
-        metadata.set_task_id(data.task_id)
-        run_def_data = RunDefinitionData(data.run_id, definition_id, metadata)
-        return run_definition(run_def_data)
-    
-    cmd = runlegacytaskdefinitionhandler.RunTaskDefinitionCommand(data.task_id, data.run_id)
-    run_task_definition_res = await runlegacytaskdefinitionhandler.handle(run_definition_handler, cmd)
-    match run_task_definition_res:
-        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
-            return None
-        case Result(tag=ResultTag.ERROR, error=error):
-            definition_id = DefinitionIdValue(data.run_id)
-            error_result = CompletedWith.Error(str(error))
-            compl_def_data = CompletedDefinitionData(data.run_id, definition_id, error_result, data.metadata)
-            publish_completed_definition_res = await publish_completed_definition(compl_def_data)
-            return publish_completed_definition_res.map(lambda _: error_result)
-        case _:
-            return run_task_definition_res
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())

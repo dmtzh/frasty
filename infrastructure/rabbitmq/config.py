@@ -9,7 +9,7 @@ from faststream.rabbit import RabbitBroker
 
 from shared.pipeline.actionhandler import ActionInput
 from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue, TaskIdValue
+from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import HandlerContinuation, StepDefinitionType, StepHandlerContinuation, Subscriber
 from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepData
@@ -45,15 +45,6 @@ def action_handler(action_name: str, action_handler: Callable[[Result[ActionInpu
 def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, data.metadata.to_dict())
-
-def run_task_handler(handler: HandlerContinuation[RunTaskData]):
-    def input_adapter(task_id: TaskIdValue, run_id: RunIdValue, metadata: dict):
-        return RunTaskData(task_id, run_id, Metadata(metadata))
-    return rabbit_task.handler(_rabbit_client, input_adapter)(handler)
-
-def run_definition(data: RunDefinitionData) -> Coroutine[Any, Any, Result[None, Any]]:
-    rabbit_run_definition = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_definition.run)
-    return rabbit_run_definition(_rabbit_client, data.run_id, data.definition_id, data.metadata.to_dict())
 
 def run_definition_handler(handler: HandlerContinuation[RunDefinitionData]):
     def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):

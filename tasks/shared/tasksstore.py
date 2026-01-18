@@ -47,6 +47,4 @@ class TasksStore:
     def with_storage(self, func: Callable[Concatenate[Task | None, P], tuple[R, Task]]):
         return self._item_action(func)
     
-legacy_tasks_storage = TasksStore(f"Legacy{Task.__name__}")
-
 tasks_storage = TasksStore(Task.__name__)

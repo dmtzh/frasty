@@ -15,7 +15,6 @@ from shared.utils.result import ResultTag
 from .client import RabbitMQClient
 from .error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from .logging import RabbitMessageLoggerCreator
-from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, command_handler_logging_middleware, RequeueChance
 
 R = TypeVar("R")
@@ -23,18 +22,6 @@ P = ParamSpec("P")
 RUN_DEFINITION_COMMAND = "run_definition"
 
 class _python_pickle:
-    @staticmethod
-    def data_to_message(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict) -> PythonPickleMessage:
-        is_metadata_valid = isinstance(metadata, dict)
-        if not is_metadata_valid:
-            raise ValueError(f"Invalid 'metadata' value {metadata}")
-        run_id_with_checksum = run_id.to_value_with_checksum()
-        definition_id_with_checksum = definition_id.to_value_with_checksum()
-        command_data = {"run_id": run_id_with_checksum, "definition_id": definition_id_with_checksum, "metadata": metadata}
-        correlation_id = run_id_with_checksum
-        data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
-        return PythonPickleMessage(data_with_correlation_id)
-
     class decoder():
         def __init__(self, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
             self._input_adapter = input_adapter
@@ -120,11 +107,6 @@ class _python_pickle:
         task_id = task_id_res.default_value(TaskIdValue(None))
         run_id = run_id_res.default_value(RunIdValue(None))
         return logger_creator.create(task_id, run_id, StepIdValue(None))
-
-def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):
-    command = RUN_DEFINITION_COMMAND
-    message = _python_pickle.data_to_message(run_id, definition_id, metadata)
-    return rabbit_client.send_command(command, message)
 
 class handler:
     def __init__(self, rabbit_client: RabbitMQClient, input_adapter: Callable[[RunIdValue, DefinitionIdValue, dict], R]):
