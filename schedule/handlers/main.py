@@ -2,7 +2,7 @@
 import functools
 
 from shared.commands import Command, ClearCommand, SetCommand
-from shared.customtypes import TaskIdValue, RunIdValue
+from shared.customtypes import TaskIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
@@ -10,12 +10,11 @@ from shared.utils.asyncresult import async_catch_ex
 
 import cleartaskschedulehandler
 import settaskschedulehandler
-from config import app, change_task_schedule_handler, logger, run_legacy_task, run_task, scheduler
+from config import app, change_task_schedule_handler, logger, run_task, scheduler
 
-async def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
+def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")
-    await run_task(task_id, schedule.schedule_id)
-    await run_legacy_task(task_id, RunIdValue.new_id(), schedule.schedule_id)
+    return run_task(task_id, schedule.schedule_id)
     
 @app.after_startup
 async def init_scheduled_tasks():
