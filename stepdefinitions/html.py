@@ -5,7 +5,7 @@ from expression import Result
 from shared.domaindefinition import StepDefinition
 from shared.validation import ValueMissing, ValueInvalid, ValueError as ValueErr
 
-from .shared import HttpResponseData, ContentData, ListOfContentData, ListOfDictData
+from .shared import HttpResponseData, ContentData, ListOfContentData
 
 class FilterHtmlResponse(StepDefinition[None]):
     def __init__(self):
@@ -22,6 +22,10 @@ class FilterHtmlResponse(StepDefinition[None]):
     @staticmethod
     def create():
         return Result[StepDefinition, list[ValueErr]].Ok(FilterHtmlResponse())
+    
+    @staticmethod
+    def validate_input(data):
+        return HttpResponseData.from_dict(data).map(HttpResponseData.to_dict)
 
 @dataclass(frozen=True)
 class GetContentFromHtmlConfig:
@@ -97,62 +101,6 @@ class GetContentFromHtml(StepDefinition[GetContentFromHtmlConfig]):
                 return ListOfContentData.from_list(list_data).map(ListOfContentData.to_list)
             case _:
                 return Result.Error([ValueInvalid("data")])
-
-@dataclass(frozen=True)
-class GetLinksFromHtmlConfig:
-    text_name: str | None
-    link_name: str | None
-
-    @staticmethod
-    def create(text_name: str | None, link_name: str | None) -> Result[GetLinksFromHtmlConfig, list[ValueErr]]:
-        def validate_text_name() -> Result[str | None, list[ValueErr]]:
-            if not isinstance(text_name, str):
-                return Result.Ok(None)
-            match text_name.strip():
-                case "":
-                    return Result.Error([ValueInvalid("text_name")])
-                case text_name_stripped:
-                    return Result.Ok(text_name_stripped)
-        def validate_link_name() -> Result[str | None, list[ValueErr]]:
-            if not isinstance(link_name, str):
-                return Result.Ok(None)
-            match link_name.strip():
-                case "":
-                    return Result.Error([ValueInvalid("link_name")])
-                case link_name_stripped:
-                    return Result.Ok(link_name_stripped)
-        text_name_res = validate_text_name()
-        link_name_res = validate_link_name()
-        errors = text_name_res.swap().default_value([]) + link_name_res.swap().default_value([])
-        match errors:
-            case []:
-                config = GetLinksFromHtmlConfig(text_name_res.ok, link_name_res.ok)
-                return Result.Ok(config)
-            case _:
-                return Result.Error(errors)
-
-type GetLinksFromHtmlInputType = HtmlContentData | ListOfContentData
-
-class GetLinksFromHtml(StepDefinition[GetLinksFromHtmlConfig]):
-    def __init__(self, config: GetLinksFromHtmlConfig):
-        super().__init__(config=config)
-    
-    @property
-    def input_type(self) -> type:
-        return GetLinksFromHtmlInputType.__value__
-    
-    @property
-    def output_type(self) -> type:
-        return ListOfDictData
-    
-    @staticmethod
-    def create(text_name: str | None = None, link_name: str | None = None):
-        config_res = GetLinksFromHtmlConfig.create(text_name=text_name, link_name=link_name)
-        return config_res.map(GetLinksFromHtml)
-    
-    @staticmethod
-    def validate_input(data):
-        return GetContentFromHtml.validate_input(data)
 
 class HtmlContentData(ContentData):
     def __init__(self, content: str):

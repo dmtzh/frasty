@@ -14,7 +14,7 @@ from shared.pipeline.handlers import DefinitionCompletedSubscriberAdapter, StepD
 from shared.pipeline.logging import with_input_output_logging, with_input_output_logging_subscriber
 from shared.pipeline.types import CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.parse import parse_value
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
@@ -24,7 +24,7 @@ from getcontentfromjson.definition import GetContentFromJson
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
+    FilterHtmlResponse, GetContentFromHtml,
     GetContentFromJson
 ]
 for step_definition in step_definitions:

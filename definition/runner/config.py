@@ -16,7 +16,7 @@ from shared.pipeline.handlers import to_continuation
 from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import CompleteStepData, RunDefinitionData
 from shared.utils.parse import parse_from_dict
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
@@ -41,7 +41,7 @@ def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]]
 
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml, GetLinksFromHtml,
+    FilterHtmlResponse, GetContentFromHtml,
     FetchNewData,
     GetContentFromJson
 ]

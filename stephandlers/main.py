@@ -8,7 +8,7 @@ from shared.pipeline.types import CompleteStepData, StepData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml, GetLinksFromHtmlConfig, GetLinksFromHtml
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
@@ -21,7 +21,6 @@ import fetchnewdata.handler as fetchnewdatahandler
 from getcontentfromjson.definition import GetContentFromJson, GetContentFromJsonConfig
 import getcontentfromjson.handler as getcontentfromjsonhandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
-import getlinksfromhtml.handler as getlinksfromhtmlhandler
 import requesturl.handler as requesturlhandler
 
 # ------------------------------------------------------------------------------------------------------------
@@ -31,15 +30,6 @@ import requesturl.handler as requesturlhandler
 def handle_get_content_from_json_command(step_data: StepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
     cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.definition.config, step_data.data)
     res = getcontentfromjsonhandler.handle(cmd)
-    return res
-
-# ------------------------------------------------------------------------------------------------------------
-
-@step_handler(GetLinksFromHtml, GetLinksFromHtml.validate_input)
-@make_async
-def handle_get_links_from_html_command(step_data: StepData[GetLinksFromHtmlConfig, dict | list]):
-    cmd = getlinksfromhtmlhandler.GetLinksFromHtmlCommand(step_data.definition.config, step_data.data)
-    res = getlinksfromhtmlhandler.handle(cmd)
     return res
 
 # ------------------------------------------------------------------------------------------------------------

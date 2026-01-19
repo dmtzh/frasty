@@ -10,7 +10,7 @@ from shared.completedresult import CompletedWith
 from runner import runlegacydefinitionhandler
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue
 from shared.domaindefinition import Definition
-from stepdefinitions.html import GetContentFromHtml, GetContentFromHtmlConfig, GetLinksFromHtml, GetLinksFromHtmlConfig
+from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml, GetContentFromHtmlConfig
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 
@@ -31,11 +31,14 @@ def definition1():
 
 @pytest.fixture(scope="session")
 def definition2():
-    input_data = {"content": "html content"}
-    first_step_def_config = GetContentFromHtmlConfig(css_selector="a", regex_selector=None, output_name=None)
-    first_step_def = GetContentFromHtml(first_step_def_config)
-    second_step_def_config = GetLinksFromHtmlConfig(None, None)
-    second_step_def = GetLinksFromHtml(second_step_def_config)
+    input_data = {
+            "status_code": 200,
+            "content_type": "text/html",
+            "content": "<html><body>test html content</body></html>"
+        }
+    first_step_def = FilterHtmlResponse()
+    second_step_def_config = GetContentFromHtmlConfig(css_selector="a", regex_selector=None, output_name=None)
+    second_step_def = GetContentFromHtml(second_step_def_config)
     two_steps_def = [first_step_def, second_step_def]
     definition = Definition.from_steps(input_data, two_steps_def).ok
     return definition
