@@ -11,7 +11,9 @@ import shared.domaindefinition as shdomaindef
 import shared.dtodefinition as shdtodef
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
+from shared.infrastructure.storage.repository import AlreadyExistsException, NotFoundError, NotFoundException, StorageError
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
+from shared.utils.asyncresult import async_ex_to_error_result
 
 class DefinitionsStore[T]:
     def __init__(self, items_sub_folder_name: str, to_list: Callable[[T], list[dict[str, Any]]], from_list: Callable[[list[dict[str, Any]]], Result[T, Any]]):
@@ -30,9 +32,18 @@ class DefinitionsStore[T]:
     def add(self, id: DefinitionIdValue, definition: T):
         def add_func(opt_def: T | None):
             if opt_def is not None:
-                raise ValueError("Definition already exists")
+                raise AlreadyExistsException(f"Definition {id} already exists")
             return None, definition
         return self._item_action(add_func)(id)
+    
+    @async_ex_to_error_result(StorageError.from_exception)
+    @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
+    def update(self, id: DefinitionIdValue, definition: T):
+        def update_func(opt_def: T | None):
+            if opt_def is None:
+                raise NotFoundException(f"Definition {id} not found")
+            return None, definition
+        return self._item_action(update_func)(id)
     
     async def get_with_ver(self, id: DefinitionIdValue):
         opt_ver_with_definition = await self._file_repo_with_ver.get(id)

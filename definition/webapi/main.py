@@ -82,6 +82,42 @@ async def get_definition(id: str):
 
 # ------------------------------------------------------------------------------------------------------------
 
+class ReplaceDefinitionRequest(BaseModel):
+    resource: list[dict[str, Any]]
+@app.put("/definitions/{id}")
+async def replace_definition(id: str, request: ReplaceDefinitionRequest):
+    async def apply_replace_definition(definition: Definition, id: DefinitionIdValue):
+        update_res = await definitions_storage.update(id, definition)
+        return update_res.map(lambda _: definition)
+    def err_to_http(error: NotFoundError | StorageError | InputValidationError):
+        match error:
+            case InputValidationError(error=StepsMissing()):
+                errors = [{"loc": ["body", "resource"], "type": "missing", "msg": "steps missing"}]
+                raise RequestValidationError(errors)
+            case InputValidationError(error=[*step_validation_errors]):
+                errors = [{"loc": ["body", "resource"], "type": "value_error", "msg": step_validation_error_to_string(err)} for err in step_validation_errors]
+                raise RequestValidationError(errors)
+            case NotFoundError():
+                raise HTTPException(status_code=404)
+            case other_error:
+                raise HTTPException(status_code=503, detail=f"Oops... {other_error}")
+    def step_validation_error_to_string(err: ValueErr) -> str:
+        match err:
+            case ValueMissing(name):
+                return f"'{name}' is missing"
+            case ValueInvalid(name):
+                return f"'{name}' value is invalid"
+    
+    opt_def_id = DefinitionIdValue.from_value_with_checksum(id)
+    if opt_def_id is None:
+        return err_to_http(NotFoundError("Definition not found"))
+    raw_definition = request.resource
+    definition_res = DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError)
+    replace_definition_res = await lift_param(apply_replace_definition)(definition_res, opt_def_id)
+    return replace_definition_res.map(DefinitionAdapter.to_list).default_with(err_to_http)
+
+# ------------------------------------------------------------------------------------------------------------
+
 class ManualRunRequest(BaseModel):
     resource: list[dict[str, Any]]
 @app.post("/definition/manual-run", status_code=202)
