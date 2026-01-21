@@ -14,7 +14,7 @@ from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_cr
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
 from shared.pipeline.handlers import to_continuation
 from shared.pipeline.logging import with_input_output_logging
-from shared.pipeline.types import CompleteStepData, RunDefinitionData
+from shared.pipeline.types import CompleteStepData
 from shared.utils.parse import parse_from_dict
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
@@ -49,11 +49,6 @@ for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
-
-def run_definition_handler(func: Callable[[RunDefinitionData], Coroutine[Any, Any, Result | None]]):
-    handler = to_continuation(func)
-    handler_with_logging = with_input_output_logging(handler, "run_definition")
-    return config.run_definition_handler(handler_with_logging)
 
 run_step = config.run_step
 

@@ -13,17 +13,16 @@ from shared.domainrunning import RunningDefinitionState
 from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.pipeline.actionhandler import ActionData
-from shared.pipeline.types import CompletedDefinitionData, RunDefinitionData, StepData
+from shared.pipeline.types import CompletedDefinitionData, StepData
 from shared.utils.asynchronous import make_async
 from shared.utils.asyncresult import async_ex_to_error_result, coroutine_result, async_result
 from shared.utils.parse import parse_from_dict
 from shared.utils.result import ResultTag
 
-from config import GetDefinitionInput, action_handler, app, complete_step_handler, get_definition_handler, publish_completed_definition, run_action, run_definition_handler, run_step, CompleteStepData
+from config import GetDefinitionInput, action_handler, app, complete_step_handler, get_definition_handler, publish_completed_definition, run_action, run_step, CompleteStepData
 import completeactionhandler
 import completestephandler
 import executedefinitionhandler
-import runlegacydefinitionhandler
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -47,30 +46,6 @@ async def handle_get_definition_action(data: ActionData[None, GetDefinitionInput
     get_definition_with_ver = async_ex_to_error_result(StorageError.from_exception)(definitions_storage.get_with_ver)
     opt_definition_with_ver_res = await get_definition_with_ver(data.input.definition_id)
     return opt_definition_with_ver_res.map(opt_definition_to_completed_result).default_with(lambda err: CompletedWith.Error(str(err)))
-
-# ------------------------------------------------------------------------------------------------------------
-
-@run_definition_handler
-async def handle_run_definition_command(data: RunDefinitionData):
-    def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning, definition_version: runlegacydefinitionhandler.DefinitionVersion):
-        metadata = data.metadata.clone()
-        metadata.set_definition_id(data.definition_id)
-        metadata.set("definition_version", str(definition_version))
-        step_data = StepData(data.run_id, evt.step_id, evt.step_definition, evt.input_data, metadata)
-        return run_step(step_data)
-    
-    cmd = runlegacydefinitionhandler.RunDefinitionCommand(data.run_id, data.definition_id)
-    run_definition_res = await runlegacydefinitionhandler.handle(run_first_step_handler, cmd)
-    match run_definition_res:
-        case Result(tag=ResultTag.ERROR, error=NotFoundError()):
-            return None
-        case Result(tag=ResultTag.ERROR, error=error):
-            error_result = CompletedWith.Error(str(error))
-            compl_def_data = CompletedDefinitionData(data.run_id, data.definition_id, error_result, data.metadata)
-            publish_completed_definition_res = await publish_completed_definition(compl_def_data)
-            return publish_completed_definition_res.map(lambda _: error_result)
-        case _:
-            return run_definition_res
 
 # ------------------------------------------------------------------------------------------------------------
 

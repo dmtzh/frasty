@@ -11,12 +11,6 @@ class RunTaskData:
     metadata: Metadata
 
 @dataclass(frozen=True)
-class RunDefinitionData:
-    run_id: RunIdValue
-    definition_id: DefinitionIdValue
-    metadata: Metadata
-
-@dataclass(frozen=True)
 class StepData[TCfg, D]:
     run_id: RunIdValue
     step_id: StepIdValue

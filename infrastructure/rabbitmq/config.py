@@ -12,11 +12,10 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import HandlerContinuation, StepDefinitionType, StepHandlerContinuation, Subscriber
-from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunDefinitionData, RunTaskData, StepData
+from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunTaskData, StepData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitcompletestep as rabbit_complete_step
-from . import rabbitrundefinition as rabbit_definition
 from . import rabbitdefinitioncompleted as rabbit_definition_completed
 from . import rabbitrunaction as rabbit_action
 from . import rabbitrunstep as rabbit_step
@@ -45,11 +44,6 @@ def action_handler(action_name: str, action_handler: Callable[[Result[ActionInpu
 def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
     return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, data.metadata.to_dict())
-
-def run_definition_handler(handler: HandlerContinuation[RunDefinitionData]):
-    def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, metadata: dict):
-        return RunDefinitionData(run_id, definition_id, Metadata(metadata))
-    return rabbit_definition.handler(_rabbit_client, input_adapter)(handler)
 
 def run_step(data: StepData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_step.run)

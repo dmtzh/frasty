@@ -7,8 +7,6 @@ from expression import Result
 import config
 from shared.customtypes import DefinitionIdValue
 from shared.definition import Definition, DefinitionAdapter
-import shared.domaindefinition as shdomaindef
-import shared.dtodefinition as shdtodef
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repository import AlreadyExistsException, NotFoundError, NotFoundException, StorageError
@@ -51,12 +49,6 @@ class DefinitionsStore[T]:
             return None
         ver, definition = opt_ver_with_definition
         return (definition, ver)
-
-legacy_definitions_storage = DefinitionsStore(
-    f"Legacy{shdomaindef.Definition.__name__}",
-    shdtodef.DefinitionAdapter.to_list,
-    shdtodef.DefinitionAdapter.from_list
-)
 
 definitions_storage = DefinitionsStore(
     Definition.__name__,
