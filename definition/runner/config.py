@@ -20,7 +20,6 @@ from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData
-from stephandlers.getcontentfromjson.definition import GetContentFromJson
 
 run_action = config.run_action
 action_handler = config.action_handler
@@ -42,8 +41,7 @@ def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]]
 step_definitions: list[type[StepDefinition]] = [
     RequestUrl, FilterSuccessResponse,
     FilterHtmlResponse, GetContentFromHtml,
-    FetchNewData,
-    GetContentFromJson
+    FetchNewData
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)

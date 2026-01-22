@@ -20,12 +20,10 @@ from stepdefinitions.requesturl import RequestUrl
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from fetchnewdata.fetchidvalue import FetchIdValue
-from getcontentfromjson.definition import GetContentFromJson
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml,
-    GetContentFromJson
+    FilterHtmlResponse, GetContentFromHtml
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)

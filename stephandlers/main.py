@@ -11,26 +11,15 @@ from shared.validation import ValueInvalid
 from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
-from stepdefinitions.shared import HttpResponseData, ContentData, ListOfContentData
+from stepdefinitions.shared import HttpResponseData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 import fetchnewdata.handler as fetchnewdatahandler
-from getcontentfromjson.definition import GetContentFromJson, GetContentFromJsonConfig
-import getcontentfromjson.handler as getcontentfromjsonhandler
 import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import requesturl.handler as requesturlhandler
-
-# ------------------------------------------------------------------------------------------------------------
-
-@step_handler(GetContentFromJson, GetContentFromJson.validate_input)
-@make_async
-def handle_get_content_from_json_command(step_data: StepData[GetContentFromJsonConfig, ContentData | ListOfContentData]):
-    cmd = getcontentfromjsonhandler.GetContentFromJsonCommand(step_data.definition.config, step_data.data)
-    res = getcontentfromjsonhandler.handle(cmd)
-    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
