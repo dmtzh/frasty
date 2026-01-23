@@ -101,6 +101,17 @@ def test_from_valid_definition_list_with_multi_items_list_input_data():
 
 
 
+def test_from_invalid_list_with_empty_first_step():
+    list_data = [{}]
+    expected_errors = [ValueMissing("input_data")]
+
+    res = DefinitionAdapter.from_list(list_data)
+
+    assert res.is_error()
+    assert res.error == expected_errors
+
+
+
 def test_from_invalid_list_without_input_data():
     list_data = [{"action": "requesturl", "type": "core"}]
     expected_errors = [ValueMissing("input_data")]
