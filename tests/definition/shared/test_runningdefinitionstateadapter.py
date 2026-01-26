@@ -1,21 +1,19 @@
-from shared.domainrunning import RunningDefinitionState
-from shared.dtorunning import RunningDefinitionStateAdapter
+from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
-from shared.domaindefinition import Definition
-from stepdefinitions.html import FilterHtmlResponse
-from stepdefinitions.httpresponse import FilterSuccessResponse
-from stepdefinitions.requesturl import RequestUrl
+from shared.definition import ActionDefinition, Definition
+from shared.runningdefinition import RunningDefinitionState, RunningDefinitionStateAdapter
+
 
 def test_to_list_and_back():
     request_url_data = {
         "url": "http://localhost",
         "http_method": "GET"
     }
-    first_step_def = RequestUrl()
-    second_step_def = FilterSuccessResponse()
-    third_step_def = FilterHtmlResponse()
-    three_steps = [first_step_def, second_step_def, third_step_def]
-    definition = Definition.from_steps(request_url_data, three_steps).ok
+    first_step_def = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, None)
+    second_step_def = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
+    third_step_def = ActionDefinition(ActionName("filterhtmlresponse"), ActionType.CUSTOM, None)
+    three_steps = (first_step_def, second_step_def, third_step_def)
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
