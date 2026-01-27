@@ -40,7 +40,7 @@ class RunningDefinitionsStore[T]:
         id_str = f"{run_id}_{definition_id}"
         return self._file_repo_with_ver.delete(id_str)
 
-running_definitions_storage = RunningDefinitionsStore(
+legacy_running_definitions_storage = RunningDefinitionsStore(
     f"Legacy{RunningDefinitionState.__name__}",
     RunningDefinitionStateAdapter.to_list,
     RunningDefinitionStateAdapter.from_list

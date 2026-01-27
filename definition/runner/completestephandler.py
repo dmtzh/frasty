@@ -11,7 +11,7 @@ from shared.utils.asyncresult import async_ex_to_error_result, async_result, cor
 from shared.utils.result import ResultTag
 
 from shared.domainrunning import RunningDefinitionState
-from shared.runningdefinitionsstore import running_definitions_storage
+from shared.runningdefinitionsstore import legacy_running_definitions_storage
 
 @dataclass(frozen=True)
 class CompleteStepCommand:
@@ -29,7 +29,7 @@ class CompleteStepHandlerStorageError(StorageError):
 @async_result
 @async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
 @async_ex_to_error_result(state_not_found_ex_to_err, NotFoundException)
-@running_definitions_storage.with_storage
+@legacy_running_definitions_storage.with_storage
 def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_step_id: StepIdValue, completed_step_result: CompletedResult):
     if state is None:
         raise NotFoundException()
@@ -63,7 +63,7 @@ def step1_apply_run_next_step(state: RunningDefinitionState | None, completed_st
     return complete_current_step_and_run_next() or run_next_step_from_current() or rerun_next_step_from_current() or (None, state)
 
 @async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
-@running_definitions_storage.with_storage
+@legacy_running_definitions_storage.with_storage
 def step3_apply_fail(state: RunningDefinitionState | None, error: Any):
     if state is None:
         raise RuntimeError(f"fail received None for {id}")
@@ -71,7 +71,7 @@ def step3_apply_fail(state: RunningDefinitionState | None, error: Any):
     return (evt, state)
 
 @async_ex_to_error_result(CompleteStepHandlerStorageError.from_exception)
-@running_definitions_storage.with_storage
+@legacy_running_definitions_storage.with_storage
 def step3_apply_fail_running_step(state: RunningDefinitionState | None, running_step_id: IdValue, error: Any):
     if state is None:
         raise RuntimeError(f"fail_running_step received None for {id}")
