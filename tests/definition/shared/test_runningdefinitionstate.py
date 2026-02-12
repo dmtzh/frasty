@@ -1,12 +1,10 @@
 import pytest
 
-from shared.domainrunning import RunningDefinitionState
+from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
 from shared.customtypes import Error
-from shared.domaindefinition import Definition, StepDefinition
-from stepdefinitions.html import FilterHtmlResponse
-from stepdefinitions.httpresponse import FilterSuccessResponse
-from stepdefinitions.requesturl import RequestUrl
+from shared.definition import ActionDefinition, Definition
+from shared.runningdefinition import RunningDefinitionState
 
 @pytest.fixture
 def request_url_data():
@@ -17,18 +15,18 @@ def request_url_data():
 
 @pytest.fixture
 def two_steps():
-    first_step_def = RequestUrl()
-    second_step_def = FilterSuccessResponse()
+    first_step_def = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, None)
+    second_step_def = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
     return (first_step_def, second_step_def)
 
 @pytest.fixture
-def three_steps(two_steps: tuple[StepDefinition, ...]) -> tuple[StepDefinition, ...]:
-    third_step_def = FilterHtmlResponse()
+def three_steps(two_steps: tuple[ActionDefinition, ...]) -> tuple[ActionDefinition, ...]:
+    third_step_def = ActionDefinition(ActionName("filterhtmlresponse"), ActionType.CUSTOM, None)
     return two_steps + (third_step_def,)
 
 @pytest.fixture
-def definition(request_url_data: dict[str, str], two_steps: tuple[StepDefinition, ...]):
-    return Definition.from_steps(request_url_data, list(two_steps)).ok
+def definition(request_url_data: dict[str, str], two_steps: tuple[ActionDefinition, ...]):
+    return Definition(request_url_data, two_steps)
 
 @pytest.fixture
 def running_definition_state(definition: Definition):
@@ -479,8 +477,8 @@ def test_multiple_run_next_step_issues_definition_completed_when_all_steps_compl
 
 
 
-def test_run_third_step(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_run_third_step(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
 
@@ -496,8 +494,8 @@ def test_run_third_step(request_url_data: dict[str, str], three_steps: tuple[Ste
 
 
 
-def test_run_third_step_output_has_correct_input_data(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_run_third_step_output_has_correct_input_data(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
 
@@ -513,8 +511,8 @@ def test_run_third_step_output_has_correct_input_data(request_url_data: dict[str
 
 
 
-def test_complete_third_step(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_complete_third_step(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
 
@@ -533,8 +531,8 @@ def test_complete_third_step(request_url_data: dict[str, str], three_steps: tupl
 
 
 
-def test_complete_first_step_with_no_data_result(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_complete_first_step_with_no_data_result(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
 
@@ -547,8 +545,8 @@ def test_complete_first_step_with_no_data_result(request_url_data: dict[str, str
 
 
 
-def test_complete_second_step_with_error_result(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_complete_second_step_with_error_result(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
 
@@ -565,8 +563,8 @@ def test_complete_second_step_with_error_result(request_url_data: dict[str, str]
 
 
 
-def test_get_events_has_no_input_data_set_in_step_running_events(request_url_data: dict[str, str], three_steps: tuple[StepDefinition, ...]):
-    definition = Definition.from_steps(request_url_data, list(three_steps)).ok
+def test_get_events_has_no_input_data_set_in_step_running_events(request_url_data: dict[str, str], three_steps: tuple[ActionDefinition, ...]):
+    definition = Definition(request_url_data, three_steps)
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
