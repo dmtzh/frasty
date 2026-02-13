@@ -17,7 +17,6 @@ from shared.utils.result import ResultTag
 from .client import ExistingQueueName, NotExistingQueueName, QueueName, RabbitMQClient
 from .error import ParseError, RabbitMessageError, RabbitMessageErrorCreator, ValidationError, rabbit_message_error_creator
 from .logging import RabbitMessageLoggerCreator
-from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, RequeueChance
 
 DEFINITION_COMPLETED_EVENT = "definition_completed"
@@ -28,19 +27,6 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 class _python_pickle:
-    @staticmethod
-    def data_to_message(run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict) -> PythonPickleMessage:
-        result_dto = CompletedResultAdapter.to_dict(result)
-        is_metadata_valid = isinstance(metadata, dict)
-        if not is_metadata_valid:
-            raise ValueError(f"Invalid 'metadata' value {metadata}")
-        run_id_dict = {"run_id": run_id.to_value_with_checksum()}
-        definition_id_dict = {"definition_id": definition_id.to_value_with_checksum()}
-        event_data = run_id_dict | definition_id_dict | {"result": result_dto, "metadata": metadata}
-        correlation_id = run_id_dict["run_id"]
-        data_with_correlation_id = DataWithCorrelationId(event_data, correlation_id)
-        return PythonPickleMessage(data_with_correlation_id)
-    
     class decoder():
         def __init__(self, queue_name: QueueName, input_adapter: Callable[[RunIdValue, DefinitionIdValue, CompletedResult, dict], R]):
             self._queue_name = queue_name
@@ -145,10 +131,6 @@ class _python_pickle:
             task_id = task_id_res.default_value(TaskIdValue(None))
             run_id = run_id_res.default_value(RunIdValue(None))
             return logger_creator.create(task_id, run_id, StepIdValue(None))
-
-def publish(rabbit_client: RabbitMQClient, run_id: RunIdValue, definition_id: DefinitionIdValue, result: CompletedResult, metadata: dict):
-    message = _python_pickle.data_to_message(run_id, definition_id, result, metadata)
-    return rabbit_client.send_event(DEFINITION_COMPLETED_EVENT, DEFINITION_COMPLETED_EVENT_GROUP, message)
 
 class _logging_middleware:
     def __init__(

@@ -5,8 +5,6 @@ from typing import Any, Concatenate, ParamSpec, TypeVar
 from expression import Result
 
 import config
-from .domainrunning import RunningDefinitionState
-from .dtorunning import RunningDefinitionStateAdapter
 from . import runningdefinition
 from shared.customtypes import DefinitionIdValue, IdValue, RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
@@ -39,12 +37,6 @@ class RunningDefinitionsStore[T]:
     def delete(self, run_id: IdValue, definition_id: IdValue):
         id_str = f"{run_id}_{definition_id}"
         return self._file_repo_with_ver.delete(id_str)
-
-legacy_running_definitions_storage = RunningDefinitionsStore(
-    f"Legacy{RunningDefinitionState.__name__}",
-    RunningDefinitionStateAdapter.to_list,
-    RunningDefinitionStateAdapter.from_list
-)
 
 running_action_definitions_storage = RunningDefinitionsStore(
     runningdefinition.RunningDefinitionState.__name__,

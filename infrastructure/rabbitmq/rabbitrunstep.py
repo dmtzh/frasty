@@ -11,7 +11,6 @@ from faststream.rabbit import RabbitMessage
 
 from shared.customtypes import Error, IdValue, StepIdValue, RunIdValue, TaskIdValue
 import shared.domaindefinition as shdomaindef
-import shared.dtodefinition as shdtodef
 from shared.completedresult import CompletedResult
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name
 from shared.utils.parse import parse_from_dict, parse_value
@@ -21,7 +20,6 @@ from shared.validation import ValueInvalid
 from .client import RabbitMQClient
 from .error import rabbit_message_error_creator, RabbitMessageErrorCreator, ParseError, ValidationError, RabbitMessageError
 from .logging import RabbitMessageLoggerCreator
-from .pythonpickle import DataWithCorrelationId, PythonPickleMessage
 from .rabbitmiddlewares import error_result_to_negative_acknowledge_middleware, command_handler_logging_middleware, RequeueChance
 
 D = TypeVar("D")
@@ -30,18 +28,6 @@ R = TypeVar("R")
 P = ParamSpec("P")
 
 class _python_pickle:
-    @staticmethod
-    def data_to_message(run_id: RunIdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict) -> PythonPickleMessage:
-        step_definition_dict = shdtodef.StepDefinitionAdapter.to_dict(definition)
-        is_metadata_valid = isinstance(metadata, dict)
-        if not is_metadata_valid:
-            raise ValueError(f"Invalid 'metadata' value {metadata}")
-        ids_dict = {"run_id": run_id.to_value_with_checksum(), "step_id": step_id.to_value_with_checksum()}
-        command_data = ids_dict | {"config": step_definition_dict, "definition": step_definition_dict, "data": data, "metadata": metadata}
-        correlation_id = ids_dict["run_id"]
-        data_with_correlation_id = DataWithCorrelationId(command_data, correlation_id)
-        return PythonPickleMessage(data_with_correlation_id)
-    
     class decoder():
         def __init__(self, command: str, data_validator: Callable[[Any], Result[D, Any]], input_adapter: Callable[[RunIdValue, StepIdValue, shdomaindef.StepDefinition[TCfg], D, dict], R]):
             self._command = command
@@ -101,8 +87,7 @@ class _python_pickle:
             run_id_unvalidated, step_id_unvalidated, step_definition_unvalidated, data_unvalidated, metadata_unvalidated = parsed_data
             run_id_res = parse_value(run_id_unvalidated, "run_id", RunIdValue.from_value_with_checksum)
             step_id_res = parse_value(step_id_unvalidated, "step_id", StepIdValue.from_value_with_checksum)
-            step_definition_res = shdtodef.StepDefinitionAdapter.from_dict(step_definition_unvalidated)\
-                .filter(lambda step_def: get_step_definition_name(type(step_def)) == command, [ValueInvalid("step")])\
+            step_definition_res = Result.Error([ValueInvalid("step")])\
                 .map_error(lambda error: f"Invalid 'definition' data: {step_definition_unvalidated}; error: {error}")
             data_res = data_validator(data_unvalidated)\
                 .map_error(lambda _: f"Invalid 'data' value {data_unvalidated}")
@@ -150,11 +135,6 @@ class _python_pickle:
         task_id, run_id, step_id, _ = _python_pickle.parse_message(msg)
         logger_creator = RabbitMessageLoggerCreator(msg.raw_message)
         return logger_creator.create(task_id, run_id, step_id)
-
-def run(rabbit_client: RabbitMQClient, run_id: RunIdValue, step_id: StepIdValue, definition: shdomaindef.StepDefinition, data: Any, metadata: dict):
-    command = get_step_definition_name(type(definition))
-    message = _python_pickle.data_to_message(run_id, step_id, definition, data, metadata)
-    return rabbit_client.send_command(command, message)
 
 class handler[TCfg, D, R]:
     @staticmethod

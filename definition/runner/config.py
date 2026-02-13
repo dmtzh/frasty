@@ -3,23 +3,12 @@ from dataclasses import dataclass
 import os
 from typing import Any
 
-from expression import Result
-
 from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue
-from shared.domaindefinition import StepDefinition
-from shared.infrastructure.stepdefinitioncreatorsstore import step_definition_creators_storage
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
-from shared.pipeline.handlers import to_continuation
-from shared.pipeline.logging import with_input_output_logging
-from shared.pipeline.types import CompleteStepData
 from shared.utils.parse import parse_from_dict
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtml
-from stepdefinitions.httpresponse import FilterSuccessResponse
-from stepdefinitions.requesturl import RequestUrl
-from stepdefinitions.task import FetchNewData
 
 run_action = config.run_action
 action_handler = config.action_handler
@@ -38,23 +27,6 @@ def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]]
         lambda dto_list: GetDefinitionInput.from_dto(dto_list[0])
     )(func)
 
-step_definitions: list[type[StepDefinition]] = [
-    RequestUrl, FilterSuccessResponse,
-    FilterHtmlResponse, GetContentFromHtml,
-    FetchNewData
-]
-for step_definition in step_definitions:
-    step_definition_creators_storage.add(step_definition)
-
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
-
-run_step = config.run_step
-
-def complete_step_handler(func: Callable[[CompleteStepData], Coroutine[Any, Any, Result | None]]):
-    handler = to_continuation(func)
-    handler_with_logging = with_input_output_logging(handler, "complete_step")
-    return config.complete_step_handler(handler_with_logging)
-
-publish_completed_definition = config.publish_completed_definition
 
 app = config.create_faststream_app()
