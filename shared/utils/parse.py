@@ -47,11 +47,15 @@ def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> 
     raw_value = d[key]
     return parse_value(raw_value, key, parser)
 
-def parse_int(value) -> Result[int, str]:
+def parse_int(value) -> int | None:
     try:
-        return Result.Ok(int(value))
+        return int(value)
     except ValueError:
-        return Result.Error(f"invalid int value {value}")
+        return None
+
+def parse_positive_int(value) -> int | None:
+    parsed_int = parse_int(value)
+    return parsed_int if parsed_int is not None and parsed_int > 0 else None
 
 def parse_value[T](value: Any, value_name: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     opt_parsed_value = parser(value)

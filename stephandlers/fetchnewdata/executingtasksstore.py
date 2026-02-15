@@ -9,7 +9,7 @@ from shared.customtypes import TaskIdValue, RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversionlimited import FileWithVersionLimited
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-from shared.utils.parse import parse_from_dict, parse_int
+from shared.utils.parse import parse_from_dict, parse_positive_int
 
 import config
 from .fetchidvalue import FetchIdValue
@@ -37,7 +37,7 @@ class ExecutingTaskData:
         dict_data = yield from Result.Ok(raw_data) if isinstance(raw_data, dict) else Result.Error(f"Invalid data type {type(raw_data)}")
         task_id = yield from parse_from_dict(dict_data, "task_id", TaskIdValue.from_value_with_checksum)
         run_id = yield from parse_from_dict(dict_data, "run_id", RunIdValue.from_value_with_checksum)
-        timestamp = yield from parse_int(dict_data.get("timestamp"))
+        timestamp = yield from parse_from_dict(dict_data, "timestamp", parse_positive_int)
         return ExecutingTaskData(task_id, run_id, timestamp)
 
 class ExecutingTasksDataAdapter:
