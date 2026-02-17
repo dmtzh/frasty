@@ -8,7 +8,7 @@ from shared.pipeline.types import CompleteStepData, StepData
 from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
-from stepdefinitions.html import FilterHtmlResponse, GetContentFromHtmlConfig, GetContentFromHtml
+from stepdefinitions.html import FilterHtmlResponse
 from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.shared import HttpResponseData
@@ -18,17 +18,7 @@ from config import FetchedData, app, complete_step, data_fetched_subscriber, fet
 import filterhtmlresponse.handler as filterhtmlresponsehandler
 import filtersuccessresponse.handler as filtersuccessresponsehandler
 import fetchnewdata.handler as fetchnewdatahandler
-import getcontentfromhtml.handler as getcontentfromhtmlhandler
 import requesturl.handler as requesturlhandler
-
-# ------------------------------------------------------------------------------------------------------------
-
-@step_handler(GetContentFromHtml, GetContentFromHtml.validate_input)
-@make_async
-def handle_get_content_from_html_command(step_data: StepData[GetContentFromHtmlConfig, dict | list]):
-    cmd = getcontentfromhtmlhandler.GetContentFromHtmlCommand(step_data.definition.config, step_data.data)
-    res = getcontentfromhtmlhandler.handle(cmd)
-    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
