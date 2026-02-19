@@ -27,8 +27,6 @@ python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./infrastructure $publish_infrastructure_folder -e $exclude_folders
 New-Item -Path $publish_stepdefinitions_folder -ItemType Directory
 Copy-Item -Path ./stepdefinitions/shared.py -Destination $publish_stepdefinitions_folder
-Copy-Item -Path ./stepdefinitions/html.py -Destination $publish_stepdefinitions_folder
-Copy-Item -Path ./stepdefinitions/httpresponse.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path ./stepdefinitions/requesturl.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path ./stepdefinitions/task.py -Destination $publish_stepdefinitions_folder
 Copy-Item -Path $publish_folder/../Dockerfile -Destination $publish_folder

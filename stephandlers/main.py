@@ -5,27 +5,14 @@ from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedWith
 from shared.pipeline.types import CompleteStepData, StepData
-from shared.utils.asyncresult import make_async
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid
-from stepdefinitions.httpresponse import FilterSuccessResponse
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
-from stepdefinitions.shared import HttpResponseData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
 from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler
-import filtersuccessresponse.handler as filtersuccessresponsehandler
 import fetchnewdata.handler as fetchnewdatahandler
 import requesturl.handler as requesturlhandler
-
-# ------------------------------------------------------------------------------------------------------------
-
-@step_handler(FilterSuccessResponse, HttpResponseData.from_dict)
-@make_async
-def handle_filter_success_response_command(step_data: StepData[None, HttpResponseData]):
-    cmd = filtersuccessresponsehandler.FilterSuccessResponseCommand(step_data.data)
-    res = filtersuccessresponsehandler.handle(cmd)
-    return res
 
 # ------------------------------------------------------------------------------------------------------------
 
