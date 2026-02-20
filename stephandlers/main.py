@@ -3,14 +3,13 @@ import functools
 
 from expression import Result
 
-from shared.completedresult import CompletedResult, CompletedWith
-from shared.pipeline.types import CompleteStepData, StepData
+from shared.completedresult import CompletedWith
+from shared.pipeline.types import StepData
 from shared.utils.result import ResultTag
-from shared.validation import ValueInvalid
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import FetchedData, app, complete_step, data_fetched_subscriber, fetch_data, step_handler
+from config import app, fetch_data, step_handler
 import fetchnewdata.handler as fetchnewdatahandler
 import requesturl.handler as requesturlhandler
 
@@ -33,19 +32,6 @@ async def handle_fetch_new_data_command(step_data: StepData[None, FetchNewDataIn
             return CompletedWith.Error(str(error))
         case _:
             return None # we won't complete step now, we will complete only after receive and process data
-
-@data_fetched_subscriber
-async def handle_fetched_data(fetched_data: FetchedData):
-    def fetch_new_data_completed_handler(fetch_cmd: fetchnewdatahandler.FetchNewDataCommand, completed_result: CompletedResult):
-        data = CompleteStepData(fetch_cmd.run_id, fetch_cmd.step_id, completed_result, fetched_data.metadata)
-        return complete_step(data)
-    completed_data = fetchnewdatahandler.CompletedTaskData(fetched_data.task_id, fetched_data.run_id, fetched_data.result)
-    handle_fetched_data_res = await fetchnewdatahandler.handle_fetched_data(fetch_new_data_completed_handler, fetched_data.fetch_id, completed_data)
-    match handle_fetched_data_res:
-        case Result(tag=ResultTag.ERROR, error=ValueInvalid()):
-            return None
-        case _:
-            return handle_fetched_data_res
 
 # ------------------------------------------------------------------------------------------------------------
 
