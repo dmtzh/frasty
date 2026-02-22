@@ -8,21 +8,18 @@ from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from shared.pipeline.actionhandler import ActionInput
-from shared.completedresult import CompletedResult
-from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
+from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
-from shared.pipeline.handlers import StepDefinitionType, StepHandlerContinuation, Subscriber
-from shared.pipeline.types import CompleteStepData, CompletedDefinitionData, RunTaskData, StepData
+from shared.pipeline.handlers import StepDefinitionType, StepHandlerContinuation
+from shared.pipeline.types import CompleteStepData, RunTaskData, StepData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitcompletestep as rabbit_complete_step
-from . import rabbitdefinitioncompleted as rabbit_definition_completed
 from . import rabbitrunaction as rabbit_action
 from . import rabbitrunstep as rabbit_step
 from . import rabbitruntask as rabbit_task
 from .broker import RabbitMQBroker, RabbitMQConfig
 from .client import RabbitMQClient, Error as RabbitClientError
-from .rabbitmiddlewares import RequeueChance
 
 _raw_rabbitmq_url = os.environ["RABBITMQ_URL"]
 _raw_rabbitmq_publisher_confirms = os.environ["RABBITMQ_PUBLISHER_CONFIRMS"]
@@ -55,11 +52,6 @@ def step_handler[TCfg](step_definition_type: StepDefinitionType[TCfg], step_hand
 def complete_step(data: CompleteStepData) -> Coroutine[Any, Any, Result[None, Any]]:
     rabbit_run_complete_step = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_complete_step.run)
     return rabbit_run_complete_step(_rabbit_client, data.run_id, data.step_id, data.result, data.metadata.to_dict())
-
-def definition_completed_subscriber(queue_name: str | None, requeue_chance: RequeueChance) -> Subscriber:
-    def input_adapter(run_id: RunIdValue, definition_id: DefinitionIdValue, completed_result: CompletedResult, metadata: dict):
-        return CompletedDefinitionData(run_id, definition_id, completed_result, Metadata(metadata))
-    return rabbit_definition_completed.subscriber(_rabbit_client, input_adapter, queue_name, requeue_chance)
 
 @asynccontextmanager
 async def lifespan():

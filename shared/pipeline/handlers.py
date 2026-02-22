@@ -7,7 +7,7 @@ from expression import Result
 from shared.completedresult import CompletedResult
 from shared.domaindefinition import StepDefinition
 
-from .types import CompleteStepData, CompletedDefinitionData, StepData
+from .types import CompleteStepData, StepData
 
 type HandlerContinuation[T] = Callable[[Result[T, Any]], Coroutine[Any, Any, Result | None]]
 type Handler[T] = Callable[[HandlerContinuation[T]], Any]
@@ -73,14 +73,9 @@ class HandlerAdapter[T]:
         cont = to_continuation(func)
         return self._handler(cont)
 
-type Subscriber = Handler[CompletedDefinitionData]
-
-def only_from(subscriber: Subscriber, from_: str):
-    def short_circuit_if_not_from(decoratee: HandlerContinuation[CompletedDefinitionData]):
-        async def middleware_func(data: CompletedDefinitionData):
-            return await decoratee(Result.Ok(data)) if data.metadata.get_from() == from_ else None
-        return to_continuation(middleware_func)
-    return with_middleware(subscriber, short_circuit_if_not_from)
-
-class DefinitionCompletedSubscriberAdapter[T](HandlerAdapter[T]):
-    '''Definition completed subscriber adapter'''
+# def sample_middleware(subscriber: Handler[Metadata], from_: str):
+#     def short_circuit_if_not_from(decoratee: HandlerContinuation[Metadata]):
+#         async def middleware_func(data: Metadata):
+#             return await decoratee(Result.Ok(data)) if data.get_from() == from_ else None
+#         return to_continuation(middleware_func)
+#     return with_middleware(subscriber, short_circuit_if_not_from)

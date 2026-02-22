@@ -7,9 +7,8 @@ from typing import Any
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.infrastructure.storage.inmemory import InMemory
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInRepository
-from shared.pipeline.types import CompletedDefinitionData
 
-from config import stress_test_definition_completed_subscriber, lifespan, run_stress_test_task
+from config import lifespan, run_stress_test_task
 
 def get_tasks_to_run(task_ids: list[TaskIdValue], num_of_tasks: int):
     task_count = 0
@@ -103,8 +102,8 @@ if __name__ == "__main__":
         "num_of_tasks": num_of_tasks
     }
 
-    @stress_test_definition_completed_subscriber
-    async def remove_completed_task(data: CompletedDefinitionData):
+    # @stress_test_definition_completed_subscriber
+    async def remove_completed_task(data):
         num_of_completed_tasks = running_tasks_storage.remove(data.run_id)
         print_intermediate_info = num_of_completed_tasks % state["count_of_completed_tasks_for_intermediate_info"] == 0
         if print_intermediate_info:
