@@ -6,16 +6,13 @@ from expression import Result
 
 from infrastructure.rabbitmq import config
 from shared.completedresult import CompletedResult
-from shared.customtypes import Metadata
 from shared.domaindefinition import StepDefinition
 from shared.infrastructure.stepdefinitioncreatorsstore import get_step_definition_name, step_definition_creators_storage
 from shared.pipeline.handlers import StepDefinitionType, step_handler_adapter, validated_data_to_any_data
 from shared.pipeline.logging import with_input_output_logging
-from shared.pipeline.types import RunTaskData, StepData
+from shared.pipeline.types import StepData
 from stepdefinitions.requesturl import RequestUrl
-from stepdefinitions.task import FetchNewData, FetchNewDataInput
-
-from fetchnewdata.fetchidvalue import FetchIdValue
+from stepdefinitions.task import FetchNewData
 
 step_definitions: list[type[StepDefinition]] = [
     FetchNewData, RequestUrl
@@ -33,13 +30,5 @@ def step_handler[TCfg, D](step_definition_type: StepDefinitionType[TCfg], data_v
         config_step_handler = validated_data_to_any_data(step_handler_with_logging, data_validator)
         return config.step_handler(step_definition_type, config_step_handler)
     return wrapper
-
-def fetch_data(step_data: StepData[None, FetchNewDataInput], fetch_id: FetchIdValue):
-    metadata = Metadata()
-    metadata.set_from("fetch new data step")
-    metadata.set_id("fetch_id", fetch_id)
-    metadata.set("parent_metadata", step_data.metadata.to_dict())
-    data = RunTaskData(step_data.data.task_id, step_data.run_id, metadata)
-    return config.run_task(data)
 
 app = config.create_faststream_app()

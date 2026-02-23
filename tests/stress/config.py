@@ -1,14 +1,12 @@
 from contextlib import asynccontextmanager
 
-from infrastructure.rabbitmq import config
-from shared.customtypes import Metadata, RunIdValue, TaskIdValue
-from shared.pipeline.types import RunTaskData
+from expression import Result
 
-def run_stress_test_task(task_id: TaskIdValue, run_id: RunIdValue):
-    metadata = Metadata()
-    metadata.set_from("stress test")
-    data = RunTaskData(task_id, run_id, metadata)
-    return config.run_task(data)
+from infrastructure.rabbitmq import config
+from shared.customtypes import RunIdValue, TaskIdValue
+
+async def run_stress_test_task(task_id: TaskIdValue, run_id: RunIdValue):
+    return Result.Ok(None)
 
 @asynccontextmanager
 async def _lifespan():

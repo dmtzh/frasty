@@ -1,14 +1,8 @@
 from dataclasses import dataclass
 
 from shared.completedresult import CompletedResult
-from shared.customtypes import Metadata, RunIdValue, StepIdValue, TaskIdValue
+from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
-
-@dataclass(frozen=True)
-class RunTaskData:
-    task_id: TaskIdValue
-    run_id: RunIdValue
-    metadata: Metadata
 
 @dataclass(frozen=True)
 class StepData[TCfg, D]:

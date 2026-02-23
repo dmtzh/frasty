@@ -1,6 +1,4 @@
 # import asyncio
-import functools
-
 from expression import Result
 
 from shared.completedresult import CompletedWith
@@ -9,7 +7,7 @@ from shared.utils.result import ResultTag
 from stepdefinitions.requesturl import RequestUrl, RequestUrlInputData
 from stepdefinitions.task import FetchNewData, FetchNewDataInput
 
-from config import app, fetch_data, step_handler
+from config import app, step_handler
 import fetchnewdata.handler as fetchnewdatahandler
 import requesturl.handler as requesturlhandler
 
@@ -24,7 +22,8 @@ def handle_request_url_command(step_data: StepData[None, RequestUrlInputData]):
 
 @step_handler(FetchNewData, FetchNewDataInput.from_dict)
 async def handle_fetch_new_data_command(step_data: StepData[None, FetchNewDataInput]):
-    fetch_data_handler = functools.partial(fetch_data, step_data)
+    async def fetch_data_handler(fetch_id: fetchnewdatahandler.FetchIdValue) -> Result[None, fetchnewdatahandler.FetchDataError]:
+        return Result.Ok(None)
     cmd = fetchnewdatahandler.FetchNewDataCommand(fetch_task_id=step_data.data.task_id, run_id=step_data.run_id, step_id=step_data.step_id)
     res = await fetchnewdatahandler.handle(fetch_data_handler, cmd)
     match res:

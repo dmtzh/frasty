@@ -11,13 +11,12 @@ from shared.pipeline.actionhandler import ActionInput
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.domaindefinition import StepDefinition
 from shared.pipeline.handlers import StepDefinitionType, StepHandlerContinuation
-from shared.pipeline.types import CompleteStepData, RunTaskData, StepData
+from shared.pipeline.types import CompleteStepData, StepData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from . import rabbitcompletestep as rabbit_complete_step
 from . import rabbitrunaction as rabbit_action
 from . import rabbitrunstep as rabbit_step
-from . import rabbitruntask as rabbit_task
 from .broker import RabbitMQBroker, RabbitMQConfig
 from .client import RabbitMQClient, Error as RabbitClientError
 
@@ -37,10 +36,6 @@ def run_action(action_name: str, action_input: ActionInput) -> Coroutine[Any, An
 
 def action_handler(action_name: str, action_handler: Callable[[Result[ActionInput, Any]], Coroutine]):
     return rabbit_action.handler(_rabbit_client, action_name)(action_handler)
-
-def run_task(data: RunTaskData) -> Coroutine[Any, Any, Result[None, Any]]:
-    rabbit_run_task = async_ex_to_error_result(RabbitClientError.UnexpectedError.from_exception)(rabbit_task.run)
-    return rabbit_run_task(_rabbit_client, data.task_id, data.run_id, data.metadata.to_dict())
 
 def step_handler[TCfg](step_definition_type: StepDefinitionType[TCfg], step_handler: StepHandlerContinuation[TCfg, Any]):
     def data_validator(data: Any) -> Result[Any, Any]:
