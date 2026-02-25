@@ -2,8 +2,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from expression import Result
-from expression.collections.block import Block
-from expression.extra.result.traversable import traverse
 
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
@@ -61,87 +59,3 @@ class HttpResponseData:
             "content_type": data.content_type,
             "content": data.content
         }
-
-class DictData:
-    def __init__(self, dict_data: dict):
-        if not isinstance(dict_data, dict) or not dict_data:
-            raise ValueError("dict_data must be non empty dict")
-        self._dict_data = dict_data
-    
-    @staticmethod
-    def to_dict(data: DictData):
-        return data._dict_data
-    
-    @staticmethod
-    def from_dict(data) -> Result[DictData, list[ValueErr]]:
-        match data:
-            case {**dict_data}:
-                return Result.Ok(DictData(dict_data)) if dict_data else Result.Error([ValueInvalid("data")])
-            case _:
-                return Result.Error([ValueInvalid("data")])
-
-class ContentData(DictData):
-    def __init__(self, dict_data: dict):
-        super().__init__(dict_data)
-        if not isinstance(dict_data.get("content"), str):
-            raise ValueError("dict_data['content'] must be str")
-        
-    @property
-    def content(self) -> str:
-        return self._dict_data["content"]
-
-    @staticmethod
-    def from_dict(data):
-        def validate_content(dict_data: DictData) -> Result[ContentData, list[ValueErr]]:
-            raw_dict_data = DictData.to_dict(dict_data)
-            if "content" not in raw_dict_data:
-                return Result.Error([ValueMissing("content")])
-            has_content = isinstance(raw_dict_data.get("content"), str)
-            return Result.Ok(ContentData(raw_dict_data)) if has_content else Result.Error([ValueInvalid("content")])
-        return DictData.from_dict(data).bind(validate_content)
-
-class ListOfDictData:
-    def __init__(self, list_data: list):
-        is_non_empty_list = isinstance(list_data, list) and list_data
-        if not is_non_empty_list:
-            raise ValueError("list_data must be non empty list")
-        all_items_are_non_empty_dict = all(isinstance(item, dict) and dict for item in list_data)
-        if not all_items_are_non_empty_dict:
-            raise ValueError("list_data must be list of non empty dictionaries")
-        self._list_data = list_data
-    
-    @staticmethod
-    def from_list(data) -> Result[ListOfDictData, list[ValueErr]]:
-        match data:
-            case []:
-                return Result.Error([ValueInvalid("data")])
-            case [*list_data]:
-                all_items_are_non_empty_dict = all(isinstance(item, dict) and dict for item in list_data)
-                return Result.Ok(ListOfDictData(list_data)) if all_items_are_non_empty_dict else Result.Error([ValueInvalid("data")])
-            case _:
-                return Result.Error([ValueInvalid("data")])
-    
-    @staticmethod
-    def to_list(data: ListOfDictData):
-        return data._list_data
-
-class ListOfContentData(ListOfDictData):
-    def __init__(self, list_of_content_data: list[ContentData]):
-        is_non_empty_list = isinstance(list_of_content_data, list) and list_of_content_data
-        if not is_non_empty_list:
-            raise ValueError("list_of_content_data must be non empty list")
-        all_items_are_content_data = all(isinstance(item, ContentData) for item in list_of_content_data)
-        if not all_items_are_content_data:
-            raise ValueError("list_of_content_data must be list of content data")
-        list_data = [ContentData.to_dict(item) for item in list_of_content_data]
-        super().__init__(list_data)
-    
-    @staticmethod
-    def from_list(data):
-        def to_list_of_content_data(list_of_dict_data: ListOfDictData):
-            list_data = ListOfDictData.to_list(list_of_dict_data)
-            items_res = traverse(ContentData.from_dict, Block(list_data)).map(list)
-            return items_res
-        list_of_dict_data_res = ListOfDictData.from_list(data)
-        list_of_content_data_res = list_of_dict_data_res.bind(to_list_of_content_data)
-        return list_of_content_data_res.map(ListOfContentData)

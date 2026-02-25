@@ -12,10 +12,9 @@ from shared.pipeline.handlers import StepDefinitionType, step_handler_adapter, v
 from shared.pipeline.logging import with_input_output_logging
 from shared.pipeline.types import StepData
 from stepdefinitions.requesturl import RequestUrl
-from stepdefinitions.task import FetchNewData
 
 step_definitions: list[type[StepDefinition]] = [
-    FetchNewData, RequestUrl
+    RequestUrl
 ]
 for step_definition in step_definitions:
     step_definition_creators_storage.add(step_definition)
