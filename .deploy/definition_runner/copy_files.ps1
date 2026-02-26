@@ -19,14 +19,12 @@ if (Test-Path $publish_folder) {
 }
 
 $publish_shared_folder = $publish_folder + "/shared"
-$publish_stepdefinitions_folder = $publish_folder + "/stepdefinitions"
 $publish_stephandlers_folder = $publish_folder + "/stephandlers"
 $publish_infrastructure_folder = $publish_folder + "/infrastructure"
 
 python $copy_folder_script ./definition/runner $publish_folder -e $exclude_folders
 python $copy_folder_script ./shared $publish_shared_folder -e $exclude_folders
 python $copy_folder_script ./definition/shared $publish_shared_folder -e $exclude_folders
-python $copy_folder_script ./stepdefinitions $publish_stepdefinitions_folder -e $exclude_folders
 $step_handlers_with_definitions = @()
 foreach ($step_child_folder in $step_handlers_with_definitions) {
     New-Item -Path $publish_stephandlers_folder/$step_child_folder -ItemType Directory
