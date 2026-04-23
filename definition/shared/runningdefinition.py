@@ -155,12 +155,12 @@ class RunningDefinitionState:
     def __init__(self):
         self._events: tuple[RunningDefinitionState.Events.Event, ...] = ()
         self._recent_completed_step_id: IdValue | None = None
-        self._running_step_id: IdValue | None = None
+        self._running_step_id: StepIdValue | None = None
 
     def recent_completed_step_id(self) -> IdValue | None:
         return self._recent_completed_step_id
     
-    def running_step_id(self) -> IdValue | None:
+    def running_step_id(self) -> StepIdValue | None:
         return self._running_step_id
     
     def get_events(self):
