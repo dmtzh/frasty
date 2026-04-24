@@ -134,7 +134,9 @@ async def test_handle_returns_no_event_when_first_step_already_completed(convert
         new_state = RunningDefinitionState()
         new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(CompletedWith.Data("completed result data")))
+        first_running_step_id = new_state.running_step_id()
+        assert first_running_step_id is not None
+        evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, CompletedWith.Data("completed result data")))
         return (evt, new_state)
     completed_evt = await convert_to_storage_action(run_first_step_then_complete)(cmd1.run_id, cmd1.definition_id)
 
@@ -221,7 +223,9 @@ async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_alr
         new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         completed_step_result = CompletedWith.Data("completed result data")
-        evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(completed_step_result))
+        first_running_step_id = new_state.running_step_id()
+        assert first_running_step_id is not None
+        evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, completed_step_result))
         return (evt, new_state)
     
     await convert_to_storage_action(run_then_complete_first_step)(cmd1.run_id, cmd1.definition_id)

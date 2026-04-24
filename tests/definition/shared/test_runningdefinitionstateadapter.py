@@ -18,10 +18,14 @@ def test_to_list_and_back():
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = CompletedWith.Data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = CompletedWith.Data("second test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
 
     list_state = RunningDefinitionStateAdapter.to_list(running_definition_state)

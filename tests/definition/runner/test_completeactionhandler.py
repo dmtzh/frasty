@@ -99,9 +99,11 @@ async def test_handle_returns_next_step_running_event_when_step_completed_and_ha
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        running_step_id = state.running_step_id()
+        assert running_step_id is not None
+        cmd_dict["step_id"] = running_step_id
         cmd_dict["result"] = html_response_result
-        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(running_step_id, html_response_result))
         return (evt, state)
     first_step_completed_evt, cmd = await create_complete_step_cmd(apply_set_first_step_completed)
 
@@ -121,9 +123,11 @@ async def test_handle_returns_next_step_running_event_when_next_step_running(cre
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        running_step_id = state.running_step_id()
+        assert running_step_id is not None
+        cmd_dict["step_id"] = running_step_id
         cmd_dict["result"] = html_response_result
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(running_step_id, html_response_result))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         return (evt, state)
     second_step_running_evt1, cmd = await create_complete_step_cmd(apply_set_second_step_running)
@@ -144,9 +148,11 @@ async def test_handle_returns_next_step_running_event_when_next_step_canceled(cr
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        running_step_id = state.running_step_id()
+        assert running_step_id is not None
+        cmd_dict["step_id"] = running_step_id
         cmd_dict["result"] = html_response_result
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         evt = state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
         return (evt, state)
@@ -169,9 +175,11 @@ async def test_handle_returns_next_step_running_event_when_next_step_running_and
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        running_step_id = state.running_step_id()
+        assert running_step_id is not None
+        cmd_dict["step_id"] = running_step_id
         cmd_dict["result"] = html_response_result
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         evt = state.apply_command(RunningDefinitionState.Commands.Fail(second_step_error))
         return (evt, state)
@@ -194,9 +202,11 @@ async def test_handle_returns_next_step_running_event_when_next_step_failed(crea
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        running_step_id = state.running_step_id()
+        assert running_step_id is not None
+        cmd_dict["step_id"] = running_step_id
         cmd_dict["result"] = html_response_result
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         evt = state.apply_command(RunningDefinitionState.Commands.FailRunningStep(second_step_error))
         return (evt, state)
@@ -219,7 +229,9 @@ async def test_handle_returns_definition_completed_event_when_step_running_and_n
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         cmd_dict["step_id"] = state.running_step_id()
         cmd_dict["result"] = CompletedWith.Data("test html content")
@@ -241,11 +253,15 @@ async def test_handle_returns_definition_completed_event_when_step_completed_and
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        second_running_step_id = state.running_step_id()
+        assert second_running_step_id is not None
+        cmd_dict["step_id"] = second_running_step_id
         cmd_dict["result"] = CompletedWith.Data("test html content")
-        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(cmd_dict["result"]))
+        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, cmd_dict["result"]))
         return (evt, state)
     second_step_completed_evt, cmd = await create_complete_step_cmd(apply_set_second_step_completed)
 
@@ -264,11 +280,15 @@ async def test_handle_returns_definition_completed_event_when_definition_complet
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
-        cmd_dict["step_id"] = state.running_step_id()
+        second_running_step_id = state.running_step_id()
+        assert second_running_step_id is not None
+        cmd_dict["step_id"] = second_running_step_id
         cmd_dict["result"] = CompletedWith.Data("test html content")
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(cmd_dict["result"]))
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, cmd_dict["result"]))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         return (evt, state)
     definition_completed_evt1, cmd = await create_complete_step_cmd(apply_set_definition_completed)
@@ -289,7 +309,9 @@ async def test_handle_returns_no_event_when_step_canceled(create_complete_step_c
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         cmd_dict["step_id"] = state.running_step_id()
         cmd_dict["result"] = CompletedWith.Data("test html content")
@@ -333,17 +355,20 @@ async def test_handle_returns_no_event_when_step_running_but_step_id_different(c
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         state.apply_command(RunningDefinitionState.Commands.RunNextStep())
-        cmd_dict["step_id"] = StepIdValue.new_id()
+        second_running_step_id = StepIdValue.new_id()
+        cmd_dict["step_id"] = second_running_step_id
         cmd_dict["result"] = CompletedWith.Data("test html content")
-        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(cmd_dict["result"]))
+        evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, cmd_dict["result"]))
         return (evt, state)
     second_step_completed_evt, cmd = await create_complete_step_cmd(apply_set_second_step_completed)
 
     handle_res = await handle(runtime_error_event_handler, cmd)
 
-    assert type(second_step_completed_evt) is RunningDefinitionState.Events.StepCompleted
+    assert second_step_completed_evt is None
     assert type(handle_res) is Result
     assert handle_res.is_ok()
     no_evt = handle_res.ok
@@ -401,7 +426,9 @@ async def test_handle_passes_correct_data_to_definition_completed_event_handler(
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         cmd_dict["step_id"] = state.running_step_id()
         cmd_dict["result"] = CompletedWith.Data("test html content")
@@ -489,7 +516,9 @@ async def test_handle_returns_complete_definition_error_when_event_handler_error
         state = RunningDefinitionState()
         state.apply_command(RunningDefinitionState.Commands.SetDefinition(two_step_definition))
         state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(html_response_result))
+        first_running_step_id = state.running_step_id()
+        assert first_running_step_id is not None
+        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, html_response_result))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         cmd_dict["step_id"] = state.running_step_id()
         cmd_dict["result"] = CompletedWith.Data("test html content")

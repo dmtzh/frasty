@@ -79,10 +79,9 @@ def _run_next_step(completed_step_id: StepIdValue, completed_step_result: Comple
     if state is None:
         raise NotFoundException()
     def complete_current_step_and_run_next():
-        is_current_step_running = state.running_step_id() == completed_step_id
-        if not is_current_step_running:
+        opt_step_completed_evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(completed_step_id, completed_step_result))
+        if opt_step_completed_evt is None:
             return None
-        state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(completed_step_result))
         evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
         return (evt, state)
     def run_next_step_from_current():

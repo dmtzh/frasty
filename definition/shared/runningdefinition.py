@@ -31,6 +31,7 @@ class RunningDefinitionState:
             pass
         @dataclass(frozen=True)
         class CompleteRunningStep(Command):
+            step_id: StepIdValue
             result: CompletedResult
         class RunNextStep(Command):
             pass
@@ -116,9 +117,12 @@ class RunningDefinitionState:
                 evt = RunningDefinitionState.Events.StepFailed(running_step_id, error)
                 RunningDefinitionState.apply(self, evt)
                 return evt
-            case RunningDefinitionState.Commands.CompleteRunningStep(result=result):
+            case RunningDefinitionState.Commands.CompleteRunningStep(step_id=step_id, result=result):
                 running_step_id = self.running_step_id()
                 if running_step_id is None:
+                    return None
+                is_current_step_running = running_step_id == step_id
+                if not is_current_step_running:
                     return None
                 evt = RunningDefinitionState.Events.StepCompleted(running_step_id, result)
                 RunningDefinitionState.apply(self, evt)

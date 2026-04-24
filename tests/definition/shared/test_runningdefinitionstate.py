@@ -2,7 +2,7 @@ import pytest
 
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
-from shared.customtypes import Error
+from shared.customtypes import Error, StepIdValue
 from shared.definition import ActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
 
@@ -180,7 +180,9 @@ def test_cant_fail_first_step_after_cancel(running_definition_state: RunningDefi
 def test_complete_first_step(running_definition_state: RunningDefinitionState):
     step_running_evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     assert type(evt) is RunningDefinitionState.Events.StepCompleted
     assert evt.step_id == step_running_evt.step_id # type: ignore
     assert evt.result == result
@@ -189,7 +191,7 @@ def test_complete_first_step(running_definition_state: RunningDefinitionState):
 
 def test_cant_complete_first_step_if_not_running(running_definition_state: RunningDefinitionState):
     result = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(StepIdValue.new_id(), result))
     assert evt is None
 
 
@@ -197,9 +199,11 @@ def test_cant_complete_first_step_if_not_running(running_definition_state: Runni
 def test_cant_complete_already_completed_first_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     result2 = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result2))
     assert evt is None
 
 
@@ -207,7 +211,9 @@ def test_cant_complete_already_completed_first_step(running_definition_state: Ru
 def test_cant_run_first_step_after_first_step_completed(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     assert evt is None
 
@@ -215,18 +221,22 @@ def test_cant_run_first_step_after_first_step_completed(running_definition_state
 
 def test_cant_complete_first_step_after_fail(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
     running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     result = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     assert evt is None
 
 
 
 def test_cant_complete_first_step_after_cancel(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     result = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     assert evt is None
 
 
@@ -237,7 +247,9 @@ def test_run_second_step(definition: Definition):
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[1]
@@ -250,7 +262,9 @@ def test_run_second_step_output_has_correct_input_data(definition: Definition):
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.input_data == result.data
@@ -273,7 +287,9 @@ def test_cant_run_next_step_if_already_running(running_definition_state: Running
 def test_cancel_second_running_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     step_running_evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     assert type(evt) is RunningDefinitionState.Events.StepCanceled
@@ -285,7 +301,9 @@ def test_cant_cancel_if_second_step_not_running(running_definition_state: Runnin
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     assert evt is None
 
@@ -294,7 +312,9 @@ def test_cant_cancel_if_second_step_not_running(running_definition_state: Runnin
 def test_cant_cancel_already_canceled_second_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
@@ -305,7 +325,9 @@ def test_cant_cancel_already_canceled_second_step(running_definition_state: Runn
 def test_run_second_step_after_cancel(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
@@ -316,7 +338,9 @@ def test_run_second_step_after_cancel(running_definition_state: RunningDefinitio
 def test_fail_second_running_step(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     step_running_evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     assert type(evt) is RunningDefinitionState.Events.StepFailed
@@ -327,7 +351,9 @@ def test_fail_second_running_step(running_definition_state: RunningDefinitionSta
 def test_cant_fail_if_second_step_not_running(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     assert evt is None
 
@@ -336,7 +362,9 @@ def test_cant_fail_if_second_step_not_running(running_definition_state: RunningD
 def test_cant_fail_already_failed_second_step(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
@@ -347,7 +375,9 @@ def test_cant_fail_already_failed_second_step(running_definition_state: RunningD
 def test_run_second_step_after_fail(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
@@ -358,7 +388,9 @@ def test_run_second_step_after_fail(running_definition_state: RunningDefinitionS
 def test_cant_cancel_second_step_after_fail(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
@@ -369,7 +401,9 @@ def test_cant_cancel_second_step_after_fail(running_definition_state: RunningDef
 def test_cant_fail_second_step_after_cancel(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
@@ -380,10 +414,14 @@ def test_cant_fail_second_step_after_cancel(running_definition_state: RunningDef
 def test_complete_second_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     step_running_evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     assert type(evt) is RunningDefinitionState.Events.StepCompleted
     assert evt.step_id == step_running_evt.step_id # type: ignore
     assert evt.result == result2
@@ -393,9 +431,11 @@ def test_complete_second_step(running_definition_state: RunningDefinitionState):
 def test_cant_complete_second_step_if_not_running(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     result2 = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result2))
     assert evt is None
 
 
@@ -403,11 +443,15 @@ def test_cant_complete_second_step_if_not_running(running_definition_state: Runn
 def test_cant_complete_already_completed_second_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     assert evt is None
 
 
@@ -415,11 +459,15 @@ def test_cant_complete_already_completed_second_step(running_definition_state: R
 def test_cant_complete_second_step_after_fail(running_definition_state: RunningDefinitionState, test_failure: Error):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
     running_definition_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(test_failure))
     result2 = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     assert evt is None
 
 
@@ -427,11 +475,15 @@ def test_cant_complete_second_step_after_fail(running_definition_state: RunningD
 def test_cant_complete_second_step_after_cancel(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
     running_definition_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
     result2 = completed_with_data("test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     assert evt is None
 
 
@@ -439,10 +491,14 @@ def test_cant_complete_second_step_after_cancel(running_definition_state: Runnin
 def test_run_next_step_issues_definition_completed_when_all_steps_completed(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
 
@@ -451,10 +507,14 @@ def test_run_next_step_issues_definition_completed_when_all_steps_completed(runn
 def test_definition_completed_data_is_same_as_result_data_from_recent_completed_step(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
     assert type(evt.result) is CompletedWith.Data
@@ -465,10 +525,14 @@ def test_definition_completed_data_is_same_as_result_data_from_recent_completed_
 def test_multiple_run_next_step_issues_definition_completed_when_all_steps_completed(running_definition_state: RunningDefinitionState):
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
@@ -484,10 +548,14 @@ def test_run_third_step(request_url_data: dict[str, str], three_steps: tuple[Act
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("second test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[2]
@@ -501,10 +569,14 @@ def test_run_third_step_output_has_correct_input_data(request_url_data: dict[str
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("second test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.input_data == result2.data
@@ -518,13 +590,19 @@ def test_complete_third_step(request_url_data: dict[str, str], three_steps: tupl
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("second test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     step_running_evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result3 = completed_with_data("third test_data")
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result3))
+    third_running_step_id = running_definition_state.running_step_id()
+    assert third_running_step_id is not None
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(third_running_step_id, result3))
     assert type(evt) is RunningDefinitionState.Events.StepCompleted
     assert evt.step_id == step_running_evt.step_id # type: ignore
     assert evt.result == result3
@@ -538,7 +616,9 @@ def test_complete_first_step_with_no_data_result(request_url_data: dict[str, str
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     no_data_result = CompletedWith.NoData()
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(no_data_result))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, no_data_result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
     assert type(evt.result) is CompletedWith.NoData
@@ -552,10 +632,14 @@ def test_complete_second_step_with_error_result(request_url_data: dict[str, str]
 
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     error_result = CompletedWith.Error("test error")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(error_result))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, error_result))
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.DefinitionCompleted
     assert type(evt.result) is CompletedWith.Error
@@ -569,10 +653,14 @@ def test_get_events_has_no_input_data_set_in_step_running_events(request_url_dat
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     result1 = completed_with_data("first test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result1))
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result1))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     result2 = completed_with_data("second test_data")
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(result2))
+    second_running_step_id = running_definition_state.running_step_id()
+    assert second_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(second_running_step_id, result2))
     running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     step_running_evts = [evt for evt in running_definition_state.get_events() if type(evt) is RunningDefinitionState.Events.StepRunning]
     assert len(step_running_evts) == 3
