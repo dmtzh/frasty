@@ -241,6 +241,15 @@ def test_cant_complete_first_step_after_cancel(running_definition_state: Running
 
 
 
+def test_cant_complete_first_step_with_mismatched_step_id(running_definition_state: RunningDefinitionState):
+    running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    wrong_running_step_id = StepIdValue.new_id()
+    result = completed_with_data("test_data")
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(wrong_running_step_id, result))
+    assert evt is None
+
+
+
 def test_run_second_step(definition: Definition):
     running_definition_state = RunningDefinitionState()
     running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
