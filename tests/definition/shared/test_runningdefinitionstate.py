@@ -3,7 +3,7 @@ import pytest
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
 from shared.customtypes import Error, StepIdValue
-from shared.definition import ActionDefinition, Definition
+from shared.definition import ActionDefinition, AggregateActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
 
 @pytest.fixture
@@ -674,6 +674,242 @@ def test_get_events_has_no_input_data_set_in_step_running_events(request_url_dat
     step_running_evts = [evt for evt in running_definition_state.get_events() if type(evt) is RunningDefinitionState.Events.StepRunning]
     assert len(step_running_evts) == 3
     assert all(evt.input_data is None for evt in step_running_evts)
-    
 
+
+
+# -----------------------------------------------------------------------------
+# Single-Step Aggregate Tests
+# -----------------------------------------------------------------------------
+@pytest.fixture
+def aggregate_step_def():
+    """Creates an ActionDefinition marked as an aggregate."""
+    return AggregateActionDefinition(ActionName("process_item"), ActionType.CUSTOM, None)
+
+@pytest.fixture
+def list_input_data():
+    """Standard list input for aggregate tests."""
+    return [{"id": 1}, {"id": 2}, {"id": 3}]
+
+@pytest.fixture
+def single_aggregate_step_definition(list_input_data: list[dict], aggregate_step_def: AggregateActionDefinition):
+    """A definition with a single aggregate step."""
+    return Definition(list_input_data, (aggregate_step_def,))
+
+
+
+def test_run_first_step_emits_aggregate_event(single_aggregate_step_definition: Definition):
+    """Verifies that starting an aggregate step emits AggregateStepsRunning instead of StepRunning."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    child_step_def = ActionDefinition(single_aggregate_step_definition.steps[0].name, single_aggregate_step_definition.steps[0].type, single_aggregate_step_definition.steps[0].config)
     
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    assert agg_evt.parent_step_id is not None
+    # Verify each child event has the correct input data item
+    assert type(single_aggregate_step_definition.input_data) is list
+    for i, child_evt in enumerate(agg_evt.child_running_events):
+        assert type(child_evt) is RunningDefinitionState.Events.StepRunning
+        assert child_evt.input_data == single_aggregate_step_definition.input_data[i]
+        assert child_evt.step_definition == child_step_def
+
+
+
+def test_run_first_step_raises_value_error_when_pass_empty_input_data_to_aggregate(aggregate_step_def: AggregateActionDefinition):
+    """Verifies that an aggregate step with empty input_data raises ValueError."""
+    empty_def = Definition([], (aggregate_step_def,))
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(empty_def))
+
+    with pytest.raises(ValueError):
+        state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+
+
+
+def test_first_aggregate_step_auto_completes_after_all_children_done(single_aggregate_step_definition: Definition):
+    """Verifies that completing all child steps triggers automatic parent completion."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    
+    # Complete all children
+    children = agg_evt.child_running_events
+    res = [CompletedWith.Data({"processed": child_evt.input_data["id"]}) for child_evt in children]
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[0].step_id, res[0]))
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[1].step_id, res[1]))
+    final_evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[2].step_id, res[2]))
+    
+    # The final event should be the Parent's StepCompleted
+    assert type(final_evt) is RunningDefinitionState.Events.StepCompleted
+    assert final_evt.step_id == agg_evt.parent_step_id
+    assert type(final_evt.result) is CompletedWith.Data
+    # Verify state cleanup
+    assert state.running_step_id() is None
+    assert state.recent_completed_step_id() == agg_evt.parent_step_id
+
+
+
+def test_first_aggregate_step_preserves_mixed_child_result_types(single_aggregate_step_definition: Definition):
+    """Verifies that Data, NoData, and Error types are preserved in the aggregated list."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    
+    children = agg_evt.child_running_events
+    res1 = CompletedWith.Data("ok")
+    res2 = CompletedWith.NoData()
+    res3 = CompletedWith.Error("fail")
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[0].step_id, res1))
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[1].step_id, res2))
+    final_evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(children[2].step_id, res3))
+    
+    assert type(final_evt) is RunningDefinitionState.Events.StepCompleted
+    assert type(final_evt.result) is CompletedWith.Data
+    agg_results = final_evt.result.data
+    assert type(agg_results) is list
+    assert agg_results[0] == res1
+    assert agg_results[1] == res2
+    assert agg_results[2] == res3
+
+
+
+def test_cant_complete_directly_when_first_aggregate_step_is_running(single_aggregate_step_definition: Definition):
+    """Verifies that completing the parent ID directly is rejected."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    # Complete one child
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(agg_evt.child_running_events[0].step_id, CompletedWith.Data("partial")))
+    
+    # Force complete parent
+    force_result = CompletedWith.Data("forced")
+    evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(agg_evt.parent_step_id, force_result))
+    
+    assert evt is None
+
+
+
+def test_fail_first_running_aggregate_step(single_aggregate_step_definition: Definition):
+    """Verifies that parent failure terminates the aggregate and rejects late children."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    
+    err = Error("test failure")
+    evt = state.apply_command(RunningDefinitionState.Commands.FailRunningStep(err))
+    # Late child completion rejected
+    reject_evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(agg_evt.child_running_events[0].step_id, CompletedWith.Data("data")))
+    
+    assert type(evt) is RunningDefinitionState.Events.StepFailed
+    assert evt.step_id == agg_evt.parent_step_id
+    assert evt.error == err
+    assert state.running_step_id() is None
+    assert reject_evt is None
+
+
+
+def test_run_first_aggregate_step_after_fail(single_aggregate_step_definition: Definition):
+    """Verifies that aggregate can run after failure."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    state.apply_command(RunningDefinitionState.Commands.FailRunningStep(Error("test failure")))
+    
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    assert state.running_step_id() == agg_evt.parent_step_id
+
+
+
+def test_cancel_first_running_aggregate_step(single_aggregate_step_definition: Definition):
+    """Verifies that canceling the parent terminates the aggregate and rejects late children."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    
+    evt = state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
+    # Late child completion rejected
+    reject_evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(agg_evt.child_running_events[0].step_id, CompletedWith.Data("data")))
+    
+    assert type(evt) is RunningDefinitionState.Events.StepCanceled
+    assert evt.step_id == agg_evt.parent_step_id
+    assert state.running_step_id() is None
+    assert reject_evt is None
+
+
+
+def test_run_first_aggregate_step_after_cancel(single_aggregate_step_definition: Definition):
+    """Verifies that aggregate can run after canceled."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
+    
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    assert state.running_step_id() == agg_evt.parent_step_id
+
+
+
+def test_cant_run_next_step_when_first_aggregate_step_is_running(single_aggregate_step_definition: Definition):
+    """Verifies that RunNextStep returns None while aggregate children are pending."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+    
+    assert evt is None
+
+
+
+def test_complete_child_step_when_first_aggregate_step_is_running(single_aggregate_step_definition: Definition):
+    """Verifies that completing a child emits StepCompleted."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    child_id = agg_evt.child_running_events[0].step_id
+    
+    res = CompletedWith.Data("data")
+    evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, res))
+
+    assert type(evt) is RunningDefinitionState.Events.StepCompleted
+    assert evt.step_id == child_id
+    assert evt.result == res
+
+
+
+def test_cant_complete_child_step_with_mismatched_id_when_first_aggregate_step_is_running(single_aggregate_step_definition: Definition):
+    """Verifies that completing a non-existent child ID is rejected."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    wrong_id = StepIdValue.new_id()
+    evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(wrong_id, CompletedWith.Data("data")))
+    
+    assert evt is None
+
+
+
+def test_cant_complete_already_completed_child_step_when_first_aggregate_step_is_running(single_aggregate_step_definition: Definition):
+    """Verifies that completing the same child twice is rejected."""
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    child_id = agg_evt.child_running_events[0].step_id
+    
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, CompletedWith.Data("first")))
+    evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, CompletedWith.Data("second")))
+
+    assert evt is None

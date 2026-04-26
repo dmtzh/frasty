@@ -39,7 +39,7 @@ class RunningDefinitionState:
         class Fail(Command):
             error: Error
     class Events:
-        type Event = DefinitionAdded | StepRunning | StepCanceled | StepFailed | StepCompleted | DefinitionCompleted | Failed
+        type Event = DefinitionAdded | StepRunning | StepCanceled | StepFailed | StepCompleted | DefinitionCompleted | Failed | AggregateStepsRunning
         @dataclass(frozen=True)
         class DefinitionAdded:
             definition: Definition
@@ -65,6 +65,10 @@ class RunningDefinitionState:
         @dataclass(frozen=True)
         class Failed:
             error: Error
+        @dataclass(frozen=True)
+        class AggregateStepsRunning:
+            parent_step_id: StepIdValue
+            child_running_events: list[RunningDefinitionState.Events.StepRunning]
     
     @staticmethod
     def apply(state: RunningDefinitionState, evt: RunningDefinitionState.Events.Event) -> RunningDefinitionState:
@@ -99,10 +103,14 @@ class RunningDefinitionState:
                 if self.recent_completed_step_id() is not None:
                     return None
                 step_id = StepIdValue.new_id()
-                apply_evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], None)
-                RunningDefinitionState.apply(self, apply_evt)
-                evt = RunningDefinitionState.Events.StepRunning(step_id, definition.steps[0], definition.input_data)
-                return evt
+                match definition.steps[0]:
+                    case ActionDefinition() as step_def:
+                        apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
+                        RunningDefinitionState.apply(self, apply_evt)
+                        evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, definition.input_data)
+                        return evt
+                    case unsupported_step_def:
+                        raise NotImplementedError(f"Unsupported step type: {type(unsupported_step_def)}")
             case RunningDefinitionState.Commands.CancelRunningStep():
                 running_step_id = self.running_step_id()
                 if running_step_id is None:
@@ -141,11 +149,14 @@ class RunningDefinitionState:
                 is_recent_step_completed_with_data = type(recent_step_completed_output) is CompletedWith.Data
                 if has_more_steps and is_recent_step_completed_with_data:
                     step_id = StepIdValue.new_id()
-                    step_def = definition.steps[num_of_completed_steps]
-                    apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
-                    RunningDefinitionState.apply(self, apply_evt)
-                    evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, recent_step_completed_output.data)
-                    return evt
+                    match definition.steps[num_of_completed_steps]:
+                        case ActionDefinition() as step_def:
+                            apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
+                            RunningDefinitionState.apply(self, apply_evt)
+                            evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, recent_step_completed_output.data)
+                            return evt
+                        case unsupported_step_def:
+                            raise NotImplementedError(f"Unsupported step type: {type(unsupported_step_def)}")
                 else:
                     evt = RunningDefinitionState.Events.DefinitionCompleted(recent_step_completed_output)
                     RunningDefinitionState.apply(self, evt)
@@ -302,6 +313,8 @@ class RunningDefinitionStateEventAdapter:
                     "type": RunningDefinitionStateEventDtoTypes.FAILED.value,
                     "error": error.message
                 }
+            case RunningDefinitionState.Events.AggregateStepsRunning(parent_step_id=_, child_running_events=_):
+                raise NotImplementedError("AggregateStepsRunning is not supported yet")
 
 class RunningDefinitionStateAdapter:
     @effect.result[RunningDefinitionState, str]()

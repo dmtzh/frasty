@@ -14,9 +14,13 @@ class ActionDefinition(Action):
     config: dict[str, Any] | None
 
 @dataclass(frozen=True)
+class AggregateActionDefinition(Action):
+    config: dict[str, Any] | None
+
+@dataclass(frozen=True)
 class Definition:
     input_data: dict[str, Any] | list[dict[str, Any]]
-    steps: tuple[ActionDefinition, ...]
+    steps: tuple[ActionDefinition | AggregateActionDefinition, ...]
 
 class ActionDefinitionAdapter:
     @effect.result[ActionDefinition, list[ValueErr]]()
@@ -40,7 +44,7 @@ class ActionDefinitionAdapter:
         return ActionDefinition(parsed_name, parsed_type, parsed_config)
     
     @staticmethod   
-    def to_dict(action_def: ActionDefinition) -> dict[str, Any]:
+    def to_dict(action_def: ActionDefinition | AggregateActionDefinition) -> dict[str, Any]:
         config_dict = action_def.config if action_def.config else {}
         type_dict = {"type": action_def.type.value} if action_def.type != ActionType.CUSTOM else {}
         return config_dict | {
