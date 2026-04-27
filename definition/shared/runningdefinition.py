@@ -57,7 +57,7 @@ class RunningDefinitionState:
             error: Error
         @dataclass(frozen=True)
         class StepCompleted:
-            step_id: IdValue
+            step_id: StepIdValue
             result: CompletedResult
         @dataclass(frozen=True)
         class DefinitionCompleted:
@@ -251,7 +251,7 @@ class RunningDefinitionStateEventAdapter:
                 )
             case RunningDefinitionStateEventDtoTypes.STEP_COMPLETED:
                 raw_step_id = yield from Result.Ok(raw_event_dict["step_id"]) if "step_id" in raw_event_dict else Result.Error("step_id is missing")
-                step_id = IdValue(raw_step_id)
+                step_id = StepIdValue(raw_step_id)
                 raw_result = yield from Result.Ok(raw_event_dict["result"]) if "result" in raw_event_dict else Result.Error("result is missing")
                 result = yield from CompletedResultAdapter.from_dict(raw_result)
                 return RunningDefinitionState.Events.StepCompleted(
