@@ -1,7 +1,7 @@
 import pytest
 
 from shared.action import ActionName, ActionType
-from shared.completedresult import CompletedWith
+from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import Error, StepIdValue
 from shared.definition import ActionDefinition, AggregateActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
@@ -770,9 +770,9 @@ def test_first_aggregate_step_preserves_mixed_child_result_types(single_aggregat
     assert type(final_evt.result) is CompletedWith.Data
     agg_results = final_evt.result.data
     assert type(agg_results) is list
-    assert agg_results[0] == res1
-    assert agg_results[1] == res2
-    assert agg_results[2] == res3
+    assert agg_results[0] == CompletedResultAdapter.to_dict(res1)
+    assert agg_results[1] == CompletedResultAdapter.to_dict(res2)
+    assert agg_results[2] == CompletedResultAdapter.to_dict(res3)
 
 
 
@@ -882,7 +882,7 @@ def test_complete_child_step_when_first_aggregate_step_is_running(single_aggrega
     res = CompletedWith.Data("data")
     evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, res))
 
-    assert type(evt) is RunningDefinitionState.Events.StepCompleted
+    assert type(evt) is RunningDefinitionState.Events.ChildStepCompleted
     assert evt.step_id == child_id
     assert evt.result == res
 
@@ -932,10 +932,10 @@ def three_step_definition_with_aggregate(three_step_def_with_aggregate: tuple[Ac
     return Definition([{"init": True}], three_step_def_with_aggregate)
 
 @pytest.fixture
-def state_at_aggregate_start(definition_with_aggregate: Definition, list_input_data):
+def state_at_aggregate_start(three_step_definition_with_aggregate, list_input_data):
     """State advanced to the point where the aggregate step has just started."""
     state = RunningDefinitionState()
-    state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition_with_aggregate))
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(three_step_definition_with_aggregate))
     state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     
     # Step 1 completes with a list to trigger the aggregate
@@ -963,10 +963,10 @@ def test_run_next_step_emits_aggregate_event(state_at_aggregate_start, aggregate
 
 
 
-def test_run_next_step_raises_value_error_when_pass_empty_input_data_to_aggregate(definition_with_aggregate):
+def test_run_next_step_raises_value_error_when_pass_empty_input_data_to_aggregate(three_step_definition_with_aggregate):
     """Verifies that an aggregate step with empty input_data raises ValueError."""
     state = RunningDefinitionState()
-    state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition_with_aggregate))
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(three_step_definition_with_aggregate))
     state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     step1_id = state.running_step_id()
     assert step1_id is not None
@@ -1013,9 +1013,9 @@ def test_second_aggregate_step_preserves_mixed_child_result_types(state_at_aggre
     assert type(final_evt.result) is CompletedWith.Data
     agg_results = final_evt.result.data
     assert type(agg_results) is list
-    assert agg_results[0] == res1
-    assert agg_results[1] == res2
-    assert agg_results[2] == res3
+    assert agg_results[0] == CompletedResultAdapter.to_dict(res1)
+    assert agg_results[1] == CompletedResultAdapter.to_dict(res2)
+    assert agg_results[2] == CompletedResultAdapter.to_dict(res3)
 
 
 
@@ -1111,7 +1111,7 @@ def test_complete_child_step_when_second_aggregate_step_is_running(state_at_aggr
     res = CompletedWith.Data("data")
     evt = state_at_aggregate_start.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, res))
 
-    assert type(evt) is RunningDefinitionState.Events.StepCompleted
+    assert type(evt) is RunningDefinitionState.Events.ChildStepCompleted
     assert evt.step_id == child_id
     assert evt.result == res
 
@@ -1149,7 +1149,7 @@ def test_run_next_step_after_second_aggregate_step_completes(state_at_aggregate_
     child_results = []
     for child_evt in agg_evt.child_running_events:
         child_result = CompletedWith.Data({"processed": child_evt.input_data["id"]})
-        child_results.append(child_result)
+        child_results.append(CompletedResultAdapter.to_dict(child_result))
         state_at_aggregate_start.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_evt.step_id, child_result))
     
     evt = state_at_aggregate_start.apply_command(RunningDefinitionState.Commands.RunNextStep())

@@ -11,9 +11,46 @@ from expression.extra.result.traversable import traverse
 
 from shared.completedresult import CompletedResultAdapter
 from shared.customtypes import Error, IdValue, StepIdValue
-from shared.definition import Definition, DefinitionAdapter, ActionDefinition, ActionDefinitionAdapter
+from shared.definition import AggregateActionDefinition, Definition, DefinitionAdapter, ActionDefinition, ActionDefinitionAdapter
 from shared.completedresult import CompletedWith, CompletedResult
 from shared.utils.string import strip_and_lowercase
+
+@dataclass(frozen=True)
+class _AggregateExecutionState:
+    parent_step_id: StepIdValue
+    pending_child_ids: frozenset[StepIdValue]
+    child_results: dict[StepIdValue, CompletedResult]
+
+    @staticmethod
+    def from_events(events: tuple[RunningDefinitionState.Events.Event, ...]) -> _AggregateExecutionState | None:
+        parent_id: StepIdValue | None = None
+        pending: set[StepIdValue] = set()
+        results: dict[StepIdValue, CompletedResult] = {}
+
+        for evt in events:
+            match evt:
+                case RunningDefinitionState.Events.AggregateStepsRunning(parent_step_id=pid, child_running_events=children):
+                    parent_id = pid
+                    pending = {c.step_id for c in children}
+                    results = {}
+                case RunningDefinitionState.Events.ChildStepCompleted(step_id=sid, result=res) if sid in pending:
+                    pending.discard(sid)
+                    results[sid] = res
+                case RunningDefinitionState.Events.StepCompleted(step_id=sid, result=_) if sid == parent_id:
+                    parent_id = None
+                    pending = set()
+                    results = {}
+                case RunningDefinitionState.Events.StepCanceled(step_id=sid) | \
+                     RunningDefinitionState.Events.StepFailed(step_id=sid, error=_) if sid == parent_id:
+                    parent_id = None
+                    pending = set()
+                    results = {}
+
+        return _AggregateExecutionState(
+            parent_step_id=parent_id,
+            pending_child_ids=frozenset(pending),
+            child_results=results
+        ) if parent_id is not None else None
 
 class RunningDefinitionState:
     class Commands:
@@ -39,7 +76,7 @@ class RunningDefinitionState:
         class Fail(Command):
             error: Error
     class Events:
-        type Event = DefinitionAdded | StepRunning | StepCanceled | StepFailed | StepCompleted | DefinitionCompleted | Failed | AggregateStepsRunning
+        type Event = DefinitionAdded | StepRunning | StepCanceled | StepFailed | StepCompleted | DefinitionCompleted | Failed | AggregateStepsRunning | ChildStepCompleted
         @dataclass(frozen=True)
         class DefinitionAdded:
             definition: Definition
@@ -69,6 +106,10 @@ class RunningDefinitionState:
         class AggregateStepsRunning:
             parent_step_id: StepIdValue
             child_running_events: list[RunningDefinitionState.Events.StepRunning]
+        @dataclass(frozen=True)
+        class ChildStepCompleted:
+            step_id: StepIdValue
+            result: CompletedResult
     
     @staticmethod
     def apply(state: RunningDefinitionState, evt: RunningDefinitionState.Events.Event) -> RunningDefinitionState:
@@ -76,6 +117,8 @@ class RunningDefinitionState:
         match evt:
             case RunningDefinitionState.Events.StepRunning(step_id, _):
                 state._running_step_id = step_id
+            case RunningDefinitionState.Events.AggregateStepsRunning(parent_step_id, _):
+                state._running_step_id = parent_step_id
             case RunningDefinitionState.Events.StepCanceled(_):
                 state._running_step_id = None
             case RunningDefinitionState.Events.StepFailed(_, _):
@@ -109,6 +152,21 @@ class RunningDefinitionState:
                         RunningDefinitionState.apply(self, apply_evt)
                         evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, definition.input_data)
                         return evt
+                    case AggregateActionDefinition() as agg_step_def:
+                        if not definition.input_data:
+                            raise ValueError(f"Aggregate step '{agg_step_def.name}' cannot be executed with an empty input_data")
+                        parent_id = step_id
+                        input_list = definition.input_data if isinstance(definition.input_data, list) else [definition.input_data]
+                        child_step_def = ActionDefinition(agg_step_def.name, agg_step_def.type, agg_step_def.config)
+                        child_events = [RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), child_step_def, None) for _ in input_list]
+                        apply_evt = RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_events)
+                        RunningDefinitionState.apply(self, apply_evt)
+                        # Return external contract with actual input_data
+                        child_running_events = [
+                            RunningDefinitionState.Events.StepRunning(evt.step_id, evt.step_definition, input_data)
+                            for evt, input_data in zip(child_events, input_list)
+                        ]
+                        return RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_running_events)
                     case unsupported_step_def:
                         raise NotImplementedError(f"Unsupported step type: {type(unsupported_step_def)}")
             case RunningDefinitionState.Commands.CancelRunningStep():
@@ -129,12 +187,36 @@ class RunningDefinitionState:
                 running_step_id = self.running_step_id()
                 if running_step_id is None:
                     return None
-                is_current_step_running = running_step_id == step_id
-                if not is_current_step_running:
-                    return None
-                evt = RunningDefinitionState.Events.StepCompleted(running_step_id, result)
-                RunningDefinitionState.apply(self, evt)
-                return evt
+                match self._get_aggregate_execution_state():
+                    case None:
+                        is_current_step_running = running_step_id == step_id
+                        if not is_current_step_running:
+                            return None
+                        evt = RunningDefinitionState.Events.StepCompleted(running_step_id, result)
+                        RunningDefinitionState.apply(self, evt)
+                        return evt
+                    case agg_state:
+                        # Reject direct parent completion
+                        if step_id == agg_state.parent_step_id:
+                            return None
+                        if step_id not in agg_state.pending_child_ids:
+                            return None
+                        # Complete child
+                        child_completed_evt = RunningDefinitionState.Events.ChildStepCompleted(step_id, result)
+                        RunningDefinitionState.apply(self, child_completed_evt)
+                        updated_agg_state = self._get_aggregate_execution_state()
+                        if updated_agg_state is None:
+                            return None
+                        has_more_running_childs = len(updated_agg_state.pending_child_ids) > 0
+                        if has_more_running_childs:
+                            return child_completed_evt
+                        else:
+                            # Auto-Completion
+                            all_child_results = [CompletedResultAdapter.to_dict(child_res) for child_res in updated_agg_state.child_results.values()]
+                            parent_res = CompletedWith.Data(all_child_results)
+                            parent_completed_evt = RunningDefinitionState.Events.StepCompleted(updated_agg_state.parent_step_id, parent_res)
+                            RunningDefinitionState.apply(self, parent_completed_evt)
+                            return parent_completed_evt
             case RunningDefinitionState.Commands.RunNextStep():
                 definition = self._events[0].definition if any(self._events) and type(self._events[0]) is RunningDefinitionState.Events.DefinitionAdded else None
                 if definition is None:
@@ -155,6 +237,21 @@ class RunningDefinitionState:
                             RunningDefinitionState.apply(self, apply_evt)
                             evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, recent_step_completed_output.data)
                             return evt
+                        case AggregateActionDefinition() as agg_step_def:
+                            if not recent_step_completed_output.data:
+                                raise ValueError(f"Aggregate step '{agg_step_def.name}' cannot be executed with an empty input_data")
+                            parent_id = step_id
+                            input_list = recent_step_completed_output.data if isinstance(recent_step_completed_output.data, list) else [recent_step_completed_output.data]
+                            child_step_def = ActionDefinition(agg_step_def.name, agg_step_def.type, agg_step_def.config)
+                            child_events = [RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), child_step_def, None) for _ in input_list]
+                            apply_evt = RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_events)
+                            RunningDefinitionState.apply(self, apply_evt)
+                            # Return external contract with actual input_data
+                            child_running_events = [
+                                RunningDefinitionState.Events.StepRunning(evt.step_id, evt.step_definition, input_data)
+                                for evt, input_data in zip(child_events, input_list)
+                            ]
+                            return RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_running_events)
                         case unsupported_step_def:
                             raise NotImplementedError(f"Unsupported step type: {type(unsupported_step_def)}")
                 else:
@@ -180,6 +277,9 @@ class RunningDefinitionState:
     
     def get_events(self):
         return self._events
+    
+    def _get_aggregate_execution_state(self) -> _AggregateExecutionState | None:
+        return _AggregateExecutionState.from_events(self._events)
 
 class RunningDefinitionStateEventDtoTypes(StrEnum):
     DEFINITION_ADDED = RunningDefinitionState.Events.DefinitionAdded.__name__.lower()
@@ -189,6 +289,8 @@ class RunningDefinitionStateEventDtoTypes(StrEnum):
     STEP_COMPLETED = RunningDefinitionState.Events.StepCompleted.__name__.lower()
     DEFINITION_COMPLETED = RunningDefinitionState.Events.DefinitionCompleted.__name__.lower()
     FAILED = RunningDefinitionState.Events.Failed.__name__.lower()
+    AGGREGATE_STEPS_RUNNING = RunningDefinitionState.Events.AggregateStepsRunning.__name__.lower()
+    CHILD_STEP_COMPLETED = RunningDefinitionState.Events.ChildStepCompleted.__name__.lower()
 
     @staticmethod
     def parse(event_type: str) -> RunningDefinitionStateEventDtoTypes | None:
@@ -209,6 +311,10 @@ class RunningDefinitionStateEventDtoTypes(StrEnum):
                 return RunningDefinitionStateEventDtoTypes.DEFINITION_COMPLETED
             case RunningDefinitionStateEventDtoTypes.FAILED:
                 return RunningDefinitionStateEventDtoTypes.FAILED
+            case RunningDefinitionStateEventDtoTypes.AGGREGATE_STEPS_RUNNING:
+                return RunningDefinitionStateEventDtoTypes.AGGREGATE_STEPS_RUNNING
+            case RunningDefinitionStateEventDtoTypes.CHILD_STEP_COMPLETED:
+                return RunningDefinitionStateEventDtoTypes.CHILD_STEP_COMPLETED
             case _:
                 return None
 
@@ -268,6 +374,26 @@ class RunningDefinitionStateEventAdapter:
                 return RunningDefinitionState.Events.Failed(
                     error=error
                 )
+            case RunningDefinitionStateEventDtoTypes.AGGREGATE_STEPS_RUNNING:
+                raw_parent_step_id = yield from Result.Ok(raw_event_dict["parent_step_id"]) if "parent_step_id" in raw_event_dict else Result.Error("parent_step_id is missing")
+                parent_step_id = StepIdValue(raw_parent_step_id)
+                raw_child_running_events = yield from Result.Ok(raw_event_dict["child_running_events"]) if isinstance(raw_event_dict["child_running_events"], list) and raw_event_dict["child_running_events"] else Result.Error("child_running_events is missing")
+                def dict_to_step_running(data: dict[str, Any]):
+                    return RunningDefinitionStateEventAdapter.from_dict(data).bind(lambda evt: Result.Ok(evt) if isinstance(evt, RunningDefinitionState.Events.StepRunning) else Result.Error(f"expected {RunningDefinitionStateEventDtoTypes.STEP_RUNNING}, but got {raw_event_type}"))
+                child_running_events = list((yield from traverse(dict_to_step_running, Block(raw_child_running_events))))
+                return RunningDefinitionState.Events.AggregateStepsRunning(
+                    parent_step_id=parent_step_id,
+                    child_running_events=child_running_events
+                )
+            case RunningDefinitionStateEventDtoTypes.CHILD_STEP_COMPLETED:
+                raw_step_id = yield from Result.Ok(raw_event_dict["step_id"]) if "step_id" in raw_event_dict else Result.Error("step_id is missing")
+                step_id = StepIdValue(raw_step_id)
+                raw_result = yield from Result.Ok(raw_event_dict["result"]) if "result" in raw_event_dict else Result.Error("result is missing")
+                result = yield from CompletedResultAdapter.from_dict(raw_result)
+                return RunningDefinitionState.Events.ChildStepCompleted(
+                    step_id=step_id,
+                    result=result
+                )
             case _:
                 yield from Result.Error(f"event type {raw_event_type} is invalid")
                 raise RuntimeError("event type is invalid")
@@ -313,8 +439,18 @@ class RunningDefinitionStateEventAdapter:
                     "type": RunningDefinitionStateEventDtoTypes.FAILED.value,
                     "error": error.message
                 }
-            case RunningDefinitionState.Events.AggregateStepsRunning(parent_step_id=_, child_running_events=_):
-                raise NotImplementedError("AggregateStepsRunning is not supported yet")
+            case RunningDefinitionState.Events.AggregateStepsRunning(parent_step_id, child_running_events):
+                return {
+                    "type": RunningDefinitionStateEventDtoTypes.AGGREGATE_STEPS_RUNNING.value,
+                    "parent_step_id": parent_step_id,
+                    "child_running_events": [RunningDefinitionStateEventAdapter.to_dict(evt) for evt in child_running_events]
+                }
+            case RunningDefinitionState.Events.ChildStepCompleted(step_id=step_id, result=result):
+                return {
+                    "type": RunningDefinitionStateEventDtoTypes.CHILD_STEP_COMPLETED.value,
+                    "step_id": step_id,
+                    "result": CompletedResultAdapter.to_dict(result)
+                }
 
 class RunningDefinitionStateAdapter:
     @effect.result[RunningDefinitionState, str]()
