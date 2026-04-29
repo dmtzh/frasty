@@ -882,7 +882,7 @@ def test_complete_child_step_when_first_aggregate_step_is_running(single_aggrega
     res = CompletedWith.Data("data")
     evt = state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, res))
 
-    assert type(evt) is RunningDefinitionState.Events.ChildStepCompleted
+    assert type(evt) is RunningDefinitionState.Events.AggregateStepCompleted
     assert evt.step_id == child_id
     assert evt.result == res
 
@@ -1111,7 +1111,7 @@ def test_complete_child_step_when_second_aggregate_step_is_running(state_at_aggr
     res = CompletedWith.Data("data")
     evt = state_at_aggregate_start.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(child_id, res))
 
-    assert type(evt) is RunningDefinitionState.Events.ChildStepCompleted
+    assert type(evt) is RunningDefinitionState.Events.AggregateStepCompleted
     assert evt.step_id == child_id
     assert evt.result == res
 
