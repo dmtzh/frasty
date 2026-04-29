@@ -337,9 +337,10 @@ class RunningDefinitionStateEventAdapter:
                 step_id = StepIdValue(raw_step_id)
                 raw_step_definition = yield from Result.Ok(raw_event_dict["step_definition"]) if "step_definition" in raw_event_dict else Result.Error("step_definition is missing")
                 step_definition = yield from ActionDefinitionAdapter.from_dict(raw_step_definition).map_error(str)
+                action_step_definition = yield from Result.Ok(step_definition) if isinstance(step_definition, ActionDefinition) else Result.Error("step_definition is invalid")
                 return RunningDefinitionState.Events.StepRunning(
                     step_id=step_id,
-                    step_definition=step_definition,
+                    step_definition=action_step_definition,
                     input_data=None
                 )
             case RunningDefinitionStateEventDtoTypes.STEP_CANCELED:
