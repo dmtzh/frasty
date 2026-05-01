@@ -11,6 +11,7 @@ from shared.completedresult import CompletedResult, CompletedResultAdapter, Comp
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.logging import with_input_output_logging
 from shared.utils.parse import parse_value
+from shared.utils.result import to_error_list
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 @dataclass(frozen=True)
@@ -137,19 +138,23 @@ class DataDtoAdapter:
 
 type DtoActionHandler = Callable[[Result[ActionInput, Any]], Coroutine[Any, Any, Result[CompletedResult, Any] | None]]
 
-def _validated_data_to_action_input[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[list[DataDto]], Result[D, Any]]) -> DtoActionHandler:
+def _validated_data_to_action_input[TCfg, D](action_handler: ActionHandler[TCfg, D], config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[TCfg, list[DataDto]], Result[D, Any]]) -> DtoActionHandler:
+    def validate_config_and_input(action_input: ActionInput):
+        config_dict = {k: v for k, v in action_input.data.items() if k not in ["input_data"] and isinstance(k, str)}
+        config_res = config_validator(config_dict)
+        config_with_input_res = DataDtoAdapter.from_input_data(action_input.data).bind(lambda input: config_res.bind(lambda cfg: input_validator(cfg, input).map(lambda d: (cfg, d))))
+        return config_with_input_res.map_error(str)
     def parse_and_validate_action_input(action_input: ActionInput) -> Result[ActionData[TCfg, D], _ValidateActionError | str]:
         run_id_res = parse_value(action_input.run_id, "run_id", RunIdValue.from_value_with_checksum)
         step_id_res = parse_value(action_input.step_id, "step_id", StepIdValue.from_value_with_checksum)
-        config_dict = {k: v for k, v in action_input.data.items() if k not in ["input_data"] and isinstance(k, str)}
-        config_res = config_validator(config_dict).map_error(str)
-        input_res = DataDtoAdapter.from_input_data(action_input.data).bind(input_validator).map_error(str)
+        config_with_input_res = validate_config_and_input(action_input)
         metadata = Metadata(action_input.metadata)
-        parse_errors = [parse_err for parse_err in [run_id_res.swap().default_value(None), step_id_res.swap().default_value(None)] if parse_err is not None]
-        validate_errors = [validate_err for validate_err in [config_res.swap().default_value(None), input_res.swap().default_value(None)] if validate_err is not None]
+        parse_errors = to_error_list(run_id_res, step_id_res)
+        validate_errors = to_error_list(config_with_input_res)
         match parse_errors, validate_errors:
             case [], []:
-                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config_res.ok, input_res.ok, metadata))
+                config, input = config_with_input_res.ok
+                return Result.Ok(ActionData(run_id_res.ok, step_id_res.ok, config, input, metadata))
             case [], [*v_errs]:
                 err = _ValidateActionError(", ".join(v_errs), run_id_res.ok, step_id_res.ok, metadata)
                 return Result.Error(err)
@@ -169,7 +174,7 @@ class ActionHandlerFactory:
         self._complete_action = complete_action
         self._action_handler = action_handler
     
-    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[list[DataDto]], Result[D, Any]]):
+    def create[TCfg, D](self, action: Action, config_validator: Callable[[dict[str, Any]], Result[TCfg, Any]], input_validator: Callable[[TCfg, list[DataDto]], Result[D, Any]]):
         def wrapper(func: Callable[[ActionData[TCfg, D]], Coroutine[Any, Any, CompletedResult | None]]):
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
@@ -183,7 +188,7 @@ class ActionHandlerFactory:
             validated_data_action_handler = _action_handler_adapter(func, self._complete_action)
             message_prefix = action.name
             action_handler_with_logging = with_input_output_logging(validated_data_action_handler, message_prefix)
-            action_input_handler = _validated_data_to_action_input(action_handler_with_logging,  lambda _: Result.Ok(None), input_validator)
+            action_input_handler = _validated_data_to_action_input(action_handler_with_logging,  lambda _: Result.Ok(None), lambda _, input:input_validator(input))
             return self._action_handler(action.get_name(), action_input_handler)
         return wrapper
 

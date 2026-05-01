@@ -23,7 +23,7 @@ class AddTaskResultToHistoryConfig:
         task_id = yield from parse_from_dict(data, "task_id", TaskIdValue.from_value_with_checksum)
         execution_id = yield from parse_from_dict(data, "execution_id", DefinitionIdValue.from_value_with_checksum)
         return AddTaskResultToHistoryConfig(task_id, execution_id)
-def add_task_result_to_history_input_validator(data: list[DataDto]):
+def add_task_result_to_history_input_validator(_: AddTaskResultToHistoryConfig, data: list[DataDto]):
     return CompletedResultAdapter.from_dict(data[0])
 def add_task_result_to_history_handler(func: Callable[[ActionData[AddTaskResultToHistoryConfig, CompletedResult]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create(
