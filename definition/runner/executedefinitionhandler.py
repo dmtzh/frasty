@@ -1,13 +1,13 @@
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Generator
 from dataclasses import dataclass
 import functools
 from typing import Any
 
-from expression import Result
+from expression import Result, effect
 
 from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
-from shared.definition import Definition
+from shared.definition import ActionDefinition, AggregateActionDefinition, Definition, DefinitionAdapter
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
@@ -16,21 +16,58 @@ from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from runningparentaction import RunningParentAction
+from shared.utils.parse import parse_from_dict
 
+@dataclass(frozen=True)
+class ExecuteDefinitionConfig:
+    definition_id: DefinitionIdValue
+    steps: tuple[ActionDefinition | AggregateActionDefinition, ...]
+    @effect.result['ExecuteDefinitionConfig | None', str]()
+    @staticmethod
+    def from_dict(data: dict[str, Any]) -> Generator[Any, Any, 'ExecuteDefinitionConfig | None']:
+        has_definition_id = "definition_id" in data
+        has_definition = "definition" in data
+        if has_definition_id or has_definition:
+            definition_id = yield from parse_from_dict(data, "definition_id", DefinitionIdValue.from_value_with_checksum)
+            list_definition = yield from parse_from_dict(data, "definition", lambda lst: lst if isinstance(lst, list) else None)
+            definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
+            return ExecuteDefinitionConfig(definition_id, definition.steps)
+        else:
+            none_res = yield from Result.Ok(None)
+            return none_res
 def register_execute_definition_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):
-    def handle_execute_definition_action(data: ActionData[None, ExecuteDefinitionInput]):
+    def handle_execute_definition_action(data: ActionData[ExecuteDefinitionConfig | None, ExecuteDefinitionInput]):
         return _handle_execute_definition_action(running_action_definitions_storage.with_storage, run_action, data)
-    return ActionHandlerFactory(run_action, action_handler).create_without_config(
+    return ActionHandlerFactory(run_action, action_handler).create(
         EXECUTE_DEFINITION_ACTION,
-        lambda data: ExecuteDefinitionInput.from_dict(data[0])
+        ExecuteDefinitionConfig.from_dict,
+        execute_definition_handler_input_validator
     )(handle_execute_definition_action)
+def execute_definition_handler_input_validator(config: ExecuteDefinitionConfig | None, dto_list: list[dict[str, Any]]):
+    def from_config_and_input():
+        if config is None:
+            return None
+        definition = Definition(dto_list, config.steps)
+        return Result[ExecuteDefinitionInput, str].Ok(ExecuteDefinitionInput(config.definition_id, definition))
+    def from_input_with_input_data():
+        missing_input_data = "input_data" not in dto_list[0]
+        if missing_input_data:
+            return None
+        def replace_input_data(execute_definition_input: ExecuteDefinitionInput):
+            input_data_res = parse_from_dict(dto_list[0], "input_data", lambda input_data: input_data if isinstance(input_data, dict | list) and input_data else None)
+            definition_res = input_data_res.map(lambda input_data: Definition(input_data, execute_definition_input.definition.steps))
+            return definition_res.map(lambda definition: ExecuteDefinitionInput(execute_definition_input.definition_id, definition))
+        return from_input_without_input_data().bind(replace_input_data)
+    def from_input_without_input_data():
+        return ExecuteDefinitionInput.from_dict(dto_list[0])
+    return from_config_and_input() or from_input_with_input_data() or from_input_without_input_data()
 
 type ToStorageActionConverter = Callable[[Callable[[RunningDefinitionState | None], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[[RunIdValue, DefinitionIdValue], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
 
 async def _handle_execute_definition_action(
         convert_to_storage_action: ToStorageActionConverter,
         run_action: RunAsyncAction,
-        data: ActionData[None, ExecuteDefinitionInput]):
+        data: ActionData[ExecuteDefinitionConfig | None, ExecuteDefinitionInput]):
     definition_id = data.input.definition_id
     def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
         metadata = Metadata()

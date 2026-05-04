@@ -11,7 +11,6 @@ from shared.pipeline.actionhandler import ActionData, RunAsyncAction, run_action
 from shared.utils.parse import parse_from_dict
 
 EXECUTE_DEFINITION_ACTION = Action(ActionName("execute_definition"), ActionType.CORE)
-
 @dataclass(frozen=True)
 class ExecuteDefinitionInput:
     definition_id: DefinitionIdValue

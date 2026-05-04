@@ -181,7 +181,7 @@ async def handle_manual_run_action(data: ActionData[None, ManualRunInput]):
         state = ManualRunState.create_running(manual_run_definition_id, definition)
         return (None, state)
     def to_execute_definition_data(manual_run_definition_id: DefinitionIdValue):
-        definition_input_data = ExecuteDefinitionInput(DefinitionIdValue.new_id(), data.input.definition).to_dict()
+        definition_input_data = [ExecuteDefinitionInput(DefinitionIdValue.new_id(), data.input.definition).to_dict()]
         definition_steps = (
             ActionDefinition(EXECUTE_DEFINITION_ACTION.name, EXECUTE_DEFINITION_ACTION.type, None),
             ActionDefinition(COMPLETE_MANUAL_RUN_ACTION.name, COMPLETE_MANUAL_RUN_ACTION.type, None))
