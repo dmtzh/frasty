@@ -85,7 +85,7 @@ class DefinitionAdapter:
                         return traverse(
                             parse_list_data_item,
                             Block(list_data)
-                        ).map(lambda block: list(block) if len(block) > 1 else block.head())
+                        ).map(list)
                     case _:
                         return Result.Error([ValueInvalid("input_data")])
             else:

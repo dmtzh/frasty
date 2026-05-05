@@ -36,11 +36,11 @@ def test_from_valid_definition_list_with_input_data_as_part_of_first_step_defini
 
 def test_from_valid_definition_list_with_single_item_list_input_data():
     expected_first_step_config = {"cfg1": "test1", "cfg2": "test2"}
-    expected_input_data_dict = {"url": "http://localhost", "http_method": "Get"}
+    expected_input_data_list = [{"url": "http://localhost", "http_method": "Get"}]
     expected_third_step_config = {"cfg3": "test3", "cfg4": "test4"}
     expected_num_of_steps = 3
     list_data = [
-        {"action": "requesturl", "type": "core", **expected_first_step_config, "input_data": [expected_input_data_dict]},
+        {"action": "requesturl", "type": "core", **expected_first_step_config, "input_data": expected_input_data_list},
         {"action": "filtersuccessresponse", "type": "core"},
         {"action": "filterhtmlresponse", **expected_third_step_config}
     ]
@@ -49,7 +49,7 @@ def test_from_valid_definition_list_with_single_item_list_input_data():
 
     assert res.is_ok()
     assert type(res.ok) is Definition
-    assert res.ok.input_data == expected_input_data_dict
+    assert res.ok.input_data == expected_input_data_list
     assert len(res.ok.steps) == expected_num_of_steps
     actual_first_step = res.ok.steps[0]
     assert actual_first_step.name == list_data[0]["action"]
