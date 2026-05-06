@@ -54,12 +54,12 @@ class ActionDefinitionAdapter:
     
     @staticmethod   
     def to_dict(action_def: ActionDefinition | AggregateActionDefinition) -> dict[str, Any]:
-        config_dict = action_def.config if action_def.config else {}
-        aggregate_dict = {"aggregate": True} if isinstance(action_def, AggregateActionDefinition) else {}
         type_dict = {"type": action_def.type.value} if action_def.type != ActionType.CUSTOM else {}
-        return config_dict | {
+        aggregate_dict = {"aggregate": True} if isinstance(action_def, AggregateActionDefinition) else {}
+        config_dict = action_def.config if action_def.config else {}
+        return {
             "action": str(action_def.name)
-        } | aggregate_dict | type_dict
+        } | type_dict | aggregate_dict | config_dict
 
 @dataclass(frozen=True)
 class StepsMissing:
@@ -105,7 +105,7 @@ class DefinitionAdapter:
             case [*list_data]:
                 input_data_dict = {"input_data": list_data}
         steps = list(map(ActionDefinitionAdapter.to_dict, definition.steps))
-        first_step_dict = [input_data_dict | steps[0]]
+        first_step_dict = [steps[0] | input_data_dict]
         next_steps_dict = steps[1:]
         definition_dict = first_step_dict + next_steps_dict
         return definition_dict
