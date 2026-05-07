@@ -2,7 +2,7 @@ import pytest
 
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedResultAdapter, CompletedWith
-from shared.customtypes import Error, StepIdValue
+from shared.customtypes import DefinitionIdValue, Error, StepIdValue
 from shared.definition import ActionDefinition, AggregateActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
 
@@ -15,8 +15,8 @@ def request_url_data():
 
 @pytest.fixture
 def two_steps():
-    first_step_def = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, None)
-    second_step_def = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
+    first_step_def = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, {})
+    second_step_def = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, {})
     return (first_step_def, second_step_def)
 
 @pytest.fixture
@@ -74,6 +74,21 @@ def test_run_first_step(definition: Definition):
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[0]
+
+
+
+def test_run_first_step_with_auto_generated_definition_id(definition: Definition):
+    assert definition.steps[0].config is not None
+    definition.steps[0].config["definition_id"] = "auto"
+    running_definition_state = RunningDefinitionState()
+    running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
+    
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+
+    assert type(evt) is RunningDefinitionState.Events.StepRunning
+    assert evt.step_definition.config is not None
+    auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(evt.step_definition.config["definition_id"])
+    assert auto_generated_definition_id is not None
 
 
 
@@ -262,6 +277,26 @@ def test_run_second_step(definition: Definition):
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[1]
+
+
+
+def test_run_second_step_with_auto_generated_definition_id(definition: Definition):
+    assert definition.steps[1].config is not None
+    definition.steps[1].config["definition_id"] = "auto"
+    running_definition_state = RunningDefinitionState()
+    running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
+    running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    result = completed_with_data("test_data")
+    first_running_step_id = running_definition_state.running_step_id()
+    assert first_running_step_id is not None
+    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
+    
+    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+    
+    assert type(evt) is RunningDefinitionState.Events.StepRunning
+    assert evt.step_definition.config is not None
+    auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(evt.step_definition.config["definition_id"])
+    assert auto_generated_definition_id is not None
 
 
 
@@ -683,7 +718,7 @@ def test_get_events_has_no_input_data_set_in_step_running_events(request_url_dat
 @pytest.fixture
 def aggregate_step_def():
     """Creates an ActionDefinition marked as an aggregate."""
-    return AggregateActionDefinition(ActionName("process_item"), ActionType.CUSTOM, None)
+    return AggregateActionDefinition(ActionName("process_item"), ActionType.CUSTOM, {})
 
 @pytest.fixture
 def list_input_data():
@@ -713,6 +748,27 @@ def test_run_first_step_emits_aggregate_event(single_aggregate_step_definition: 
         assert type(child_evt) is RunningDefinitionState.Events.StepRunning
         assert child_evt.input_data == single_aggregate_step_definition.input_data[i]
         assert child_evt.step_definition == child_step_def
+
+
+
+def test_run_first_aggregate_step_with_auto_generated_definition_id(single_aggregate_step_definition: Definition):
+    assert single_aggregate_step_definition.steps[0].config is not None
+    single_aggregate_step_definition.steps[0].config["definition_id"] = "auto"
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(single_aggregate_step_definition))
+    
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    # Verify each child event has unique definition_id
+    auto_generated_definition_ids = set[DefinitionIdValue]()
+    for child_evt in agg_evt.child_running_events:
+        assert type(child_evt) is RunningDefinitionState.Events.StepRunning
+        assert child_evt.step_definition.config is not None
+        auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(child_evt.step_definition.config["definition_id"])
+        assert auto_generated_definition_id is not None
+        auto_generated_definition_ids.add(auto_generated_definition_id)
+    assert len(agg_evt.child_running_events) == len(auto_generated_definition_ids)
 
 
 
@@ -960,6 +1016,32 @@ def test_run_next_step_emits_aggregate_event(state_at_aggregate_start, aggregate
         assert type(child_evt) is RunningDefinitionState.Events.StepRunning
         assert child_evt.input_data == list_input_data[i]
         assert child_evt.step_definition == child_step_def
+
+
+
+def test_run_second_aggregate_step_with_auto_generated_definition_id(three_step_definition_with_aggregate, list_input_data):
+    assert three_step_definition_with_aggregate.steps[1].config is not None
+    three_step_definition_with_aggregate.steps[1].config["definition_id"] = "auto"
+    state = RunningDefinitionState()
+    state.apply_command(RunningDefinitionState.Commands.SetDefinition(three_step_definition_with_aggregate))
+    state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
+    # Step 1 completes with a list to trigger the aggregate
+    step1_id = state.running_step_id()
+    assert step1_id is not None
+    state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(step1_id, CompletedWith.Data(list_input_data)))
+
+    agg_evt = state.apply_command(RunningDefinitionState.Commands.RunNextStep())
+
+    assert type(agg_evt) is RunningDefinitionState.Events.AggregateStepsRunning
+    # Verify each child event has unique definition_id
+    auto_generated_definition_ids = set[DefinitionIdValue]()
+    for child_evt in agg_evt.child_running_events:
+        assert type(child_evt) is RunningDefinitionState.Events.StepRunning
+        assert child_evt.step_definition.config is not None
+        auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(child_evt.step_definition.config["definition_id"])
+        assert auto_generated_definition_id is not None
+        auto_generated_definition_ids.add(auto_generated_definition_id)
+    assert len(agg_evt.child_running_events) == len(auto_generated_definition_ids)
 
 
 
