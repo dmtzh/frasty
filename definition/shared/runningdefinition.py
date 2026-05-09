@@ -10,9 +10,10 @@ from expression.collections.block import Block
 from expression.extra.result.traversable import traverse
 
 from shared.completedresult import CompletedResultAdapter
-from shared.customtypes import Error, IdValue, StepIdValue
+from shared.customtypes import DefinitionIdValue, Error, IdValue, StepIdValue
 from shared.definition import AggregateActionDefinition, Definition, DefinitionAdapter, ActionDefinition, ActionDefinitionAdapter
 from shared.completedresult import CompletedWith, CompletedResult
+from shared.utils.parse import parse_from_dict
 from shared.utils.string import strip_and_lowercase
 
 @dataclass(frozen=True)
@@ -85,6 +86,16 @@ class RunningDefinitionState:
             step_id: StepIdValue
             step_definition: ActionDefinition
             input_data: Any
+            @staticmethod
+            def from_step_definition(step: ActionDefinition):
+                match step.config:
+                    case None:
+                        return RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), step, None)
+                    case step_with_config:
+                        auto_def_id_res = parse_from_dict(step_with_config, "definition_id", lambda def_id: DefinitionIdValue.new_id() if isinstance(def_id, str) and strip_and_lowercase(def_id) == "auto" else None)
+                        config_res = auto_def_id_res.map(lambda def_id: {**step_with_config, "definition_id": def_id.to_value_with_checksum()})
+                        step = config_res.map(lambda config: ActionDefinition(step.name, step.type, config)).default_value(step)
+                        return RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), step, None)
         @dataclass(frozen=True)
         class StepCanceled:
             step_id: IdValue
@@ -145,20 +156,19 @@ class RunningDefinitionState:
                     return None
                 if self.recent_completed_step_id() is not None:
                     return None
-                step_id = StepIdValue.new_id()
                 match definition.steps[0]:
                     case ActionDefinition() as step_def:
-                        apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
+                        apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition(step_def)
                         RunningDefinitionState.apply(self, apply_evt)
-                        evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, definition.input_data)
+                        evt = RunningDefinitionState.Events.StepRunning(apply_evt.step_id, apply_evt.step_definition, definition.input_data)
                         return evt
                     case AggregateActionDefinition() as agg_step_def:
                         if not definition.input_data:
                             raise ValueError(f"Aggregate step '{agg_step_def.name}' cannot be executed with an empty input_data")
-                        parent_id = step_id
+                        parent_id = StepIdValue.new_id()
                         input_list = definition.input_data if isinstance(definition.input_data, list) else [definition.input_data]
                         child_step_def = ActionDefinition(agg_step_def.name, agg_step_def.type, agg_step_def.config)
-                        child_events = [RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), child_step_def, None) for _ in input_list]
+                        child_events = [RunningDefinitionState.Events.StepRunning.from_step_definition(child_step_def) for _ in input_list]
                         apply_evt = RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_events)
                         RunningDefinitionState.apply(self, apply_evt)
                         # Return external contract with actual input_data
@@ -230,20 +240,19 @@ class RunningDefinitionState:
                 recent_step_completed_output = next((e.result for e in reversed(self._events) if type(e) is RunningDefinitionState.Events.StepCompleted))
                 is_recent_step_completed_with_data = type(recent_step_completed_output) is CompletedWith.Data
                 if has_more_steps and is_recent_step_completed_with_data:
-                    step_id = StepIdValue.new_id()
                     match definition.steps[num_of_completed_steps]:
                         case ActionDefinition() as step_def:
-                            apply_evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, None)
+                            apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition(step_def)
                             RunningDefinitionState.apply(self, apply_evt)
-                            evt = RunningDefinitionState.Events.StepRunning(step_id, step_def, recent_step_completed_output.data)
+                            evt = RunningDefinitionState.Events.StepRunning(apply_evt.step_id, apply_evt.step_definition, recent_step_completed_output.data)
                             return evt
                         case AggregateActionDefinition() as agg_step_def:
                             if not recent_step_completed_output.data:
                                 raise ValueError(f"Aggregate step '{agg_step_def.name}' cannot be executed with an empty input_data")
-                            parent_id = step_id
+                            parent_id = StepIdValue.new_id()
                             input_list = recent_step_completed_output.data if isinstance(recent_step_completed_output.data, list) else [recent_step_completed_output.data]
                             child_step_def = ActionDefinition(agg_step_def.name, agg_step_def.type, agg_step_def.config)
-                            child_events = [RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), child_step_def, None) for _ in input_list]
+                            child_events = [RunningDefinitionState.Events.StepRunning.from_step_definition(child_step_def) for _ in input_list]
                             apply_evt = RunningDefinitionState.Events.AggregateStepsRunning(parent_id, child_events)
                             RunningDefinitionState.apply(self, apply_evt)
                             # Return external contract with actual input_data
