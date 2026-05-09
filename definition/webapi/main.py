@@ -1,11 +1,12 @@
 from dataclasses import dataclass
 import functools
+import json
 from typing import Any
 
 from expression import Result
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
@@ -154,7 +155,11 @@ async def manual_run(request: ManualRunRequest):
 
 # ------------------------------------------------------------------------------------------------------------
 
-@app.get("/definition/manual-run/{id}")
+class PrettyJSONResponse(JSONResponse):
+    def render(self, content):
+        return json.dumps(content, indent=2, ensure_ascii=False).encode("utf-8")
+    
+@app.get("/definition/manual-run/{id}", response_class=PrettyJSONResponse)
 async def get_status(id: str):
     opt_run_id = RunIdValue.from_value_with_checksum(id)
     if opt_run_id is None:
