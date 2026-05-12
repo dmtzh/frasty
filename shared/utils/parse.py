@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 from expression import Result
@@ -48,14 +49,51 @@ def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> 
     return parse_value(raw_value, key, parser)
 
 def parse_int(value) -> int | None:
+    # Strict float handling: reject fractional parts
+    if isinstance(value, float) and not value.is_integer():
+        return None
     try:
         return int(value)
-    except ValueError:
+    except (ValueError, TypeError):
         return None
 
-def parse_positive_int(value) -> int | None:
-    parsed_int = parse_int(value)
-    return parsed_int if parsed_int is not None and parsed_int > 0 else None
+class PositiveInt(int):
+    """
+    A strictly positive integer type (value > 0).
+    Direct construction raises ValueError on invalid input.
+    Use parse() for safe conversion that returns None on failure.
+    """
+
+    def __new__(cls, value: int) -> PositiveInt:
+        # bool is a subclass of int in Python, so we explicitly reject it
+        if isinstance(value, bool) or value <= 0:
+            raise ValueError(f"Expected a positive integer, got {value!r}")
+        return super().__new__(cls, value)
+
+    @classmethod
+    def parse(cls, value: object) -> PositiveInt | None:
+        """
+        Safely attempt to convert a value to a PositiveInt.
+        Returns a PositiveInt instance on success, or None on any failure.
+        """
+        # 1. Reject booleans (Python's bool is a subclass of int)
+        if isinstance(value, bool):
+            return None
+        # 2. Handle floats: reject fractional parts, convert whole floats safely
+        if isinstance(value, float):
+            if not value.is_integer():
+                return None
+            value = int(value)
+        # 3. Attempt integer conversion (handles str, Decimal, etc.)
+        opt_parsed_int = parse_int(value)
+        # 4. Enforce positivity
+        match opt_parsed_int:
+            case None:
+                return None
+            case positive_int if positive_int > 0:
+                return cls(positive_int)
+            case _:
+                return None
 
 def parse_value[T](value: Any, value_name: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     opt_parsed_value = parser(value)
