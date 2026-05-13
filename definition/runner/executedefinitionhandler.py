@@ -4,10 +4,12 @@ import functools
 from typing import Any
 
 from expression import Result, effect
+from expression.collections.block import Block
+from expression.extra.result.traversable import traverse
 
 from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
-from shared.definition import ActionDefinition, AggregateActionDefinition, Definition, DefinitionAdapter
+from shared.definition import ActionDefinition, ActionDefinitionAdapter, AggregateActionDefinition, Definition
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
@@ -29,9 +31,9 @@ class ExecuteDefinitionConfig:
         has_definition = "definition" in data
         if has_definition_id or has_definition:
             definition_id = yield from parse_from_dict(data, "definition_id", DefinitionIdValue.from_value_with_checksum)
-            list_definition = yield from parse_from_dict(data, "definition", lambda lst: lst if isinstance(lst, list) else None)
-            definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
-            return ExecuteDefinitionConfig(definition_id, definition.steps)
+            block_definition = yield from parse_from_dict(data, "definition", lambda lst: lst if isinstance(lst, list) else None).map(Block)
+            steps = tuple((yield from traverse(ActionDefinitionAdapter.from_dict, block_definition).map_error(str)))
+            return ExecuteDefinitionConfig(definition_id, steps)
         else:
             none_res = yield from Result.Ok(None)
             return none_res
