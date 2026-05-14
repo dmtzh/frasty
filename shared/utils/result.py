@@ -30,3 +30,14 @@ def to_error_list(*results: Result[Any, TErr]) -> list[TErr]:
 def to_ok_list(*results: Result[T, Any]) -> list[T]:
     oks = map(lambda result: result.map(lambda t: [t]).default_with(lambda _: []), results)
     return list(chain.from_iterable(oks))
+
+def apply[T1, T2, R, TErr, RErr](f: Callable[[T1, T2], R], f_err: Callable[[tuple[TErr, ...]], RErr], res1: Result[T1, TErr], res2: Result[T2, TErr]):
+    match res1.is_ok(), res2.is_ok():
+        case True, True:
+            return Result[R, RErr].Ok(f(res1.ok, res2.ok))
+        case True, False:
+            return Result[R, RErr].Error(f_err((res2.error,)))
+        case False, True:
+            return Result[R, RErr].Error(f_err((res1.error,)))
+        case False, False:
+            return Result[R, RErr].Error(f_err((res1.error, res2.error)))
