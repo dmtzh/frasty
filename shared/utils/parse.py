@@ -95,7 +95,7 @@ class PositiveInt(int):
             case _:
                 return None
 
-def parse_value[T](value: Any, value_name: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
+def parse_value[T, R](value: T, value_name: str, parser: Callable[[T], R | None]) -> Result[R, str]:
     opt_parsed_value = parser(value)
     match opt_parsed_value:
         case None:
