@@ -9,11 +9,11 @@ from shared.utils.asyncresult import async_ex_to_error_result
 
 from config import GetDefinitionInput, action_handler, app, get_definition_handler, run_action
 import completeactionhandler
-import executedefinitionhandler
+from executedefinition.registration import register_execute_definition_action_handler
 
 # ------------------------------------------------------------------------------------------------------------
 
-executedefinitionhandler.register_execute_definition_action_handler(run_action, action_handler)
+register_execute_definition_action_handler(run_action, action_handler)
 
 # ------------------------------------------------------------------------------------------------------------
 

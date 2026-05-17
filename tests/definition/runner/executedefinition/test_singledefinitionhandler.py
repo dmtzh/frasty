@@ -4,11 +4,13 @@ from typing import Concatenate, ParamSpec, TypeVar
 from expression import Result
 import pytest
 
-from runner import executedefinitionhandler
+from runner.executedefinition import singledefinitionhandler
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
-from shared.customtypes import DefinitionIdValue, Error, RunIdValue
+from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
 from shared.definition import ActionDefinition, Definition
+from shared.executedefinitionaction import ExecuteDefinitionInput
+from shared.pipeline.actionhandler import ActionData, ActionInput
 from shared.runningdefinition import RunningDefinitionState
 from shared.runningdefinitionsstore import running_action_definitions_storage
 
@@ -17,29 +19,32 @@ def convert_to_storage_action():
     return running_action_definitions_storage.with_storage
 
 @pytest.fixture
-def run_first_step_handler():
-    async def handler(evt):
+def run_first_step_action():
+    async def run_action(action_name: str, action_input: ActionInput):
         return Result.Ok(None)
-    return handler
+    return run_action
 
 @pytest.fixture
-def cmd1():
+def action_data():
     run_id = RunIdValue.new_id()
+    step_id = StepIdValue.new_id()
+    config = None
     definition_id = DefinitionIdValue.new_id()
     input_data = [{"url": "http://localhost", "http_method": "GET"}, {"url": "http://localhost", "http_method": "GET"}]
     first_step_definition = ActionDefinition(ActionName("requesturl"), ActionType.CUSTOM, None)
     second_step_definition = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
     definition = Definition(input_data, (first_step_definition, second_step_definition))
-    cmd = executedefinitionhandler.ExecuteDefinitionCommand(run_id, definition_id, definition)
-    return cmd
+    input = ExecuteDefinitionInput(definition_id, definition)
+    metadata = Metadata()
+    return ActionData(run_id, step_id, config, input, metadata)
 
 
 
-async def test_handle_returns_first_step_running_event(convert_to_storage_action, run_first_step_handler, cmd1):
-    expected_input_data = cmd1.definition.input_data
-    expected_step_definition = cmd1.definition.steps[0]
+async def test_handle_returns_first_step_running_event(convert_to_storage_action, run_first_step_action, action_data):
+    expected_input_data = action_data.input.definition.input_data
+    expected_step_definition = action_data.input.definition.steps[0]
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(handle_res) is Result
     assert handle_res.is_ok()
@@ -50,19 +55,19 @@ async def test_handle_returns_first_step_running_event(convert_to_storage_action
 
 
 
-async def test_handle_returns_new_first_step_running_event_when_first_step_already_running(convert_to_storage_action, run_first_step_handler, cmd1):
-    expected_input_data = cmd1.definition.input_data
-    expected_step_definition = cmd1.definition.steps[0]
+async def test_handle_returns_new_first_step_running_event_when_first_step_already_running(convert_to_storage_action, run_first_step_action, action_data):
+    expected_input_data = action_data.input.definition.input_data
+    expected_step_definition = action_data.input.definition.steps[0]
     def run_first_step(state: RunningDefinitionState | None):
         if state is not None:
             raise RuntimeError()
         new_state = RunningDefinitionState()
-        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
+        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(action_data.input.definition))
         evt = new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         return (evt, new_state)
-    running_evt = await convert_to_storage_action(run_first_step)(cmd1.run_id, cmd1.definition_id)
+    running_evt = await convert_to_storage_action(run_first_step)(action_data.run_id, action_data.input.definition_id)
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(running_evt) is RunningDefinitionState.Events.StepRunning
     assert type(handle_res) is Result
@@ -75,20 +80,20 @@ async def test_handle_returns_new_first_step_running_event_when_first_step_alrea
 
 
 
-async def test_handle_returns_first_step_running_event_when_first_step_canceled(convert_to_storage_action, run_first_step_handler, cmd1):
-    expected_input_data = cmd1.definition.input_data
-    expected_step_definition = cmd1.definition.steps[0]
+async def test_handle_returns_first_step_running_event_when_first_step_canceled(convert_to_storage_action, run_first_step_action, action_data):
+    expected_input_data = action_data.input.definition.input_data
+    expected_step_definition = action_data.input.definition.steps[0]
     def run_first_step_then_cancel(state: RunningDefinitionState | None):
         if state is not None:
             raise RuntimeError()
         new_state = RunningDefinitionState()
-        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
+        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(action_data.input.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         evt = new_state.apply_command(RunningDefinitionState.Commands.CancelRunningStep())
         return (evt, new_state)
-    canceled_evt = await convert_to_storage_action(run_first_step_then_cancel)(cmd1.run_id, cmd1.definition_id)
+    canceled_evt = await convert_to_storage_action(run_first_step_then_cancel)(action_data.run_id, action_data.input.definition_id)
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(canceled_evt) is RunningDefinitionState.Events.StepCanceled
     assert type(handle_res) is Result
@@ -101,20 +106,20 @@ async def test_handle_returns_first_step_running_event_when_first_step_canceled(
 
 
 
-async def test_handle_returns_first_step_running_event_when_first_step_failed(convert_to_storage_action, run_first_step_handler, cmd1):
-    expected_input_data = cmd1.definition.input_data
-    expected_step_definition = cmd1.definition.steps[0]
+async def test_handle_returns_first_step_running_event_when_first_step_failed(convert_to_storage_action, run_first_step_action, action_data):
+    expected_input_data = action_data.input.definition.input_data
+    expected_step_definition = action_data.input.definition.steps[0]
     def run_first_step_then_fail(state: RunningDefinitionState | None):
         if state is not None:
             raise RuntimeError()
         new_state = RunningDefinitionState()
-        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
+        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(action_data.input.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         evt = new_state.apply_command(RunningDefinitionState.Commands.FailRunningStep(Error("some error")))
         return (evt, new_state)
-    failed_evt = await convert_to_storage_action(run_first_step_then_fail)(cmd1.run_id, cmd1.definition_id)
+    failed_evt = await convert_to_storage_action(run_first_step_then_fail)(action_data.run_id, action_data.input.definition_id)
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(failed_evt) is RunningDefinitionState.Events.StepFailed
     assert type(handle_res) is Result
@@ -127,20 +132,20 @@ async def test_handle_returns_first_step_running_event_when_first_step_failed(co
 
 
 
-async def test_handle_returns_no_event_when_first_step_already_completed(convert_to_storage_action, run_first_step_handler, cmd1):
+async def test_handle_returns_no_event_when_first_step_already_completed(convert_to_storage_action, run_first_step_action, action_data):
     def run_first_step_then_complete(state: RunningDefinitionState | None):
         if state is not None:
             raise RuntimeError()
         new_state = RunningDefinitionState()
-        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
+        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(action_data.input.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         first_running_step_id = new_state.running_step_id()
         assert first_running_step_id is not None
         evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, CompletedWith.Data("completed result data")))
         return (evt, new_state)
-    completed_evt = await convert_to_storage_action(run_first_step_then_complete)(cmd1.run_id, cmd1.definition_id)
+    completed_evt = await convert_to_storage_action(run_first_step_then_complete)(action_data.run_id, action_data.input.definition_id)
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(completed_evt) is RunningDefinitionState.Events.StepCompleted
     assert type(handle_res) is Result
@@ -150,77 +155,60 @@ async def test_handle_returns_no_event_when_first_step_already_completed(convert
 
 
 
-async def test_handle_passes_correct_data_to_run_first_step_handler(convert_to_storage_action, cmd1):
-    expected_input_data = cmd1.definition.input_data
-    expected_step_definition = cmd1.definition.steps[0]
+async def test_handle_passes_correct_data_to_run_action(convert_to_storage_action, action_data):
+    expected_input_data = action_data.input.definition.input_data
+    expected_step_definition = action_data.input.definition.steps[0]
     passed_data = {}
-    async def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
-        passed_data["input_data"] = evt.input_data
-        passed_data["step_definition"] = evt.step_definition
+    async def run_first_step_action(action_name: str, action_input: ActionInput):
+        passed_data["input_data"] = action_input.data["input_data"]
+        passed_data["step_name"] = action_name
         return Result.Ok(None)
     
-    await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert "input_data" in passed_data
     assert passed_data["input_data"] == expected_input_data
-    assert "step_definition" in passed_data
-    assert passed_data["step_definition"] == expected_step_definition
+    assert "step_name" in passed_data
+    assert passed_data["step_name"] == expected_step_definition.get_name()
 
 
 
-async def test_handle_return_data_is_same_as_run_first_step_handler_data(convert_to_storage_action, cmd1):
-    passed_data = {}
-    async def run_first_step_handler(evt: RunningDefinitionState.Events.StepRunning):
-        passed_data["evt"] = evt
-        return Result.Ok(None)
-    
-    res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
-
-    assert type(res) is Result
-    assert res.is_ok()
-    assert passed_data["evt"] == res.ok
-
-
-
-async def test_handle_returns_error_when_run_first_step_handler_error(convert_to_storage_action, cmd1):
+async def test_handle_returns_error_when_run_action_error(convert_to_storage_action, action_data):
     expected_error = Error("expected error")
-    async def run_first_step_handler_with_err(evt):
+    async def run_first_step_action_with_err(action_name: str, action_input: ActionInput):
         return Result.Error(expected_error)
     
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler_with_err, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action_with_err, action_data)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
-    assert type(handle_res.error) is executedefinitionhandler.RunFirstStepError
+    assert type(handle_res.error) is singledefinitionhandler.RunFirstStepError
     assert handle_res.error.error == expected_error
 
 
 
-async def test_handle_raises_exception_when_run_first_step_handler_exception(convert_to_storage_action, cmd1):
+async def test_handle_raises_exception_when_run_action_exception(convert_to_storage_action, action_data):
     expected_ex = RuntimeError("expected exception")
-    async def run_first_step_handler_with_ex(evt):
+    async def run_first_step_action_with_ex(action_name: str, action_input: ActionInput):
         raise expected_ex
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action_with_ex, action_data)
     
-    try:
-        await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler_with_ex, cmd1)
-        assert False
-    except Exception as e:
-        actual_ex = e
-
-    assert actual_ex == expected_ex
+    assert exc_info.value == expected_ex
 
 
 
-async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_already_completed(convert_to_storage_action, cmd1):
+async def test_handle_does_not_invoke_run_action_when_first_step_already_completed(convert_to_storage_action, action_data):
     run_first_step_handler_calls = []
-    async def run_first_step_handler(evt):
-        run_first_step_handler_calls.append(evt)
+    async def run_first_step_action(action_name: str, action_input: ActionInput):
+        run_first_step_handler_calls.append(action_input)
         return Result.Ok(None)
     def run_then_complete_first_step(state: RunningDefinitionState | None):
         if state is not None:
             raise RuntimeError()
         new_state = RunningDefinitionState()
-        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(cmd1.definition))
+        new_state.apply_command(RunningDefinitionState.Commands.SetDefinition(action_data.input.definition))
         new_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
         completed_step_result = CompletedWith.Data("completed result data")
         first_running_step_id = new_state.running_step_id()
@@ -228,8 +216,8 @@ async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_alr
         evt = new_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, completed_step_result))
         return (evt, new_state)
     
-    await convert_to_storage_action(run_then_complete_first_step)(cmd1.run_id, cmd1.definition_id)
-    await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    await convert_to_storage_action(run_then_complete_first_step)(action_data.run_id, action_data.input.definition_id)
+    await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert len(run_first_step_handler_calls) == 0
 
@@ -237,33 +225,37 @@ async def test_handle_does_not_invoke_run_first_step_handler_when_first_step_alr
 
 P = ParamSpec("P")
 R = TypeVar("R")
-async def test_handle_returns_error_when_storage_action_exception(run_first_step_handler, cmd1):
+async def test_handle_returns_error_when_storage_action_exception(run_first_step_action, action_data):
     def convert_to_storage_action(func: Callable[Concatenate[RunningDefinitionState | None, P], tuple[R, RunningDefinitionState]]):
         async def wrapper(run_id: RunIdValue, definition_id: DefinitionIdValue, *args: P.args, **kwargs: P.kwargs) -> R:
             raise RuntimeError("Storage action error")
         return wrapper
 
-    handle_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
+    handle_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
 
 
 
-async def test_handle_two_different_definitions_with_same_run_id(convert_to_storage_action, run_first_step_handler, cmd1):
+async def test_handle_two_different_definitions_with_same_run_id(convert_to_storage_action, run_first_step_action, action_data):
+    step_id2 = StepIdValue.new_id()
+    config2 = None
     definition_id2 = DefinitionIdValue.new_id()
     input_data2 = { "response": "test response" }
     first_step_definition2 = ActionDefinition(ActionName("filtersuccessresponse"), ActionType.CUSTOM, None)
     second_step_definition2 = ActionDefinition(ActionName("filterhtmlresponse"), ActionType.CUSTOM, None)
     definition2 = Definition(input_data2, (first_step_definition2, second_step_definition2))
-    cmd2 = executedefinitionhandler.ExecuteDefinitionCommand(cmd1.run_id, definition_id2, definition2)
-    expected_input_data1 = cmd1.definition.input_data
-    expected_step_definition1 = cmd1.definition.steps[0]
-    expected_input_data2 = cmd2.definition.input_data
-    expected_step_definition2 = cmd2.definition.steps[0]
+    input2 = ExecuteDefinitionInput(definition_id2, definition2)
+    metadata2 = Metadata()
+    action_data2 = ActionData(action_data.run_id, step_id2, config2, input2, metadata2)
+    expected_input_data1 = action_data.input.definition.input_data
+    expected_step_definition1 = action_data.input.definition.steps[0]
+    expected_input_data2 = definition2.input_data
+    expected_step_definition2 = definition2.steps[0]
     
-    handle1_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd1)
-    handle2_res = await executedefinitionhandler._handle(convert_to_storage_action, run_first_step_handler, cmd2)
+    handle1_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data)
+    handle2_res = await singledefinitionhandler.handle(convert_to_storage_action, run_first_step_action, action_data2)
 
     assert type(handle1_res) is Result
     assert type(handle2_res) is Result
