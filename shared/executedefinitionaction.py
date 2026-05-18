@@ -46,7 +46,7 @@ def run_execute_definition_action(run_action: RunAsyncAction, data: ActionData[N
 
 @dataclass(frozen=True)
 class ExecuteGroupOfDefinitionsInput:
-    items: list[ExecuteDefinitionInput]
+    items: tuple[ExecuteDefinitionInput, ...]
     
     def to_list(self):
         return [item.to_dict() for item in self.items]
@@ -56,5 +56,6 @@ class ExecuteGroupOfDefinitionsInput:
     def from_list(data: list[dict[str, Any]]) -> Generator[Any, Any, 'ExecuteGroupOfDefinitionsInput']:
         non_empty_list = yield from parse_value(data, "definitions", lambda lst: lst if isinstance(lst, list) and lst else None)
         list_of_dicts = yield from parse_value(non_empty_list, "definitions", lambda lst: lst if all(isinstance(item, dict) and item for item in lst) else None)
-        exec_def_inputs_res = yield from traverse(ExecuteDefinitionInput.from_dict, Block(list_of_dicts)).map(list)
+        exec_def_inputs_res = yield from traverse(ExecuteDefinitionInput.from_dict, Block(list_of_dicts)).map(tuple)
+        # seen_def_ids = set[DefinitionIdValue]()
         return ExecuteGroupOfDefinitionsInput(exec_def_inputs_res)

@@ -124,7 +124,7 @@ class TestHappyPath:
 
         assert result.is_ok()
         assert type(result.ok) is ExecuteGroupOfDefinitionsInput
-        assert type(result.ok.items) is list
+        assert type(result.ok.items) is tuple
         assert result.ok.items
         for item in result.ok.items:
             assert type(item) is ExecuteDefinitionInput

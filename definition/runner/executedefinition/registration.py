@@ -47,7 +47,7 @@ def execute_definition_handler_input_validator(dto_list: list[DataDto]):
             case [single_item]:
                 return from_input_with_input_data(single_item) or from_input_without_input_data(single_item)
             case [*multiple_items]:
-                exec_def_inputs_res = traverse(lambda item: from_input_with_input_data(item) or from_input_without_input_data(item), Block(multiple_items)).map(list)
+                exec_def_inputs_res = traverse(lambda item: from_input_with_input_data(item) or from_input_without_input_data(item), Block(multiple_items)).map(tuple)
                 return exec_def_inputs_res.map(ExecuteGroupOfDefinitionsInput)
     dto_items_res = parse_has_items()
     execute_definition_input_res = dto_items_res.bind(parse_execute_definition_input)
