@@ -12,11 +12,12 @@ from shared.definition import ActionDefinition, Definition
 from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.pipeline.actionhandler import ActionData, ActionInput
 from shared.runningdefinition import RunningDefinitionState
-from shared.runningdefinitionsstore import running_action_definitions_storage
+
+from config import running_definitions_storage
 
 @pytest.fixture
 def convert_to_storage_action():
-    return running_action_definitions_storage.with_storage
+    return running_definitions_storage.with_storage
 
 @pytest.fixture
 def run_first_step_action():

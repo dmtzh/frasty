@@ -11,17 +11,17 @@ from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.pipeline.actionhandler import COMPLETE_ACTION, ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction, StepError
 from shared.runningdefinition import RunningDefinitionState
-from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
 from shared.utils.result import to_error_list
 
+from config import running_definitions_storage
 from runningparentaction import RunningParentAction
 
 type CompleteInput = CompletedResult
 
 def register_complete_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):
     def handle_complete_action(data: ActionData[None, CompleteInput]):
-        return _handle_complete_action(running_action_definitions_storage.with_storage, run_action, data)
+        return _handle_complete_action(running_definitions_storage.with_storage, run_action, data)
     async def do_nothing_when_run_action(action_name: str, action_input: ActionInput):
         return Result.Ok(None)
     return ActionHandlerFactory(do_nothing_when_run_action, action_handler).create_without_config(

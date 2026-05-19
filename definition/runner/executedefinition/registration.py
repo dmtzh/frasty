@@ -6,8 +6,9 @@ from shared.completedresult import CompletedResultAdapter, CompletedWith
 from shared.definition import Definition
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, AsyncActionHandler, DataDto, DataDtoAdapter, RunAsyncAction
-from shared.runningdefinitionsstore import running_action_definitions_storage
 from shared.utils.result import apply
+
+from config import running_definitions_storage
 
 from .singledefinitionhandler import handle as handle_execute_single_definition
 
@@ -16,7 +17,7 @@ def register_execute_definition_action_handler(run_action: RunAsyncAction, actio
         match data.input:
             case ExecuteDefinitionInput():
                 action_data = ActionData(data.run_id, data.step_id, data.config, data.input, data.metadata)
-                execute_single_definition_res = await handle_execute_single_definition(running_action_definitions_storage.with_storage, run_action, action_data)
+                execute_single_definition_res = await handle_execute_single_definition(running_definitions_storage.with_storage, run_action, action_data)
                 return _result_to_execute_definition_action_handler_result(execute_single_definition_res)
             case ExecuteGroupOfDefinitionsInput():
                 action_data = ActionData(data.run_id, data.step_id, data.config, data.input, data.metadata)
