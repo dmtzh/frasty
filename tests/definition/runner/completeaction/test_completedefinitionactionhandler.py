@@ -4,7 +4,7 @@ from typing import Concatenate, ParamSpec, TypeVar
 from expression import Result
 import pytest
 
-from runner import completeactionhandler
+from runner.completeaction.completedefinitionactionhandler import CompleteActionCommand, CompleteDefinitionError, RunNextStepError, handle as handle_complete_definition_action
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
@@ -47,13 +47,13 @@ def create_complete_step_cmd(convert_to_storage_action):
             "metadata": {"command": "cmd1"}
         }
         evt = await convert_to_storage_action(storage_setup_func)(run_id, definition_id, cmd_dict)
-        cmd = completeactionhandler.CompleteActionCommand(cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"])
+        cmd = CompleteActionCommand(cmd_dict["run_id"], cmd_dict["definition_id"], cmd_dict["step_id"], cmd_dict["result"])
         return (evt, cmd)
     return wrapper
 
 @pytest.fixture
 def handle(convert_to_storage_action):
-    return functools.partial(completeactionhandler.handle, convert_to_storage_action)
+    return functools.partial(handle_complete_definition_action, convert_to_storage_action)
 
 @pytest.fixture(scope="session")
 def two_step_definition():
@@ -386,7 +386,7 @@ async def test_handle_returns_NotFoundError_when_state_not_found(create_complete
         return (evt, state)
     _, cmd = await create_complete_step_cmd(apply_set_first_step_running)
     wrong_definition_id = DefinitionIdValue.new_id()
-    cmd_with_wrong_definition_id = completeactionhandler.CompleteActionCommand(cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result)
+    cmd_with_wrong_definition_id = CompleteActionCommand(cmd.run_id, wrong_definition_id, cmd.step_id, cmd.result)
 
     handle_res = await handle(runtime_error_event_handler, cmd_with_wrong_definition_id)
 
@@ -478,7 +478,7 @@ async def test_handle_returns_error_when_running_definitions_storage_exception(c
             raise RuntimeError("Running definitions storage error")
         return wrapper
 
-    handle_res = await completeactionhandler.handle(convert_to_storage_action, step_running_event_handler, cmd)
+    handle_res = await handle_complete_definition_action(convert_to_storage_action, step_running_event_handler, cmd)
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
@@ -503,7 +503,7 @@ async def test_handle_returns_run_next_step_error_when_event_handler_error(creat
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
-    assert type(handle_res.error) is completeactionhandler.RunNextStepError
+    assert type(handle_res.error) is RunNextStepError
     assert handle_res.error.step_id == passed_data["step_id"]
     assert handle_res.error.error == event_handler_error
 
@@ -531,7 +531,7 @@ async def test_handle_returns_complete_definition_error_when_event_handler_error
 
     assert type(handle_res) is Result
     assert handle_res.is_error()
-    assert type(handle_res.error) is completeactionhandler.CompleteDefinitionError
+    assert type(handle_res.error) is CompleteDefinitionError
     assert handle_res.error.error == event_handler_error
 
 

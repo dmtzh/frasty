@@ -8,7 +8,7 @@ from shared.pipeline.actionhandler import ActionData
 from shared.utils.asyncresult import async_ex_to_error_result
 
 from config import GetDefinitionInput, action_handler, app, get_definition_handler, run_action
-import completeactionhandler
+from completeaction.registration import register_complete_action_handler
 from executedefinition.registration import register_execute_definition_action_handler
 
 # ------------------------------------------------------------------------------------------------------------
@@ -17,7 +17,7 @@ register_execute_definition_action_handler(run_action, action_handler)
 
 # ------------------------------------------------------------------------------------------------------------
 
-completeactionhandler.register_complete_action_handler(run_action, action_handler)
+register_complete_action_handler(run_action, action_handler)
 
 # ------------------------------------------------------------------------------------------------------------
 
