@@ -5,10 +5,12 @@ from typing import Any, Concatenate, ParamSpec, TypeVar
 from expression import Result
 
 from shared.customtypes import DefinitionIdValue, IdValue, RunIdValue
+from shared.definitioncustomtypes import GroupIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 
+from .groupofrunningdefinitions import GroupOfRunningDefinitionsState, GroupOfRunningDefinitionsStateAdapter
 from .runningdefinition import RunningDefinitionState, RunningDefinitionStateAdapter
 
 P = ParamSpec("P")
@@ -40,4 +42,19 @@ class RunningDefinitionsStore(GenericFileStoreWithVersioning[RunningDefinitionSt
     
     def delete(self, run_id: IdValue, definition_id: IdValue):
         id_str = f"{run_id}_{definition_id}"
+        return self._file_repo_with_ver.delete(id_str)
+
+class GroupOfRunningDefinitionsStore(GenericFileStoreWithVersioning[GroupOfRunningDefinitionsState]):
+    def __init__(self, root_folder: str):
+        folder_path = os.path.join(root_folder, "DefinitionsStorage")
+        super().__init__(folder_path, GroupOfRunningDefinitionsState.__name__, GroupOfRunningDefinitionsStateAdapter.to_list, GroupOfRunningDefinitionsStateAdapter.from_list)
+    
+    def with_storage(self, func: Callable[Concatenate[GroupOfRunningDefinitionsState | None, P], tuple[R, GroupOfRunningDefinitionsState]]):
+        def wrapper(run_id: RunIdValue, group_id: GroupIdValue, *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, R]:
+            id_str = f"{run_id}_{group_id}"
+            return self._item_action(func)(id_str, *args, **kwargs)
+        return wrapper
+    
+    def delete(self, run_id: IdValue, group_id: GroupIdValue):
+        id_str = f"{run_id}_{group_id}"
         return self._file_repo_with_ver.delete(id_str)

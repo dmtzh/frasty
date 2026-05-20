@@ -8,7 +8,7 @@ from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
-from shared.runningdefinitionsstore import RunningDefinitionsStore
+from shared.runningdefinitionsstore import GroupOfRunningDefinitionsStore, RunningDefinitionsStore
 from shared.utils.parse import parse_from_dict
 
 run_action = config.run_action
@@ -31,5 +31,6 @@ def get_definition_handler(func: Callable[[ActionData[None, GetDefinitionInput]]
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
 running_definitions_storage = RunningDefinitionsStore(STORAGE_ROOT_FOLDER)
+group_of_running_definitions_storage = GroupOfRunningDefinitionsStore(STORAGE_ROOT_FOLDER)
 
 app = config.create_faststream_app()
