@@ -31,7 +31,8 @@ def register_complete_action_handler(run_action: RunAsyncAction, action_handler:
         opt_parent_action = RunningParentAction.parse(data.metadata)
         if opt_parent_action is not None:
             error_result = CompletedWith.Error(str(complete_error))
-            await opt_parent_action.run_complete_definition(run_action, error_result)
+            error_result_dict = CompletedResultAdapter.to_dict(error_result)
+            await opt_parent_action.run_complete_definition(run_action, CompletedWith.Data(error_result_dict))
     async def do_nothing_when_run_action(action_name: str, action_input: ActionInput):
         return Result.Ok(None)
     
@@ -54,4 +55,5 @@ async def _event_handler(run_action: RunAsyncAction, data: ActionData[None, Comp
                 case parent_action_no_def_id if parent_action_no_def_id.metadata.get_definition_id() is None:
                     return Result.Ok(None)
                 case parent_action_with_def_id:
-                    return await parent_action_with_def_id.run_complete_definition(run_action, evt.result)
+                    evt_result_dict = CompletedResultAdapter.to_dict(evt.result)
+                    return await parent_action_with_def_id.run_complete_definition(run_action, CompletedWith.Data(evt_result_dict))

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from expression import Result
 
-from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
+from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.actionhandler import CompleteActionData, RunAsyncAction
 from shared.utils.parse import parse_from_dict
@@ -16,11 +16,10 @@ class RunningParentAction:
     async def run_complete_definition(self, run_action: RunAsyncAction, result: CompletedResult):
         if self.metadata.get_definition_id() is None:
             return Result[None, str].Error("metadata does not have definition id")
-        result_dict = CompletedResultAdapter.to_dict(result)
         complete_action_data = CompleteActionData(
             self.run_id,
             self.step_id,
-            CompletedWith.Data(result_dict),
+            result,
             self.metadata
         )
         return await complete_action_data.run_complete(run_action)
