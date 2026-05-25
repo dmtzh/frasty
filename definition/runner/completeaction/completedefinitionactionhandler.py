@@ -24,9 +24,10 @@ class CompleteActionCommand:
     result: CompletedResult
 
 async def handle(
-        convert_to_storage_action: ToStorageActionConverter,
-        event_handler: Callable[[RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]],
-        cmd: CompleteActionCommand):
+    convert_to_storage_action: ToStorageActionConverter,
+    event_handler: Callable[[RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted], Coroutine[Any, Any, Result]],
+    cmd: CompleteActionCommand
+):
     def map_errors(error: NotFoundError | StorageError | _EventHandlerError):
         match error:
             case _EventHandlerError(event=evt, error=evt_error):
