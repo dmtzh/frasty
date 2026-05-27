@@ -1,17 +1,14 @@
-import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, Concatenate, NamedTuple
 
 from expression import Result
 
-from shared.completedresult import CompletedResult, CompletedWith
+from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
-from shared.pipeline.actionhandler import StepError
 from shared.runningdefinition import RunningDefinitionState
 from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
-from shared.utils.result import to_error_list
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[RunningDefinitionState | None, P], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[Concatenate[RunIdValue, DefinitionIdValue, P], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
 type CompleteInput = CompletedResult
@@ -105,19 +102,6 @@ async def _complete_action_workflow(
     match opt_evt:
         case RunningDefinitionState.Events.StepRunning() | RunningDefinitionState.Events.DefinitionCompleted():
             await async_result(event_handler)(opt_evt).map_error(lambda err: _EventHandlerError(opt_evt, err))
-        case RunningDefinitionState.Events.AggregateStepsRunning():
-            # run all child steps
-            async def child_step_event_handler(evt: RunningDefinitionState.Events.StepRunning):
-                res = await event_handler(evt)
-                return res.map_error(lambda err: StepError(evt.step_id, err))
-            running_event_handlers = (child_step_event_handler(evt) for evt in opt_evt.child_running_events)
-            event_handlers_results = await asyncio.gather(*running_event_handlers)
-            step_errors = to_error_list(*event_handlers_results)
-            if step_errors:
-                # complete failed child steps
-                complete_with_error_commands = (CompleteActionCommand(cmd.run_id, cmd.definition_id, step_err.step_id, CompletedWith.Error(str(step_err))) for step_err in step_errors)
-                error_handlers = (handle(convert_to_storage_action, event_handler, err_cmd) for err_cmd in complete_with_error_commands)
-                await asyncio.gather(*error_handlers)
     return opt_evt
 
 async def _clean_up_failed_complete(
