@@ -2,7 +2,7 @@ import pytest
 
 from shared.action import ActionName, ActionType
 from shared.completedresult import CompletedWith
-from shared.customtypes import DefinitionIdValue, Error, StepIdValue
+from shared.customtypes import Error, StepIdValue
 from shared.definition import ActionDefinition, Definition
 from shared.runningdefinition import RunningDefinitionState
 
@@ -74,21 +74,6 @@ def test_run_first_step(definition: Definition):
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[0]
-
-
-
-def test_run_first_step_with_auto_generated_definition_id(definition: Definition):
-    assert definition.steps[0].config is not None
-    definition.steps[0].config["definition_id"] = "auto"
-    running_definition_state = RunningDefinitionState()
-    running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
-    
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-
-    assert type(evt) is RunningDefinitionState.Events.StepRunning
-    assert evt.step_definition.config is not None
-    auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(evt.step_definition.config["definition_id"])
-    assert auto_generated_definition_id is not None
 
 
 
@@ -277,26 +262,6 @@ def test_run_second_step(definition: Definition):
     evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
     assert type(evt) is RunningDefinitionState.Events.StepRunning
     assert evt.step_definition == definition.steps[1]
-
-
-
-def test_run_second_step_with_auto_generated_definition_id(definition: Definition):
-    assert definition.steps[1].config is not None
-    definition.steps[1].config["definition_id"] = "auto"
-    running_definition_state = RunningDefinitionState()
-    running_definition_state.apply_command(RunningDefinitionState.Commands.SetDefinition(definition))
-    running_definition_state.apply_command(RunningDefinitionState.Commands.RunFirstStep())
-    result = completed_with_data("test_data")
-    first_running_step_id = running_definition_state.running_step_id()
-    assert first_running_step_id is not None
-    running_definition_state.apply_command(RunningDefinitionState.Commands.CompleteRunningStep(first_running_step_id, result))
-    
-    evt = running_definition_state.apply_command(RunningDefinitionState.Commands.RunNextStep())
-    
-    assert type(evt) is RunningDefinitionState.Events.StepRunning
-    assert evt.step_definition.config is not None
-    auto_generated_definition_id = DefinitionIdValue.from_value_with_checksum(evt.step_definition.config["definition_id"])
-    assert auto_generated_definition_id is not None
 
 
 

@@ -10,10 +10,9 @@ from expression.collections.block import Block
 from expression.extra.result.traversable import traverse
 
 from shared.completedresult import CompletedResultAdapter
-from shared.customtypes import DefinitionIdValue, Error, IdValue, StepIdValue
+from shared.customtypes import Error, IdValue, StepIdValue
 from shared.definition import Definition, DefinitionAdapter, ActionDefinition, ActionDefinitionAdapter
 from shared.completedresult import CompletedWith, CompletedResult
-from shared.utils.parse import parse_from_dict
 from shared.utils.string import strip_and_lowercase
 
 class RunningDefinitionState:
@@ -50,15 +49,8 @@ class RunningDefinitionState:
             step_definition: ActionDefinition
             input_data: Any
             @staticmethod
-            def from_step_definition(step: ActionDefinition):
-                match step.config:
-                    case None:
-                        return RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), step, None)
-                    case step_with_config:
-                        auto_def_id_res = parse_from_dict(step_with_config, "definition_id", lambda def_id: DefinitionIdValue.new_id() if isinstance(def_id, str) and strip_and_lowercase(def_id) == "auto" else None)
-                        config_res = auto_def_id_res.map(lambda def_id: {**step_with_config, "definition_id": def_id.to_value_with_checksum()})
-                        step = config_res.map(lambda config: ActionDefinition(step.name, step.type, config)).default_value(step)
-                        return RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), step, None)
+            def from_step_definition_without_input_data(step: ActionDefinition):
+                return RunningDefinitionState.Events.StepRunning(StepIdValue.new_id(), step, None)
         @dataclass(frozen=True)
         class StepCanceled:
             step_id: IdValue
@@ -111,7 +103,7 @@ class RunningDefinitionState:
                     return None
                 match definition.steps[0]:
                     case ActionDefinition() as step_def:
-                        apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition(step_def)
+                        apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition_without_input_data(step_def)
                         RunningDefinitionState.apply(self, apply_evt)
                         evt = RunningDefinitionState.Events.StepRunning(apply_evt.step_id, apply_evt.step_definition, definition.input_data)
                         return evt
@@ -156,7 +148,7 @@ class RunningDefinitionState:
                 if has_more_steps and is_recent_step_completed_with_data:
                     match definition.steps[num_of_completed_steps]:
                         case ActionDefinition() as step_def:
-                            apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition(step_def)
+                            apply_evt = RunningDefinitionState.Events.StepRunning.from_step_definition_without_input_data(step_def)
                             RunningDefinitionState.apply(self, apply_evt)
                             evt = RunningDefinitionState.Events.StepRunning(apply_evt.step_id, apply_evt.step_definition, recent_step_completed_output.data)
                             return evt
