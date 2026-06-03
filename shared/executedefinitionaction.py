@@ -35,6 +35,9 @@ class ExecuteDefinitionInput:
                 lambda raw_def: parse_value(raw_def, "definition", lambda raw_def: raw_def if isinstance(raw_def, dict) and raw_def else None),
                 Block(list_definition)
             ).map(list)
+            if "input_data" in data:
+                first_step_data = list_of_dict_definitions[0] | {"input_data": data["input_data"]}
+                list_of_dict_definitions = [first_step_data] + list_of_dict_definitions[1:]
             definition = yield from DefinitionAdapter.from_list(list_of_dict_definitions).map_error(str)
             return definition
         definition_id_res = parse_from_dict(data, "definition_id", DefinitionIdValue.from_value_with_checksum)

@@ -295,12 +295,12 @@ def test_validate_double_failure_aggregates_or_chooses_single_error(dto_list_sin
     assert all(keyword in error_msg for keyword in ["definition", "definition_id"])
 
 
-def test_validate_traverse_short_circuit_on_first_error(dto_list_group):
+def test_validate_multiple_errors_captured(dto_list_group):
     """
     GIVEN a list of 4 DTOs where the second one has malformed definition and fourth has malformed definition_id
     WHEN validator is called
-    THEN traverse halts at the second item, third and fourth items are NOT processed
-    AND Result.Error contains definition parsing failure
+    THEN all items are processed
+    AND Result.Error contains definition parsing failure and definition_id parsing failure
     """
     dto_list = [
         dto_list_group[0],
@@ -314,8 +314,8 @@ def test_validate_traverse_short_circuit_on_first_error(dto_list_group):
     assert result.is_error()
     error_msg = str(result.error).lower()
     assert "action" in error_msg
-    assert "definition_id" not in error_msg
-    assert "checksum" not in error_msg
+    assert "definition_id" in error_msg
+    assert "checksum" in error_msg
 
 
 def test_validate_empty_definition_list_rejected(dto_list_single):
