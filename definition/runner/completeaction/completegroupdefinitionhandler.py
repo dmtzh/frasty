@@ -8,7 +8,8 @@ from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.definitioncustomtypes import GroupIdValue
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.result import lift_param
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[GroupOfRunningDefinitionsState | None, P], tuple[GroupOfRunningDefinitionsState.Events.Event | None, GroupOfRunningDefinitionsState]]], Callable[Concatenate[RunIdValue, GroupIdValue, P], Coroutine[Any, Any, GroupOfRunningDefinitionsState.Events.Event | None]]]
 
@@ -59,13 +60,11 @@ class _EventHandlerError(NamedTuple):
     event: GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted
     error: Any
 
-@coroutine_result[CompleteGroupDefinitionStorageError | _EventHandlerError]()
 async def _complete_group_definition_workflow(
     convert_to_storage_action: ToStorageActionConverter,
     event_handler: Callable[[GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted], Coroutine[Any, Any, Result]],
     cmd: CompleteGroupDefinitionCommand
 ):
-    @async_result
     @async_ex_to_error_result(CompleteGroupDefinitionStorageError.from_exception)
     @async_ex_to_error_result(lambda _: CompleteGroupDefinitionStorageError(f"State not found for run_id {cmd.run_id} and group_id {cmd.group_id}"), NotFoundException)
     @convert_to_storage_action
@@ -75,9 +74,16 @@ async def _complete_group_definition_workflow(
         complete_def_cmd = GroupOfRunningDefinitionsState.Commands.CompleteDefinition(cmd.step_id, cmd.definition_id, cmd.result)
         evt = state.apply_command(complete_def_cmd)
         return (evt, state)
-            
-    opt_evt = await apply_complete_definition(cmd.run_id, cmd.group_id)
-    match opt_evt:
-        case GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted() as all_defs_completed:
-            await async_result(event_handler)(all_defs_completed).map_error(lambda err: _EventHandlerError(all_defs_completed, err))
-    return opt_evt
+    async def handle_all_definitions_completed(opt_evt: GroupOfRunningDefinitionsState.Events.Event | None):
+        match opt_evt:
+            case GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted() as all_defs_completed:
+                event_handler_res = await event_handler(all_defs_completed)
+                return event_handler_res\
+                    .map(lambda _: opt_evt) \
+                    .map_error(lambda err: _EventHandlerError(all_defs_completed, err))
+            case _:
+                return Result[GroupOfRunningDefinitionsState.Events.Event | None, _EventHandlerError].Ok(opt_evt)
+
+    opt_evt_res = await apply_complete_definition(cmd.run_id, cmd.group_id)
+    res = await lift_param(handle_all_definitions_completed)(opt_evt_res)
+    return res
