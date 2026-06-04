@@ -3,11 +3,11 @@
 import pytest
 
 from shared.customtypes import DefinitionIdValue
-from shared.executedefinitionaction import ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput
+from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.pipeline.actionhandler import DataDto
 
+from runner.executedefinition.input import ExecuteGroupOfDefinitionsInput
 from runner.executedefinition.registration import execute_definition_handler_input_validator
-
 
 # =============================================================================
 # FIXTURES: Canonical valid input structures

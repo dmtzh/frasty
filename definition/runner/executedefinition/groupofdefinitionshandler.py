@@ -10,7 +10,7 @@ from shared.completedresult import CompletedWith
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
 from shared.definition import Definition
 from shared.definitioncustomtypes import GroupIdValue
-from shared.executedefinitionaction import ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput, run_execute_definition_action
+from shared.executedefinitionaction import ExecuteDefinitionInput, run_execute_definition_action
 from shared.groupofrunningdefinitions import DefinitionIdWithValue, GroupOfRunningDefinitionsState, RunningDefinition
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData, RunAsyncAction
@@ -18,6 +18,8 @@ from shared.utils.asyncresult import async_ex_to_error_result
 from shared.utils.result import apply, lift_error_param, lift_param, to_error_list, to_ok_list
 
 from runningparentaction import RunningParentAction
+
+from .input import ExecuteGroupOfDefinitionsInput
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[GroupOfRunningDefinitionsState | None, P], tuple[GroupOfRunningDefinitionsState.Events.Event | None, GroupOfRunningDefinitionsState]]], Callable[Concatenate[RunIdValue, GroupIdValue, P], Coroutine[Any, Any, GroupOfRunningDefinitionsState.Events.Event | None]]]
 

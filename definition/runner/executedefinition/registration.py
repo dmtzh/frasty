@@ -3,13 +3,14 @@ from typing import Any
 from expression import Result
 
 from shared.completedresult import CompletedResultAdapter, CompletedWith
-from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput
+from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, AsyncActionHandler, DataDto, RunAsyncAction
 
 from config import running_definitions_storage, group_of_running_definitions_storage
 
 from .groupofdefinitionshandler import RunGroupOfDefinitionsStorageError, CompleteFailedDefinitionStorageError, handle as handle_execute_group_of_definitions
+from .input import ExecuteGroupOfDefinitionsInput
 from .singledefinitionhandler import handle as handle_execute_single_definition
 
 def register_execute_definition_action_handler(run_action: RunAsyncAction, action_handler: AsyncActionHandler):

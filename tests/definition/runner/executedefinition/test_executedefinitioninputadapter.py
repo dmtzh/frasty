@@ -2,7 +2,9 @@ import pytest
 
 from shared.customtypes import DefinitionIdValue
 from shared.definition import Definition
-from shared.executedefinitionaction import ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput
+from shared.executedefinitionaction import ExecuteDefinitionInput
+
+from runner.executedefinition.input import ExecuteGroupOfDefinitionsInput
 
 # ==========================================
 # Negative cases

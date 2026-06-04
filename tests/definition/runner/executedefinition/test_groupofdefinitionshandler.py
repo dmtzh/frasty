@@ -3,12 +3,13 @@ from typing import Concatenate, ParamSpec, TypeVar
 from expression import Result
 import pytest
 from runner.executedefinition import groupofdefinitionshandler
+from runner.executedefinition.input import ExecuteGroupOfDefinitionsInput
 from runner.runningparentaction import RunningParentAction
 from shared.action import ActionName, ActionType
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue
 from shared.definition import ActionDefinition, Definition
 from shared.definitioncustomtypes import GroupIdValue
-from shared.executedefinitionaction import ExecuteDefinitionInput, ExecuteGroupOfDefinitionsInput
+from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState, DefinitionIdWithValue
 from shared.pipeline.actionhandler import ActionData, ActionInput
 from config import group_of_running_definitions_storage
