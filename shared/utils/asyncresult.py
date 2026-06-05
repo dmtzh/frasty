@@ -1,14 +1,12 @@
 from __future__ import annotations
 from collections.abc import Callable, Coroutine
 from functools import wraps
-import functools
 from inspect import signature
 from typing import Any, Concatenate, ParamSpec, Type, TypeVar
 
 from expression import Result
 
 from shared.customtypes import Error
-from shared.utils.result import ResultTag
 from shared.utils.asynchronous import make_async
 
 P = ParamSpec("P")
@@ -132,7 +130,7 @@ def async_ex_to_error_result[TExErr](ex_to_err: Callable[[Exception], TExErr] | 
             try:
                 val = await func(*args, **kwargs)
                 match val:
-                    case Result(tag="ok", ok=_) | Result(tag="error", error=_):
+                    case Result():
                         return val
                     case _:
                         return Result[T, TExErr].Ok(val)
@@ -201,34 +199,33 @@ class AsyncResult[T, TErr]:
             return res.map_error(mapper)
         return AsyncResult[T, TErrOut](map_error_value(self._value, mapper))
     
-    def bind[TOut](self, mapper: Callable[[T], AsyncResult[TOut, TErr]]):
-        async def error_func(err):
-            return Result[TOut, TErr].Error(err)
-        async def get_result(t_result_coro: Coroutine[Any, Any, Result[T, TErr]], mapper: Callable[[T], AsyncResult[TOut, TErr]]) -> Result[TOut, TErr]:
+    def bind[TOut, TErrOut](self, mapper: Callable[[T], Coroutine[Any, Any, Result[TOut, TErrOut]]]):
+        async def error_func(err: TErr):
+            return Result[TOut, TErr | TErrOut].Error(err)
+        async def get_result(t_result_coro: Coroutine[Any, Any, Result[T, TErr]], mapper: Callable[[T], Coroutine[Any, Any, Result[TOut, TErrOut]]]) -> Result[TOut, TErr | TErrOut]:
             t_res = await t_result_coro
-            async_func = t_res\
-                .map(lambda t_val: mapper(t_val).to_coroutine_result)\
-                .default_with(lambda err: functools.partial(error_func, err))
-            tout_res = await async_func()
+            tout_res_coro = t_res\
+                .map(mapper)\
+                .default_with(error_func)
+            tout_res = await tout_res_coro
             return tout_res
-        return AsyncResult[TOut, TErr](get_result(self._value, mapper))
+        return AsyncResult[TOut, TErr | TErrOut](get_result(self._value, mapper))
     
     async def get_or_else[TOut](self, error_getter: Callable[[TErr], TOut]) -> T | TOut:
         res = await self._value
         return res.default_with(error_getter)
     
-    def or_else(self, func: Callable[[TErr], AsyncResult[T, TErr]]):
-        async def get_result(get_first_result: Coroutine[Any, Any, Result[T, TErr]], get_second_result_func: Callable[[TErr], AsyncResult[T, TErr]]):            
+    def or_else[TOut, TErrOut](self, func: Callable[[TErr], Coroutine[Any, Any, Result[TOut, TErrOut]]]):
+        async def map_func(t: T):
+            return Result[T | TOut, TErrOut].Ok(t)
+        async def get_result(get_first_result: Coroutine[Any, Any, Result[T, TErr]], get_second_result_func: Callable[[TErr], Coroutine[Any, Any, Result[TOut, TErrOut]]]):            
             first_res = await get_first_result
-            match first_res:
-                case Result(tag=ResultTag.ERROR, error=error):
-                    second_result = await get_second_result_func(error).to_coroutine_result()
-                    return second_result
-                case _:
-                    return first_res
-        return AsyncResult[T, TErr](get_result(self._value, func))
+            res_coro = first_res.map(map_func).default_with(get_second_result_func)
+            res = await res_coro
+            return res
+        return AsyncResult[T | TOut, TErrOut](get_result(self._value, func))
     
-    def to_coroutine_result(self):
+    def to_coroutine(self):
         return self._value
     
     @staticmethod
