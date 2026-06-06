@@ -14,8 +14,8 @@ from shared.executedefinitionaction import ExecuteDefinitionInput, run_execute_d
 from shared.groupofrunningdefinitions import DefinitionIdWithValue, GroupOfRunningDefinitionsState, RunningDefinition
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData, RunAsyncAction
-from shared.utils.asyncresult import async_ex_to_error_result
-from shared.utils.result import apply, lift_error_param, lift_param, to_error_list, to_ok_list
+from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result
+from shared.utils.result import apply, to_error_list, to_ok_list
 
 from runningparentaction import RunningParentAction
 
@@ -81,7 +81,7 @@ class _RunDefinitionError(NamedTuple):
     definition_id: DefinitionIdValue
     error: Any
 
-async def _run_group_of_definitions_workflow(
+def _run_group_of_definitions_workflow(
     convert_to_storage_action: ToStorageActionConverter,
     run_definition_handler: Callable[[StepIdValue, DefinitionIdValue, Definition], Coroutine[Any, Any, Result]],
     cmd: _RunGroupOfDefinitionsCommand
@@ -115,15 +115,16 @@ async def _run_group_of_definitions_workflow(
             case _:
                 return initial_res
     
-    opt_evt_res = await apply_run_group_of_definitions(cmd.run_id, cmd.group_id)
-    run_definitions_res = await lift_param(run_definitions)(opt_evt_res)
-    res = await lift_error_param(_complete_failed_definitions)(run_definitions_res, convert_to_storage_action, cmd)
-    return res
+    opt_evt_res = AsyncResult(apply_run_group_of_definitions(cmd.run_id, cmd.group_id))
+    run_definitions_res = opt_evt_res.bind(run_definitions)
+    complete_failed_definitions = functools.partial(_complete_failed_definitions, convert_to_storage_action, cmd)
+    res = run_definitions_res.or_else(complete_failed_definitions)
+    return res.to_coroutine()
 
 async def _complete_failed_definitions(
-    failed_definitions: tuple[_RunDefinitionError, ...] | RunGroupOfDefinitionsStorageError,
     convert_to_storage_action: ToStorageActionConverter,
-    cmd: _RunGroupOfDefinitionsCommand
+    cmd: _RunGroupOfDefinitionsCommand,
+    failed_definitions: tuple[_RunDefinitionError, ...] | RunGroupOfDefinitionsStorageError
 ) -> Result[GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted | None, RunGroupOfDefinitionsStorageError | list[CompleteFailedDefinitionStorageError]]:
     @async_ex_to_error_result(CompleteFailedDefinitionStorageError.from_exception)
     @async_ex_to_error_result(lambda _: CompleteFailedDefinitionStorageError(f"State not found for run_id {cmd.run_id} and group_id {cmd.group_id}"), NotFoundException)
