@@ -6,9 +6,9 @@ from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData
 from shared.taskresulthistory import TaskResultHistoryItem
 from shared.taskresultshistorystore import taskresultshistory_storage
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 from config import AddTaskResultToHistoryConfig, add_task_result_to_history_handler, app
-from shared.utils.asyncresult import async_ex_to_error_result
 
 @add_task_result_to_history_handler
 async def handle_add_task_result_to_history(data: ActionData[AddTaskResultToHistoryConfig, CompletedResult]):

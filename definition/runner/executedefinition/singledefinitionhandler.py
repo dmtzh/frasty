@@ -10,7 +10,7 @@ from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData, ActionInput, DataDtoAdapter, RunAsyncAction
 from shared.runningdefinition import RunningDefinitionState
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 from runningparentaction import RunningParentAction
 

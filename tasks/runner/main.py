@@ -11,7 +11,7 @@ from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.pipeline.actionhandler import ActionData
 from shared.task import Task
 from shared.tasksstore import tasks_storage
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.result import lift_param
 
 from config import app, execute_definition, execute_task_handler

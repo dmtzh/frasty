@@ -13,7 +13,8 @@ from shared.customtypes import ScheduleIdValue, TaskIdValue, Error
 from shared.infrastructure.storage.repository import NotFoundError, StorageError, NotFoundException
 from shared.task import Task
 from shared.tasksstore import TasksStore
-from shared.utils.asyncresult import AsyncResult, coroutine_result, async_ex_to_error_result, async_result
+from shared.utils.asyncresult import AsyncResult, coroutine_result, async_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId
 

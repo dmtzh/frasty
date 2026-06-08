@@ -9,7 +9,8 @@ from shared.customtypes import ScheduleIdValue, TaskIdValue
 from shared.domainschedule import TaskSchedule
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.tasksschedulesstore import tasks_schedules_storage
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result, AsyncResult
+from shared.utils.asyncresult import async_result, coroutine_result, AsyncResult
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId

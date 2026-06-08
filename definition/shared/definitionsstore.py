@@ -11,7 +11,7 @@ from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repository import AlreadyExistsException, NotFoundError, NotFoundException, StorageError
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 class DefinitionsStore[T]:
     def __init__(self, items_sub_folder_name: str, to_list: Callable[[T], list[dict[str, Any]]], from_list: Callable[[list[dict[str, Any]]], Result[T, Any]]):

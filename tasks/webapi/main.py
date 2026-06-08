@@ -6,7 +6,7 @@ from shared.customtypes import TaskIdValue
 from shared.infrastructure.storage.repository import StorageError
 from shared.task import Task
 from shared.tasksstore import tasks_storage
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 import addtaskapihandler
 import cleartaskscheduleapihandler

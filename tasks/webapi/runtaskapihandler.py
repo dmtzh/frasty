@@ -7,7 +7,8 @@ from fastapi import HTTPException
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.tasksstore import tasks_storage
-from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import AsyncResult, async_result, coroutine_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.parse import parse_value
 from shared.utils.result import ResultTag
 from shared.validation import InvalidId

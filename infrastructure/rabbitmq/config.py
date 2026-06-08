@@ -8,7 +8,7 @@ from faststream import FastStream
 from faststream.rabbit import RabbitBroker
 
 from shared.pipeline.actionhandler import ActionInput
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 from . import rabbitrunaction as rabbit_action
 from .broker import RabbitMQBroker, RabbitMQConfig

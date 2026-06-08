@@ -8,7 +8,8 @@ from shared.customtypes import TaskIdValue
 from shared.domainschedule import TaskSchedule
 from shared.infrastructure.storage.repository import StorageError
 from shared.tasksschedulesstore import tasks_schedules_storage
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import async_result, coroutine_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)

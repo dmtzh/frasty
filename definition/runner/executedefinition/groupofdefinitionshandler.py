@@ -14,7 +14,8 @@ from shared.executedefinitionaction import ExecuteDefinitionInput, run_execute_d
 from shared.groupofrunningdefinitions import DefinitionIdWithValue, GroupOfRunningDefinitionsState, RunningDefinition
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData, RunAsyncAction
-from shared.utils.asyncresult import AsyncResult, async_ex_to_error_result
+from shared.utils.asyncresult import AsyncResult
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.result import apply, to_error_list, to_ok_list
 
 from runningparentaction import RunningParentAction

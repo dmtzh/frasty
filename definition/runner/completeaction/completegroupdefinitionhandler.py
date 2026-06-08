@@ -8,7 +8,7 @@ from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.definitioncustomtypes import GroupIdValue
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 from shared.utils.result import lift_param
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[GroupOfRunningDefinitionsState | None, P], tuple[GroupOfRunningDefinitionsState.Events.Event | None, GroupOfRunningDefinitionsState]]], Callable[Concatenate[RunIdValue, GroupIdValue, P], Coroutine[Any, Any, GroupOfRunningDefinitionsState.Events.Event | None]]]

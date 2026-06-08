@@ -5,7 +5,7 @@ from shared.definitionsstore import definitions_storage
 from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.infrastructure.storage.repository import StorageError
 from shared.pipeline.actionhandler import ActionData
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 from config import GetDefinitionInput, action_handler, app, get_definition_handler, run_action
 from completeaction.registration import register_complete_action_handler

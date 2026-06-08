@@ -8,7 +8,8 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.runningdefinition import RunningDefinitionState
-from shared.utils.asyncresult import async_ex_to_error_result, async_result, coroutine_result
+from shared.utils.asyncresult import async_result, coroutine_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[RunningDefinitionState | None, P], tuple[RunningDefinitionState.Events.Event | None, RunningDefinitionState]]], Callable[Concatenate[RunIdValue, DefinitionIdValue, P], Coroutine[Any, Any, RunningDefinitionState.Events.Event | None]]]
 type CompleteInput = CompletedResult

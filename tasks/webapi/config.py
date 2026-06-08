@@ -12,7 +12,7 @@ from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.pipeline.actionhandler import ActionData, run_action_adapter
-from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 # async def execute_definition(input: ExecuteDefinitionInput):
 #     run_id = RunIdValue.new_id()
