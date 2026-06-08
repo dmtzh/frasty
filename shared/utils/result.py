@@ -23,14 +23,6 @@ def lift_param(func: Callable[Concatenate[T, P], Coroutine[Any, Any, Result[R, T
         return t_res.map(lambda t: func(t, *args, **kwargs)).default_with(err1_to_result)
     return wrapper
 
-def lift_error_param(func: Callable[Concatenate[TErr, P], Coroutine[Any, Any, Result[R, TErr1]]]) -> Callable[Concatenate[Result[T, TErr], P], Coroutine[Any, Any, Result[T | R, TErr1]]]:
-    async def t_to_result(t: T) -> Result[T | R, TErr1]:
-        return Result.Ok(t)
-    @wraps(func)
-    def wrapper(t_res: Result[T, TErr], *args: P.args, **kwargs: P.kwargs) -> Coroutine[Any, Any, Result[T | R, TErr1]]:
-        return t_res.map(t_to_result).default_with(lambda err: func(err, *args, **kwargs))
-    return wrapper
-
 def to_error_list(*results: Result[Any, TErr]) -> list[TErr]:
     errors = map(lambda result: result.map(lambda _: []).default_with(lambda err: [err]), results)
     return list(chain.from_iterable(errors))
