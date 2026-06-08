@@ -6,7 +6,7 @@ from shared.customtypes import TaskIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
 from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
-from shared.utils.asyncresult import async_catch_ex
+from shared.utils.exceptiondecorators import async_catch_ex
 
 import cleartaskschedulehandler
 import settaskschedulehandler

@@ -6,7 +6,7 @@ from expression import Result
 
 from shared.infrastructure.serialization.serializer import Serializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
-from shared.utils.asyncresult import async_catch_ex
+from shared.utils.exceptiondecorators import async_catch_ex
 
 class FileWithVersionLimited[TId, TItem, TItemDto](FileWithVersion[TId, TItem, TItemDto]):
     def __init__(

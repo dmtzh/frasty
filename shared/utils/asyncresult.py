@@ -6,7 +6,6 @@ from typing import Any, Concatenate, ParamSpec, Type, TypeVar
 
 from expression import Result
 
-from shared.customtypes import Error
 from shared.utils.asynchronous import make_async
 
 P = ParamSpec("P")
@@ -139,9 +138,6 @@ def async_ex_to_error_result[TExErr](ex_to_err: Callable[[Exception], TExErr] | 
                 return Result[T, TExErr].Error(err)
         return wrapper
     return decorator
-
-def async_catch_ex[T, TErr](func: Callable[P, Coroutine[Any, Any, T]] | Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, Coroutine[Any, Any, Result[T, Error]]] | Callable[P, Coroutine[Any, Any, Result[T, TErr | Error]]]:
-    return async_ex_to_error_result(Error.from_exception)(func)
 
 class AsyncResult[T, TErr]:
     """

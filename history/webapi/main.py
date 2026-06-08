@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.taskresulthistory import LegacyTaskResultHistoryItemAdapter
 from shared.taskresultshistorystore import legacy_taskresultshistory_storage
-from shared.utils.asyncresult import async_catch_ex
+from shared.utils.exceptiondecorators import async_catch_ex
 from shared.utils.result import ResultTag
 
 from config import app

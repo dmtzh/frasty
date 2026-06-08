@@ -16,7 +16,8 @@ from shared.definitionsstore import definitions_storage
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData
-from shared.utils.asyncresult import async_catch_ex, async_ex_to_error_result
+from shared.utils.asyncresult import async_ex_to_error_result
+from shared.utils.exceptiondecorators import async_catch_ex
 from shared.utils.result import ResultTag, lift_param
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
