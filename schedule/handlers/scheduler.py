@@ -3,7 +3,7 @@ from typing import Any
 from shared.customtypes import ScheduleIdValue
 from shared.infrastructure.storage.repository import AlreadyExistsError, AlreadyExistsException, Repository
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInRepository
-from shared.utils.asyncresult import ex_to_error_result
+from shared.utils.exceptiondecorators import ex_to_error_result
 
 class Scheduler[TSchedule, TState]:
     def __init__(self, states_storage: Repository[ScheduleIdValue, TState], add_schedule_handler: Callable[[TSchedule,Callable[[], Any]], TState], remove_schedule_handler: Callable[[TState], None]):

@@ -1,8 +1,7 @@
 from __future__ import annotations
 from collections.abc import Callable, Coroutine
 from functools import wraps
-from inspect import signature
-from typing import Any, Concatenate, ParamSpec, Type, TypeVar
+from typing import Any, ParamSpec, TypeVar
 
 from expression import Result
 
@@ -11,59 +10,6 @@ from shared.utils.asynchronous import make_async
 P = ParamSpec("P")
 T = TypeVar("T")
 TErr = TypeVar("TErr")
-
-def ex_to_error_result[TExErr](ex_to_err: Callable[[Exception], TExErr] | Callable[Concatenate[Exception, P], TExErr], exception: Type[Exception] = Exception):
-    """
-    A decorator factory that converts any exceptions raised by a function into a Result error.
-
-    This function returns a decorator that wraps a given function. If the function executes
-    successfully, the result is wrapped in a Result.Ok. If an exception occurs, the exception 
-    is passed to the `ex_to_err` function to convert it into an error type, which is then 
-    wrapped in a Result.Error. If the function returns a Result, it is returned as is.
-
-    Args:
-        ex_to_err (Callable[[Exception], TExErr] | Callable[Concatenate[Exception, P], TExErr]): 
-            A function that converts an exception to an error type. To get values of
-            the parameters passed to the decorated function, add all parameters after ex parameter
-            to the function signature.
-    Returns:
-        Callable[[Callable[P, T] | Callable[P, Result[T, TErr]]], 
-                 Callable[P, Result[T, TExErr]] | Callable[P, Result[T, TErr | TExErr]]]:
-            A decorator that wraps a function and applies exception-to-error conversion.
-    """
-
-    num_of_params = len(signature(ex_to_err).parameters)
-    ex_to_err_with_args = ex_to_err if num_of_params > 1 else lambda ex, *args, **kwargs: ex_to_err(ex)
-    def decorator[T, TErr](func: Callable[P, T] | Callable[P, Result[T, TErr]]) -> Callable[P, Result[T, TExErr]] | Callable[P, Result[T, TErr | TExErr]]:
-        """
-        A decorator that wraps a function and converts any exceptions raised into a Result error.
-
-        If the function executes successfully, the result is wrapped in a Result.Ok. If an exception
-        occurs, the exception is passed to the `ex_to_err` function to convert it into an error type, which is then 
-        wrapped in a Result.Error. If the function returns a Result, it is returned as is.
-
-        Args:
-            func (Callable[P, T] | Callable[P, Result[T, TErr]]): The function to be wrapped.
-
-        Returns:
-            Callable[P, Result[T, TExErr]] | Callable[P, Result[T, TErr | TExErr]]:
-                A function that wraps the given function and applies the above logic.
-        """
-
-        @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs):
-            try:
-                val = func(*args, **kwargs)
-                match val:
-                    case Result():
-                        return val
-                    case _:
-                        return Result[T, TExErr].Ok(val)
-            except exception as ex:
-                err = ex_to_err_with_args(ex, *args, **kwargs)
-                return Result[T, TExErr].Error(err)
-        return wrapper
-    return decorator
 
 class _AsyncResultError(Exception):
     """
