@@ -68,6 +68,22 @@ class AsyncResult[T, TErr]:
                 raise _AsyncResultError(res)
         return res
     
+    def map[TOut](self, mapper: Callable[[T], TOut]) -> AsyncResult[TOut, TErr]:
+        """
+        Applies a synchronous function to the successful value of the AsyncResult.
+
+        Args:
+            mapper (Callable[[T], TOut]): The function to apply to the successful value.
+
+        Returns:
+            AsyncResult[TOut, TErr]: A new AsyncResult with the transformed successful value.
+        """
+        async def map_value(get_result: Coroutine[Any, Any, Result[T, TErr]], mapper: Callable[[T], TOut]) -> Result[TOut, TErr]:
+            res = await get_result
+            return res.map(mapper)
+        
+        return AsyncResult[TOut, TErr](map_value(self._value, mapper))
+    
     def map_error[TErrOut](self, mapper: Callable[[TErr], TErrOut]) -> AsyncResult[T, TErrOut]:
         async def map_error_value(get_result: Coroutine[Any, Any, Result[T, TErr]], mapper: Callable[[TErr], TErrOut]) -> Result[T, TErrOut]:
             res = await get_result
