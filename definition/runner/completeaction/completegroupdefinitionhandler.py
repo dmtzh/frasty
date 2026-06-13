@@ -8,8 +8,8 @@ from shared.customtypes import DefinitionIdValue, Error, RunIdValue, StepIdValue
 from shared.definitioncustomtypes import GroupIdValue
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState
 from shared.infrastructure.storage.repository import NotFoundException, StorageError
+from shared.utils.asyncresult import AsyncResult
 from shared.utils.exceptiondecorators import async_ex_to_error_result
-from shared.utils.result import lift_param
 
 type ToStorageActionConverter[**P] = Callable[[Callable[Concatenate[GroupOfRunningDefinitionsState | None, P], tuple[GroupOfRunningDefinitionsState.Events.Event | None, GroupOfRunningDefinitionsState]]], Callable[Concatenate[RunIdValue, GroupIdValue, P], Coroutine[Any, Any, GroupOfRunningDefinitionsState.Events.Event | None]]]
 
@@ -60,7 +60,7 @@ class _EventHandlerError(NamedTuple):
     event: GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted
     error: Any
 
-async def _complete_group_definition_workflow(
+def _complete_group_definition_workflow(
     convert_to_storage_action: ToStorageActionConverter,
     event_handler: Callable[[GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted], Coroutine[Any, Any, Result]],
     cmd: CompleteGroupDefinitionCommand
@@ -83,7 +83,7 @@ async def _complete_group_definition_workflow(
                     .map_error(lambda err: _EventHandlerError(all_defs_completed, err))
             case _:
                 return Result[GroupOfRunningDefinitionsState.Events.Event | None, _EventHandlerError].Ok(opt_evt)
-
-    opt_evt_res = await apply_complete_definition(cmd.run_id, cmd.group_id)
-    res = await lift_param(handle_all_definitions_completed)(opt_evt_res)
-    return res
+    
+    opt_evt_res = AsyncResult(apply_complete_definition(cmd.run_id, cmd.group_id))
+    res = opt_evt_res.bind(handle_all_definitions_completed)
+    return res.to_coroutine()

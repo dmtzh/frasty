@@ -16,8 +16,9 @@ from shared.definitionsstore import definitions_storage
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData
+from shared.utils.asyncresult import AsyncResult
 from shared.utils.exceptiondecorators import async_catch_ex, async_ex_to_error_result
-from shared.utils.result import ResultTag, lift_param
+from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
 from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, manual_run_handler, run_action, run_manual_run_action
@@ -55,11 +56,12 @@ async def add_definition(request: AddDefinitionRequest):
                 return f"'{name}' value is invalid"
             
     raw_definition = request.resource
-    definition_res = DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError)
+    definition_res = AsyncResult.from_result(DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError))
     id = DefinitionIdValue.new_id()
     apply_add_definition = functools.partial(async_ex_to_error_result(StorageError.from_exception)(definitions_storage.add), id)
-    add_definition_res = await lift_param(apply_add_definition)(definition_res)
-    return add_definition_res.map(lambda _: {"id": id.to_value_with_checksum()}).default_with(err_to_http)
+    add_definition_res = definition_res.bind(apply_add_definition)
+    res = add_definition_res.map(lambda _: {"id": id.to_value_with_checksum()})
+    return await res.get_or_else(err_to_http)
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -87,7 +89,7 @@ class ReplaceDefinitionRequest(BaseModel):
     resource: list[dict[str, Any]]
 @app.put("/definitions/{id}")
 async def replace_definition(id: str, request: ReplaceDefinitionRequest):
-    async def apply_replace_definition(definition: Definition, id: DefinitionIdValue):
+    async def apply_replace_definition(id: DefinitionIdValue, definition: Definition):
         update_res = await definitions_storage.update(id, definition)
         return update_res.map(lambda _: definition)
     def err_to_http(error: NotFoundError | StorageError | InputValidationError):
@@ -113,9 +115,11 @@ async def replace_definition(id: str, request: ReplaceDefinitionRequest):
     if opt_def_id is None:
         return err_to_http(NotFoundError("Definition not found"))
     raw_definition = request.resource
-    definition_res = DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError)
-    replace_definition_res = await lift_param(apply_replace_definition)(definition_res, opt_def_id)
-    return replace_definition_res.map(DefinitionAdapter.to_list).default_with(err_to_http)
+    definition_res = AsyncResult.from_result(DefinitionAdapter.from_list(raw_definition).map_error(InputValidationError))
+    replace_definition_func = functools.partial(apply_replace_definition, opt_def_id)
+    replace_definition_res = definition_res.bind(replace_definition_func)
+    res = replace_definition_res.map(DefinitionAdapter.to_list)
+    return await res.get_or_else(err_to_http)
 
 # ------------------------------------------------------------------------------------------------------------
 
@@ -148,10 +152,11 @@ async def manual_run(request: ManualRunRequest):
                 return f"'{name}' value is invalid"
     
     raw_definition = request.resource
-    definition_res = DefinitionAdapter.from_list(raw_definition)
+    definition_res = AsyncResult.from_result(DefinitionAdapter.from_list(raw_definition))
     manual_run_data_res = definition_res.map(to_manual_run_data).map_error(InputValidationError)
-    manual_run_res = await lift_param(run_manual_run_action)(manual_run_data_res)
-    return manual_run_res.map(lambda data: {"id": data.run_id.to_value_with_checksum()}).default_with(err_to_http)
+    manual_run_res = manual_run_data_res.bind(run_manual_run_action)
+    res = manual_run_res.map(lambda data: {"id": data.run_id.to_value_with_checksum()})
+    return await res.get_or_else(err_to_http)
 
 # ------------------------------------------------------------------------------------------------------------
 

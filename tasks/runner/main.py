@@ -11,8 +11,8 @@ from shared.infrastructure.storage.repository import NotFoundError, StorageError
 from shared.pipeline.actionhandler import ActionData
 from shared.task import Task
 from shared.tasksstore import tasks_storage
+from shared.utils.asyncresult import AsyncResult
 from shared.utils.exceptiondecorators import async_ex_to_error_result
-from shared.utils.result import lift_param
 
 from config import app, execute_definition, execute_task_handler
 
@@ -45,10 +45,11 @@ async def handle_execute_task_action(data: ActionData[None, TaskIdValue]):
         error_result_dict = CompletedResultAdapter.to_dict(CompletedWith.Error(str(error)))
         return CompletedWith.Data(error_result_dict)
 
-    task_res = await get_task(data.input)
+    task_res = AsyncResult(get_task(data.input))
     execute_definition_data_res = task_res.map(to_execute_definition_data)
-    execute_definition_res = await lift_param(execute_definition)(execute_definition_data_res)
-    return execute_definition_res.map(ok_to_none).default_with(error_to_completed_result)
+    execute_definition_res = execute_definition_data_res.bind(execute_definition)
+    res = execute_definition_res.map(ok_to_none)
+    return await res.get_or_else(error_to_completed_result)
 
 # if __name__ == "__main__":
 #     asyncio.run(app.run())
