@@ -120,10 +120,10 @@ class AsyncResult[T, TErr]:
         return self._value
     
     @staticmethod
-    def from_result(res: Result[T, TErr]):
+    def from_result[TFrom, TErrFrom](res: Result[TFrom, TErrFrom]):
         get_res_async = make_async(lambda: res)
         res_coro = get_res_async()
-        return AsyncResult[T, TErr](res_coro)
+        return AsyncResult[TFrom, TErrFrom](res_coro)
 
 def async_result(func: Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, AsyncResult[T, TErr]]:
     @wraps(func)
