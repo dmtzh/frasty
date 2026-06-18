@@ -1,9 +1,6 @@
-from collections.abc import Coroutine
 from contextlib import asynccontextmanager
 import os
-from typing import Any
 
-from expression import Result
 from fastapi import FastAPI
 
 from infrastructure.rabbitmq import config
@@ -11,9 +8,12 @@ from shared.changetaskcheduleaction import CHANGE_TASK_SCHEDULE_ACTION
 from shared.commands import Command, CommandAdapter
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.actionhandler import ActionData, run_action_adapter
+from shared.tasksschedulesstore import TasksSchedulesStore
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 CHANGE_TASK_SCHEDULE_RUN_ID = RunIdValue("0" * RunIdValue._length)
+
+tasks_schedules_storage = TasksSchedulesStore(STORAGE_ROOT_FOLDER)
 
 def change_task_schedule(command: Command):
     command_dto = CommandAdapter.to_dict(command)

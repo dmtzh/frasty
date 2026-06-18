@@ -6,9 +6,10 @@ from expression import Result
 from shared.commands import ClearCommand
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.storage.repository import NotFoundError, StorageError
-from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asyncresult import async_result, coroutine_result
 from shared.utils.exceptiondecorators import async_ex_to_error_result
+
+from config import tasks_schedules_storage
 
 @async_result
 @async_ex_to_error_result(StorageError.from_exception)

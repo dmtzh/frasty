@@ -1,12 +1,8 @@
-import os
-
 from shared.customtypes import ScheduleIdValue, TaskIdValue
 from shared.domainschedule import TaskSchedule, TaskScheduleAdapter
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
-
-import config
 
 type ItemType = dict[TaskIdValue, TaskSchedule]
 type DtoItemType = dict[TaskIdValue, dict[str, str]]
@@ -21,15 +17,14 @@ def _dto_to_item(dto: DtoItemType) -> ItemType:
     return valid_schedules
 
 class TasksSchedulesStore:
-    def __init__(self):
-        folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "SchedulesStorage")
+    def __init__(self, root_folder: str):
         file_repo_with_ver = FileWithVersion[str, ItemType, DtoItemType](
-            "",
+            "SchedulesStorage",
             _item_to_dto,
             _dto_to_item,
             JsonSerializer[DtoItemType](),
             "json",
-            folder_path
+            root_folder
         )
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
@@ -60,5 +55,3 @@ class TasksSchedulesStore:
                 return {}
             case (_, schedules):
                 return schedules
-
-tasks_schedules_storage = TasksSchedulesStore()

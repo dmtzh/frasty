@@ -4,13 +4,12 @@ import functools
 from shared.commands import Command, ClearCommand, SetCommand
 from shared.customtypes import TaskIdValue
 from shared.domainschedule import TaskSchedule, CronSchedule
-from shared.tasksschedulesstore import tasks_schedules_storage
 from shared.utils.asynchronous import make_async
 from shared.utils.exceptiondecorators import async_catch_ex
 
 import cleartaskschedulehandler
 import settaskschedulehandler
-from config import app, change_task_schedule_handler, logger, run_task, scheduler
+from config import app, change_task_schedule_handler, logger, run_task, scheduler, tasks_schedules_storage
 
 def run_task_action(task_id: TaskIdValue, schedule: TaskSchedule):
     logger.info(f"Running {task_id} with schedule {schedule}")

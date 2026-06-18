@@ -15,10 +15,13 @@ from shared.customtypes import Metadata, RunIdValue, ScheduleIdValue, StepIdValu
 from shared.domainschedule import CronSchedule
 from shared.infrastructure.storage.inmemory import InMemory
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, ActionInput, run_action_adapter
+from shared.tasksschedulesstore import TasksSchedulesStore
 
 from scheduler import Scheduler
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
+
+tasks_schedules_storage = TasksSchedulesStore(STORAGE_ROOT_FOLDER)
 
 def run_task(task_id: TaskIdValue, schedule_id: ScheduleIdValue):
     execute_task_action = Action(ActionName("execute_task"), ActionType.SERVICE)
