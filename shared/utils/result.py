@@ -25,14 +25,21 @@ def apply[T1, T2, R, TErr, RErr](f: Callable[[T1, T2], R], f_err: Callable[[tupl
             return Result[R, RErr].Error(f_err((res2.error,)))
         case False, True:
             match res1.error:
-                case (*_,):
-                    return Result[R, RErr].Error(f_err(res1.error))
-                case _:
-                    return Result[R, RErr].Error(f_err((res1.error,)))
+                case (*_,) as err1_tuple:
+                    return Result[R, RErr].Error(f_err(err1_tuple))
+                case err1:
+                    return Result[R, RErr].Error(f_err((err1,)))
         case False, False:
             match res1.error:
-                case (*_,):
-                    return Result[R, RErr].Error(f_err((*res1.error, res2.error)))
-                case _:
-                    return Result[R, RErr].Error(f_err((res1.error, res2.error)))
-            
+                case (*_,) as err1_tuple:
+                    return Result[R, RErr].Error(f_err(err1_tuple + (res2.error,)))
+                case err1:
+                    return Result[R, RErr].Error(f_err((err1, res2.error)))
+
+def apply3[T1, T2, T3, R, TErr, RErr](f: Callable[[T1, T2, T3], R], f_err: Callable[[tuple[TErr, ...]], RErr], res1: Result[T1, TErr] | Result[T1, tuple[TErr, ...]], res2: Result[T2, TErr], res3: Result[T3, TErr]):
+    res_1_2 = apply(lambda t1, t2: (t1, t2), lambda err: err, res1, res2)
+    return apply(lambda t_1_2, t3: f(*t_1_2, t3), f_err, res_1_2, res3)
+
+def apply4[T1, T2, T3, T4, R, TErr, RErr](f: Callable[[T1, T2, T3, T4], R], f_err: Callable[[tuple[TErr, ...]], RErr], res1: Result[T1, TErr] | Result[T1, tuple[TErr, ...]], res2: Result[T2, TErr], res3: Result[T3, TErr], res4: Result[T4, TErr]):
+    res_1_2 = apply(lambda t1, t2: (t1, t2), lambda err: err, res1, res2)
+    return apply3(lambda t_1_2, t3, t4: f(*t_1_2, t3, t4), f_err, res_1_2, res3, res4)
