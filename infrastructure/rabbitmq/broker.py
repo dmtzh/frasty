@@ -1,20 +1,19 @@
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-import functools
-from typing import Any, Optional, ParamSpec
+from typing import Optional, ParamSpec, override
 from urllib.parse import urlparse
 
 from aio_pika import (
     Message,
-    connect_robust
+    RobustChannel
 )
-from aio_pika.abc import AbstractRobustChannel, AbstractExchange
+from aio_pika.abc import AbstractExchange
 from aiormq import ChannelInvalidStateError, ChannelNotFoundEntity, ConnectionChannelError
 from aiormq.abc import DeliveredMessage
 from expression import Result
-from faststream.broker.types import SubscriberMiddleware
-from faststream.rabbit import RabbitQueue
-from faststream.rabbit.subscriber.asyncapi import AsyncAPISubscriber
+from faststream.broker.types import CustomCallable, SubscriberMiddleware
+from faststream.rabbit import RabbitBroker, RabbitQueue
+from faststream.rabbit.message import RabbitMessage
 from pamqp import commands as spec
 
 from shared.utils.parse import parse_bool_str
@@ -85,62 +84,34 @@ class Error:
     class RouteNotFound:
         '''Route with routing key not found'''
         routing_key: str
-    
-class RabbitMQBroker:
-    def __init__(self, subscriber: Callable[P, AsyncAPISubscriber]):
-        self._async_startup_tasks = []
-        self._subscriber = subscriber
-    
-    async def connect(self, config: RabbitMQConfig) -> None:
-        print(f"RabbitMQBroker.connect({config})")
-        try:
-            self._rabbit_connection = await connect_robust(config.url.value)
-            channel: AbstractRobustChannel = await self._rabbit_connection.channel(publisher_confirms=config.publisher_confirms)
-            self._rabbit_channel = channel
-            for async_task in self._async_startup_tasks:
-                await async_task()
-        except Exception:
-            await self.disconnect()
-            raise
-    
-    async def disconnect(self) -> None:
-        if hasattr(self, "_rabbit_channel") and not self._rabbit_channel.is_closed:
-            await self._rabbit_channel.close()
-        if hasattr(self, "_rabbit_connection") and not self._rabbit_connection.is_closed:
-            await self._rabbit_connection.close()
-        self._rabbit_connection = None
-        self._rabbit_channel = None
-        print("RabbitMQBroker disconnected")
 
-    def _add_async_startup_task(self, func):
-        self._async_startup_tasks.append(func)
+@dataclass
+class AsyncCommandSubscriber:
+    command: str
+    decoder: CustomCallable | None
+    no_reply: bool
+    middlewares: Sequence[SubscriberMiddleware[RabbitMessage]]
+    func: Callable | None = None
+
+    def __call__(self, func: Callable):
+        self.func = func
     
-    async def _bind_queue_to_exchange(self, queue_name: str, exchange_name: str, routing_key: str):
-        queue = await self._rabbit_channel.get_queue(name=queue_name, ensure=False)
-        exchange = await self._rabbit_channel.get_exchange(name=exchange_name, ensure=False)
-        return await queue.bind(exchange=exchange, routing_key=routing_key)
-    
-    def bind_queue_to_exchange(self, queue_name: str, exchange_name: str, routing_key: str):
-        startup_task = functools.partial(self._bind_queue_to_exchange, queue_name, exchange_name, routing_key)
-        self._add_async_startup_task(startup_task)
-    
-    def _create_auto_delete_queue(self, queue_name: str):
-        return self._rabbit_channel.declare_queue(name=queue_name, auto_delete=True)
-    
-    def create_auto_delete_queue(self, queue_name: str):
-        startup_task = functools.partial(self._create_auto_delete_queue, queue_name)
-        self._add_async_startup_task(startup_task)
-    
-    def subscriber(self, queue: RabbitQueue, message_decoder: Callable, no_reply: bool, retry: bool | int, middlewares: Sequence[SubscriberMiddleware[Any]] = ()) -> AsyncAPISubscriber:
-        return self._subscriber(queue=queue, decoder=message_decoder, no_reply=no_reply, retry=retry, middlewares=middlewares)
-    
-    async def _publish_to_exchange(self, exchange: AbstractExchange | str, routing_key: str, message: Message, retry_count: int) -> Result[None, Error.ExchangeNotFound | Error.RouteNotFound]:
+class RabbitMQBroker(RabbitBroker):
+    _command_subscribers: tuple[AsyncCommandSubscriber, ...] = ()
+    def command_subscriber(self, command: str, decoder: CustomCallable | None = None, no_reply: bool = False, middlewares: Sequence[SubscriberMiddleware[RabbitMessage]] = ()):
+        command_subscriber = AsyncCommandSubscriber(command, decoder, no_reply, middlewares)
+        self._command_subscribers += (command_subscriber,)
+        return command_subscriber
+
+    def publish_to_default_exchange(self, routing_key: str, message: Message):
+        if self._channel is None:
+            raise RabbitMQBrokerNotConnectedError("RabbitMQ broker is not connected. Please call start() to establish a connection.")
+        return RabbitMQBroker._publish_to_exchange(self._channel, self._channel.default_exchange, routing_key, message, 2)
+
+    @staticmethod
+    async def _publish_to_exchange(channel: RobustChannel, exchange: AbstractExchange, routing_key: str, message: Message, retry_count: int) -> Result[None, Error.ExchangeNotFound | Error.RouteNotFound]:
         try:
-            if isinstance(exchange, str):
-                exchange_to_publish = await self._rabbit_channel.get_exchange(name=exchange, ensure=True)
-            else:
-                exchange_to_publish = exchange
-            publish_res = await exchange_to_publish.publish(message, routing_key)
+            publish_res = await exchange.publish(message, routing_key)
         except ChannelNotFoundEntity as ch_ex:
             args = tuple(arg for arg in ch_ex.args if isinstance(arg, str))
             if isinstance(exchange, str):
@@ -151,8 +122,8 @@ class RabbitMQBroker:
         except (ChannelInvalidStateError, ConnectionChannelError) as ch_inv_err:
             if retry_count > 0:
                 # await asyncio.sleep(RobustChannel.RESTORE_RETRY_DELAY)
-                await self._rabbit_channel.ready()
-                return await self._publish_to_exchange(message, exchange, routing_key, retry_count -1)
+                await channel.ready()
+                return await RabbitMQBroker._publish_to_exchange(channel, exchange, routing_key, message, retry_count -1)
             raise ch_inv_err
         except Exception as ex:
             raise ex
@@ -164,14 +135,17 @@ class RabbitMQBroker:
                 raise RabbitMQBrokerUnexpectedError(delivery)
             case _:
                 return Result.Ok(None)
-    
-    def publish_to_default_exchange(self, routing_key: str, message: Message):
-        if self._rabbit_channel is None:
-            raise RabbitMQBrokerNotConnectedError("RabbitMQ broker is not connected. Please call connect() to establish a connection.")
-        return self._publish_to_exchange(self._rabbit_channel.default_exchange, routing_key, message, 2)
-    
-    def publish_to_exchange(self, exchange_name: str, routing_key: str, message: Message):
-        if self._rabbit_channel is None:
-            raise RabbitMQBrokerNotConnectedError("RabbitMQ broker is not connected. Please call connect() to establish a connection.")
-        return self._publish_to_exchange(exchange_name, routing_key, message, 2)
-    
+
+    @override
+    def start(self):
+        self._setup_command_subscribers()
+        return super().start()
+
+    def _setup_command_subscribers(self):
+        if not self._command_subscribers:
+            return
+        
+        for cmd_subscriber in self._command_subscribers:
+            queue = RabbitQueue(name=cmd_subscriber.command, passive=True)
+            subscriber = self.subscriber(queue=queue, decoder=cmd_subscriber.decoder, no_reply=cmd_subscriber.no_reply, middlewares=cmd_subscriber.middlewares)
+            subscriber(cmd_subscriber.func)
