@@ -4,11 +4,12 @@ from typing import Optional, ParamSpec, override
 from urllib.parse import urlparse
 
 from aio_pika import (
+    connect_robust,
     Message,
     RobustChannel
 )
 from aio_pika.abc import AbstractExchange
-from aiormq import ChannelInvalidStateError, ChannelNotFoundEntity, ConnectionChannelError
+from aiormq import ChannelClosed, ChannelInvalidStateError, ChannelNotFoundEntity, ConnectionChannelError
 from aiormq.abc import DeliveredMessage
 from expression import Result
 from faststream.broker.types import CustomCallable, SubscriberMiddleware
@@ -137,15 +138,31 @@ class RabbitMQBroker(RabbitBroker):
                 return Result.Ok(None)
 
     @override
-    def start(self):
-        self._setup_command_subscribers()
-        return super().start()
+    async def start(self):
+        await self._setup_command_subscribers()
+        return await super().start()
 
-    def _setup_command_subscribers(self):
+    async def _setup_command_subscribers(self):
         if not self._command_subscribers:
             return
         
-        for cmd_subscriber in self._command_subscribers:
-            queue = RabbitQueue(name=cmd_subscriber.command, passive=True)
-            subscriber = self.subscriber(queue=queue, decoder=cmd_subscriber.decoder, no_reply=cmd_subscriber.no_reply, middlewares=cmd_subscriber.middlewares)
-            subscriber(cmd_subscriber.func)
+        connection_kwargs = self._connection_kwargs.copy()
+        check_connection = await connect_robust(**connection_kwargs)
+        check_channel = await check_connection.channel()
+        try:
+            for cmd_subscriber in self._command_subscribers:
+                try:
+                    await check_channel.get_queue(cmd_subscriber.command, ensure=True)
+                    queue = RabbitQueue(name=cmd_subscriber.command, passive=True)
+                except ChannelClosed:
+                    queue = RabbitQueue(name=cmd_subscriber.command, exclusive=True)
+                    if not check_channel.is_closed:
+                        await check_channel.close()
+                    check_channel = await check_connection.channel()
+                subscriber = self.subscriber(queue=queue, decoder=cmd_subscriber.decoder, no_reply=cmd_subscriber.no_reply, middlewares=cmd_subscriber.middlewares)
+                subscriber(cmd_subscriber.func)
+        finally:
+            if not check_channel.is_closed:
+                await check_channel.close()
+            if not check_connection.is_closed:
+                await check_connection.close()
