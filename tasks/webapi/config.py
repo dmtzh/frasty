@@ -83,9 +83,8 @@ async def add_definition(raw_definition: list[dict[str, Any]]) -> Result[Definit
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with config.lifespan():
-        await config._broker.start()
-        yield
-        await config._broker.stop()
+    await config._rabbit_broker.start()
+    yield
+    await config._rabbit_broker.stop()
 
 app = FastAPI(lifespan=lifespan)

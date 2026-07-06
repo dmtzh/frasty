@@ -22,9 +22,8 @@ def change_task_schedule(command: Command):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with config.lifespan():
-        await config._broker.start()
-        yield
-        await config._broker.stop()
+    await config._rabbit_broker.start()
+    yield
+    await config._rabbit_broker.stop()
 
 app = FastAPI(lifespan=lifespan)

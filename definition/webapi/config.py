@@ -51,9 +51,8 @@ STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with config.lifespan():
-        await config._broker.start()
-        yield
-        await config._broker.stop()
+    await config._rabbit_broker.start()
+    yield
+    await config._rabbit_broker.stop()
 
 app = FastAPI(lifespan=lifespan)
