@@ -1,6 +1,6 @@
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Any, Concatenate, NamedTuple
+from typing import Any, Concatenate
 
 from expression import Result
 
@@ -43,7 +43,8 @@ async def handle(
         await _clean_up_failed_complete(convert_to_storage_action, cmd, opt_error)
     return res.map_error(map_errors)
 
-class _EventHandlerError(NamedTuple):
+@dataclass(frozen=True)
+class _EventHandlerError:
     event: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted
     error: Any
 

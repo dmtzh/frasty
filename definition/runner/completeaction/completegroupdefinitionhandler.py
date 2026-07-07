@@ -1,4 +1,5 @@
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from typing import Any, Concatenate, NamedTuple
 
 from expression import Result
@@ -53,10 +54,12 @@ async def handle(
 class CompleteGroupDefinitionStorageError(StorageError):
     '''Unexpected complete group definition storage error'''
 
-class CompletAllDefinitionsError(NamedTuple):
+@dataclass(frozen=True)
+class CompletAllDefinitionsError:
     error: Any
 
-class _EventHandlerError(NamedTuple):
+@dataclass(frozen=True)
+class _EventHandlerError:
     event: GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted
     error: Any
 

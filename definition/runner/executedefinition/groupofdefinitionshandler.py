@@ -2,7 +2,7 @@ import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 import functools
-from typing import Any, Concatenate, NamedTuple
+from typing import Any, Concatenate
 
 from expression import Result
 
@@ -77,7 +77,8 @@ class _RunGroupOfDefinitionsCommand:
     group_id: GroupIdValue
     definitions: tuple[DefinitionIdWithValue[Definition], ...]
 
-class _RunDefinitionError(NamedTuple):
+@dataclass(frozen=True)
+class _RunDefinitionError:
     step_id: StepIdValue
     definition_id: DefinitionIdValue
     error: Any
