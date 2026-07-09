@@ -54,7 +54,7 @@ def async_ex_to_error_result[TExErr](ex_to_err: Callable[[Exception], TExErr], e
         return wrapper
     return decorator
 
-def async_ex_to_error_result_with_args[TExErr, **P](ex_to_err: Callable[Concatenate[Exception, P], TExErr], exception: Type[Exception] = Exception):
+class async_ex_to_error_result_with_args[TExErr, **P]:
     """
     A decorator factory that converts any exceptions raised by an asynchronous function into a Result error.
 
@@ -73,7 +73,11 @@ def async_ex_to_error_result_with_args[TExErr, **P](ex_to_err: Callable[Concaten
             A decorator that wraps an asynchronous function and applies exception-to-error conversion.
     """
 
-    def decorator[T, TErr](func: Callable[P, Coroutine[Any, Any, T]] | Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, Coroutine[Any, Any, Result[T, TExErr]]] | Callable[P, Coroutine[Any, Any, Result[T, TErr | TExErr]]]:
+    def __init__(self, ex_to_err: Callable[Concatenate[Exception, P], TExErr], exception: Type[Exception] = Exception):
+        self._ex_to_err = ex_to_err
+        self._exception = exception
+
+    def __call__[T, TErr](self, func: Callable[P, Coroutine[Any, Any, T]] | Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, Coroutine[Any, Any, Result[T, TExErr]]] | Callable[P, Coroutine[Any, Any, Result[T, TErr | TExErr]]]:
         """
         A decorator that wraps an asynchronous function and converts any exceptions raised into a Result error.
 
@@ -97,11 +101,10 @@ def async_ex_to_error_result_with_args[TExErr, **P](ex_to_err: Callable[Concaten
                         return val
                     case _:
                         return Result[T, TExErr].Ok(val)
-            except exception as ex:
-                err = ex_to_err(ex, *args, **kwargs)
+            except self._exception as ex:
+                err = self._ex_to_err(ex, *args, **kwargs)
                 return Result[T, TExErr].Error(err)
         return wrapper
-    return decorator
 
 def async_catch_ex[T, TErr, **P](func: Callable[P, Coroutine[Any, Any, T]] | Callable[P, Coroutine[Any, Any, Result[T, TErr]]]) -> Callable[P, Coroutine[Any, Any, Result[T, Error]]] | Callable[P, Coroutine[Any, Any, Result[T, TErr | Error]]]:
     return async_ex_to_error_result(Error.from_exception)(func)
