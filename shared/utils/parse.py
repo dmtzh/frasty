@@ -345,3 +345,190 @@ def parse_non_empty_str(value: Any, strip: bool = True) -> str | None:
             return None
         case non_empty_value:
             return non_empty_value
+
+class NonEmptyStr(str):
+    """
+    A non-empty string type (len(value) > 0).
+
+    This class is a thin wrapper around Python's built-in ``str`` that enforces
+    the invariant "len(value) > 0" at construction time. It is intended for use
+    in configuration dataclasses (e.g. ``NormalizeTextConfig.field_name``,
+    ``GetFromJsonQuery.query``) where a non-empty string is semantically required.
+
+    Construction modes
+    ------------------
+    1. Direct construction via ``NonEmptyStr(value)``:
+       - Accepts ONLY ``str`` values (not ``bytes``, ``int``, ``bool``, ``None``, etc.).
+       - Raises ``TypeError`` for non-str types.
+       - Raises ``ValueError`` for empty strings (len == 0).
+       - Does NOT apply ``strip()`` — the string is stored as-is.
+       - Use this mode when the caller is certain the value is a valid non-empty ``str``
+         (e.g. after parsing/validation, or when working with already-validated data).
+
+    2. Safe parsing via ``NonEmptyStr.parse(value, strip=True)``:
+       - Accepts ``str`` values, rejects all other types.
+       - If ``strip=True`` (default): applies ``strip()`` before validation.
+         Rejects strings that become empty after stripping (e.g. ``"   "``).
+       - If ``strip=False``: does not apply ``strip()``. Rejects only truly empty strings.
+       - Returns a ``NonEmptyStr`` instance on success, or ``None`` on any failure.
+       - Never raises exceptions.
+       - Use this mode when the input comes from untrusted sources
+         (e.g. JSON configuration, user input).
+
+    Important limitations
+    ---------------------
+    * ``NonEmptyStr`` inherits from ``str``. String operations
+      (``+``, ``*``, slicing, etc.) return a plain ``str``, NOT a ``NonEmptyStr``.
+      This means the "len > 0" invariant is NOT preserved across operations.
+      Example::
+
+          x = NonEmptyStr("abc")
+          y = NonEmptyStr("def")
+          z = x + y   # z == "abcdef", but type(z) is str, not NonEmptyStr
+          w = x * 0   # w == "", type(w) is str, and the invariant is violated
+          s = x[1:]   # s == "bc", type(s) is str
+
+      If you need to preserve the invariant, re-validate after operations:
+      ``NonEmptyStr.parse(x + y)``.
+
+    * The constructor does NOT apply ``strip()``. If you need to trim whitespace,
+      use ``NonEmptyStr.parse(value, strip=True)`` or explicitly call ``strip()``
+      before construction: ``NonEmptyStr(value.strip())``.
+
+    * ``isinstance(NonEmptyStr("abc"), str)`` returns ``True``. This is intentional
+      for compatibility with code that expects plain ``str`` values.
+
+    * Type checkers (mypy, pyright) cannot statically verify the "len > 0"
+      invariant. This class provides runtime validation only.
+
+    Edge cases handled by ``parse()``
+    ---------------------------------
+    * ``bytes`` values are explicitly rejected. Although ``str(b"abc")`` works
+      in Python (with encoding), bytes represent binary data, not text.
+      In a JSON-based pipeline, bytes should never appear as string input.
+    * ``bool``, ``int``, ``float``, ``None``, ``list``, ``dict`` are rejected.
+    * Empty strings (``""``) return ``None``.
+    * Strings containing only whitespace (``"   "``, ``"\\t\\n"``) return ``None``
+      when ``strip=True`` (default), but are accepted when ``strip=False``.
+    * Unicode whitespace (``\\u00A0``, ``\\u3000``, etc.) is handled correctly
+      by ``str.strip()``.
+
+    Examples
+    --------
+    >>> NonEmptyStr("abc")
+    abc
+    >>> NonEmptyStr("  abc  ")  # Constructor does NOT strip
+    '  abc  '
+    >>> NonEmptyStr("")
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected a non-empty string, got empty string
+    >>> NonEmptyStr(123)
+    Traceback (most recent call last):
+        ...
+    TypeError: Expected a str, got int
+
+    >>> NonEmptyStr.parse("abc")
+    abc
+    >>> NonEmptyStr.parse("  abc  ", strip=True)
+    abc
+    >>> NonEmptyStr.parse("  abc  ", strip=False)
+    '  abc  '
+    >>> NonEmptyStr.parse("") is None
+    True
+    >>> NonEmptyStr.parse("   ", strip=True) is None
+    True
+    >>> NonEmptyStr.parse("   ", strip=False) is not None
+    True
+    >>> NonEmptyStr.parse(123) is None
+    True
+    >>> NonEmptyStr.parse(None) is None
+    True
+    >>> NonEmptyStr.parse(b"abc") is None
+    True
+    """
+
+    def __new__(cls, value: str) -> NonEmptyStr:
+        # 1. Reject non-str types explicitly.
+        #    The constructor is strict: it accepts ONLY str values.
+        #    For safe conversion from other types, use NonEmptyStr.parse().
+        if not isinstance(value, str):
+            raise TypeError(f"Expected a str, got {type(value).__name__}")
+
+        # 2. Reject empty strings.
+        #    Note: the constructor does NOT apply strip(). If you need to trim
+        #    whitespace, use NonEmptyStr.parse(value, strip=True) or explicitly
+        #    call strip() before construction.
+        if len(value) == 0:
+            raise ValueError("Expected a non-empty string, got empty string")
+
+        return super().__new__(cls, value)
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation that clearly identifies this as a NonEmptyStr.
+
+        This is primarily useful for debugging and logging, where it's important
+        to distinguish a validated NonEmptyStr from a plain str.
+
+        Example:
+            >>> repr(NonEmptyStr("abc"))
+            'NonEmptyStr(\\'abc\\')'
+            >>> str(NonEmptyStr("abc"))  # str() is unchanged, returns 'abc'
+            'abc'
+
+        Note: This intentionally differs from str.__repr__, which would return 'abc'.
+        If compatibility with code that expects repr(str) is required, remove this method.
+        """
+        return f"NonEmptyStr({str.__repr__(self)})"
+
+    def __str__(self) -> str:
+        """
+        Return the plain string representation.
+
+        This is necessary because overriding __repr__ in a subclass of str
+        can cause __str__ and __format__ (used by f-strings) to fall back
+        to the overridden __repr__ in some Python implementations.
+        By explicitly defining __str__, we ensure that str(), f-strings,
+        and format() return the plain string value.
+
+        Example:
+            >>> str(NonEmptyStr("abc"))
+            'abc'
+            >>> f"{NonEmptyStr('abc')}"
+            'abc'
+            >>> format(NonEmptyStr("abc"))
+            'abc'
+        """
+        return str.__str__(self)
+
+    @classmethod
+    def parse(cls, value: object, strip: bool = True) -> NonEmptyStr | None:
+        """
+        Safely attempt to convert a value to a NonEmptyStr.
+
+        Args:
+            value: The value to parse. Must be a str.
+            strip: If True (default), applies strip() before validation.
+                   Rejects strings that become empty after stripping.
+                   If False, does not apply strip(). Rejects only truly empty strings.
+
+        Returns:
+            A NonEmptyStr instance on success, or None on any failure.
+            This method never raises exceptions.
+
+        See the class docstring for a full list of handled edge cases.
+        """
+        # 1. Reject non-str types explicitly.
+        if not isinstance(value, str):
+            return None
+
+        # 2. Apply strip if requested.
+        processed = value.strip() if strip else value
+
+        # 3. Reject empty strings.
+        if len(processed) == 0:
+            return None
+
+        # 4. Construct and return.
+        return cls(processed)
