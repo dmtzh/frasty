@@ -32,7 +32,7 @@ class ActionDefinitionAdapter:
             opt_type = ActionType.parse(raw_type)
             return Result.Ok(opt_type) if opt_type is not None else Result.Error([ValueInvalid("type")])
         def parse_config():
-            config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"] and v is not None}
+            config_dict = {k: v for k, v in data.items() if k not in ["action", "type", "input_data"]}
             return config_dict if config_dict else None
         parsed_name = yield from parse_name()
         parsed_type = yield from parse_type()
