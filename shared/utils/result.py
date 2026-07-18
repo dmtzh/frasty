@@ -180,3 +180,92 @@ def traverse_accumulating_with_index[T, R, TErr](
         return Result.Error(tuple(err_buffer))
     else:
         return Result.Ok(ok_buffer)
+
+def sequence_accumulating[T, TErr](
+    results: Iterable[Result[T, TErr] | Result[T, tuple[TErr, ...]]]
+) -> Result[list[T], tuple[TErr, ...]]:
+    """
+    Collapse an iterable of Results into a single Result of a list,
+    accumulating all errors.
+
+    This is the "dual" of traverse_accumulating: while traverse_accumulating
+    applies a function to each element and then collapses the resulting
+    collection of effects, sequence_accumulating takes an already-formed
+    collection of effects and collapses it directly.
+
+    Mathematically:
+        sequence_accumulating(results) == traverse_accumulating(results, lambda x: x)
+
+    However, sequence_accumulating is provided as a separate function for
+    ergonomics and readability. When you already have a list[Result] (e.g.
+    from asyncio.gather, a list comprehension, or parallel validation),
+    calling sequence_accumulating(my_list) is clearer than
+    traverse_accumulating(my_list, lambda r: r).
+
+    Semantics:
+    - Does NOT stop on first error (unlike expression's fail-fast sequence)
+    - Collects ALL errors in tuple[TErr, ...]
+    - If all Results are Ok -> Result.Ok(list[T]) with values in original order
+    - If any Result is Error -> Result.Error(tuple[TErr, ...]) with all errors
+      (successful values are discarded in this case)
+    - Empty input -> Result.Ok([])
+
+    Error normalization:
+    - Each input element may be Result[T, TErr] OR Result[T, tuple[TErr, ...]]
+    - Single errors are wrapped into a 1-tuple internally
+    - Tuple errors are flattened into the final tuple
+    - Output error type is always tuple[TErr, ...] (compatible with apply)
+
+    Order preservation:
+    - Successful values appear in the output list in the same order as inputs
+    - Errors appear in the output tuple in the same order as encountered
+      (left-to-right traversal)
+
+    Complexity:
+    - Time: O(N) where N is the number of elements
+    - Space: O(N) for storing results or errors
+
+    Args:
+        results: Iterable of Result values to collapse. May be a list, tuple,
+                 generator, or any other Iterable. Each element may carry
+                 either a single error (TErr) or a tuple of errors.
+
+    Returns:
+        Result[list[T], tuple[TErr, ...]]:
+        - Ok(list[T]) if all elements were Ok
+        - Error(tuple[TErr, ...]) if any element was Error, containing all
+          accumulated errors
+
+    Examples:
+        >>> sequence_accumulating([Result.Ok(1), Result.Ok(2), Result.Ok(3)])
+        Result.Ok([1, 2, 3])
+
+        >>> sequence_accumulating([Result.Ok(1), Result.Error("err"), Result.Ok(3)])
+        Result.Error(("err",))
+
+        >>> sequence_accumulating([Result.Error("e1"), Result.Error("e2")])
+        Result.Error(("e1", "e2"))
+
+        >>> sequence_accumulating([])
+        Result.Ok([])
+
+        # Mixing single errors and tuple errors:
+        >>> sequence_accumulating([
+        ...     Result.Error("single"),
+        ...     Result.Error(("multi1", "multi2"))
+        ... ])
+        Result.Error(("single", "multi1", "multi2"))
+
+    Typical use cases:
+    - Collapsing results of asyncio.gather (best-effort parallel execution)
+    - Combining N independent validations where N > 4 (beyond apply4)
+    - Aggregating errors from parallel storage operations
+    - Any scenario where you have list[Result] and want Result[list] with
+      accumulating error semantics
+
+    See also:
+    - traverse_accumulating: applies a function and then collapses
+    - apply / apply3 / apply4: combine a fixed small number of Results
+    - to_error_list / to_ok_list: extract only one side of the Result
+    """
+    return traverse_accumulating(results, lambda res: res)
