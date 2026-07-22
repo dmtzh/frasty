@@ -1,0 +1,98 @@
+name: CD Tasks WebAPI
+
+on:
+  workflow_run:
+    workflows: ["CI Tasks WebAPI"]
+    types:
+      - completed
+    branches: [main]
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Tasks WebAPI
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: self-hosted
+    environment: tasks-webapi-production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin
+      
+      - name: Build Docker image
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker build \
+            -f tasks/webapi/Dockerfile \
+            -t ghcr.io/${{ github.repository }}/tasks-webapi:$SHA \
+            .
+      
+      - name: Push image to GHCR
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker push ghcr.io/${{ github.repository }}/tasks-webapi:$SHA
+          docker tag ghcr.io/${{ github.repository }}/tasks-webapi:$SHA \
+                     ghcr.io/${{ github.repository }}/tasks-webapi:latest
+          docker push ghcr.io/${{ github.repository }}/tasks-webapi:latest
+      
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT }} localhost >> ~/.ssh/known_hosts 2>/dev/null
+      
+      - name: Deploy to VPS
+        env:
+          ENV_VARS: ${{ secrets.TASKS_WEBAPI_ENV_VARS }}
+          IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ssh -i ~/.ssh/deploy_key \
+              -p ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              deployer@localhost << 'EOF'
+            set -eu  # Stop on error, output commands
+            
+            echo "=== Starting deployment of tasks-webapi ==="
+            
+            cd /opt/frasty
+            
+            # Backup current config
+            cp docker-compose.webapi.prod.yml docker-compose.webapi.prod.yml.bak
+            
+            # Generate .env file
+            echo "Updating .env.tasks-webapi..."
+            printf '%s\n' "$ENV_VARS" > .env.tasks-webapi
+            
+            echo "Logging in to GHCR..."
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            
+            echo "Updating image tag to $IMAGE_SHA..."
+            sed -i "s|image: ghcr.io/.*/tasks-webapi:.*|image: ghcr.io/$GITHUB_REPOSITORY/tasks-webapi:$IMAGE_SHA|" docker-compose.webapi.prod.yml
+            
+            echo "Pulling new image..."
+            docker compose -f docker-compose.webapi.prod.yml pull tasks-webapi
+            
+            echo "Restarting container..."
+            docker compose -f docker-compose.webapi.prod.yml up -d tasks-webapi
+            
+            echo "Checking container status..."
+            sleep 5
+            docker compose -f docker-compose.webapi.prod.yml ps tasks-webapi
+            
+            echo "Cleaning up..."
+            docker logout ghcr.io
+            # docker image prune -f
+            
+            echo "=== Deployment completed successfully ==="
+          EOF
+      
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
