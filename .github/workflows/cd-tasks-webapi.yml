@@ -13,6 +13,8 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: self-hosted
     environment: tasks-webapi-production
+    permissions:
+      packages: write
     
     steps:
       - name: Checkout code
