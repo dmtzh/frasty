@@ -1,0 +1,54 @@
+name: CI Tasks WebAPI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tasks/webapi/**'
+      - 'tasks/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/ci-tasks-webapi.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tasks/webapi/**'
+      - 'tasks/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/ci-tasks-webapi.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-tasks-webapi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Tasks WebAPI
+    runs-on: self-hosted
+    container: python:3.13-alpine
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: /root/.cache/pip
+          key: ${{ runner.os }}-pip-tasks-webapi-${{ hashFiles('tasks/webapi/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-tasks-webapi-
+      
+      - name: Install system dependencies
+        run: |
+          apk update
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio Expression aiofiles
+      
+      - name: Run tests with pytest
+        run: pytest tests/ -v --tb=short
