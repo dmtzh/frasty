@@ -65,9 +65,9 @@ jobs:
       
       - name: Deploy to VPS
         env:
-          ENV_VARS: ${{ secrets.TASKS_WEBAPI_ENV_VARS }}
           IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
+          ENCODED_VARS=$(printf '%s' "${{ secrets.TASKS_WEBAPI_ENV_VARS }}" | base64 -w 0)
           ssh -i ~/.ssh/deploy_key_tasks-webapi \
               -p ${{ secrets.DEPLOY_SSH_PORT }} \
               -o StrictHostKeyChecking=no \
@@ -85,10 +85,7 @@ jobs:
             
             # Generate .env file
             echo "Updating .env.tasks-webapi..."
-            #printf '%s\n' "${{ secrets.TASKS_WEBAPI_ENV_VARS }}" > .env.tasks-webapi
-            cat > .env.tasks-webapi << 'ENVEOF'
-$ENV_VARS
-ENVEOF
+            echo "$ENCODED_VARS" | base64 -d > .env.tasks-webapi
 
             if [ ! -s .env.tasks-webapi ]; then
               echo "✗ .env.tasks-webapi is empty!"
