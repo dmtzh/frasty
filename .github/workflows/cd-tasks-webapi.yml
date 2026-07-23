@@ -45,10 +45,17 @@ jobs:
       
       - name: Setup SSH key
         run: |
-          mkdir -p ~/.ssh
+          set -x
+          echo "=== Starting SSH key setup ==="
+          mkdir -p ~/.ssh && echo "✓ Directory created"
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p ${{ secrets.DEPLOY_SSH_PORT }} localhost >> ~/.ssh/known_hosts 2>/dev/null
+          echo "✓ Key written"
+          echo "Key validation:"
+          test -s ~/.ssh/deploy_key && echo "✓ File is not empty" || echo "✗ File is empty!"
+          head -n 1 ~/.ssh/deploy_key | grep -q "BEGIN" && echo "✓ Valid key format" || echo "✗ Invalid key format!"
+          chmod 600 ~/.ssh/deploy_key && echo "✓ Permissions set"
+          ls -l ~/.ssh/deploy_key
+          echo "=== SSH key setup completed ==="
       
       - name: Deploy to VPS
         env:
