@@ -45,7 +45,6 @@ jobs:
       
       - name: Setup SSH key
         run: |
-          set -x
           echo "=== Starting SSH key setup ==="
           mkdir -p ~/.ssh && echo "✓ Directory created"
           echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
@@ -65,7 +64,7 @@ jobs:
           ssh -i ~/.ssh/deploy_key \
               -p ${{ secrets.DEPLOY_SSH_PORT }} \
               -o StrictHostKeyChecking=no \
-              deployer@localhost << 'EOF'
+              deployer@host.docker.internal << 'EOF'
             set -eu  # Stop on error, output commands
             
             echo "=== Starting deployment of tasks-webapi ==="
