@@ -7,6 +7,10 @@ on:
       - completed
     branches: [main]
 
+concurrency:
+  group: cd-vps-deploy
+  cancel-in-progress: false
+
 jobs:
   build-and-deploy:
     name: Build and Deploy Tasks WebAPI
@@ -42,18 +46,21 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}/tasks-webapi:$SHA \
                      ghcr.io/${{ github.repository }}/tasks-webapi:latest
           docker push ghcr.io/${{ github.repository }}/tasks-webapi:latest
+
+          docker logout ghcr.io || true
       
       - name: Setup SSH key
         run: |
           echo "=== Starting SSH key setup ==="
+          SSH_KEY_FILE=~/.ssh/deploy_key_tasks-webapi
           mkdir -p ~/.ssh && echo "✓ Directory created"
-          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "$SSH_KEY_FILE"
           echo "✓ Key written"
           echo "Key validation:"
-          test -s ~/.ssh/deploy_key && echo "✓ File is not empty" || echo "✗ File is empty!"
-          head -n 1 ~/.ssh/deploy_key | grep -q "BEGIN" && echo "✓ Valid key format" || echo "✗ Invalid key format!"
-          chmod 600 ~/.ssh/deploy_key && echo "✓ Permissions set"
-          ls -l ~/.ssh/deploy_key
+          test -s "$SSH_KEY_FILE" && echo "✓ File is not empty" || echo "✗ File is empty!"
+          head -n 1 "$SSH_KEY_FILE" | grep -q "BEGIN" && echo "✓ Valid key format" || echo "✗ Invalid key format!"
+          chmod 600 "$SSH_KEY_FILE" && echo "✓ Permissions set"
+          ls -l "$SSH_KEY_FILE"
           echo "=== SSH key setup completed ==="
       
       - name: Deploy to VPS
@@ -61,14 +68,16 @@ jobs:
           ENV_VARS: ${{ secrets.TASKS_WEBAPI_ENV_VARS }}
           IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          ssh -i ~/.ssh/deploy_key \
+          ssh -i ~/.ssh/deploy_key_tasks-webapi \
               -p ${{ secrets.DEPLOY_SSH_PORT }} \
               -o StrictHostKeyChecking=no \
-              deployer@host.docker.internal << 'EOF'
-            set -eu  # Stop on error, output commands
+              deployer@host.docker.internal << EOF
+            set -eu
             
             echo "=== Starting deployment of tasks-webapi ==="
+            echo "Image SHA: $IMAGE_SHA"
             
+            # Chande working folder
             cd /opt/frasty
             
             # Backup current config
@@ -76,31 +85,58 @@ jobs:
             
             # Generate .env file
             echo "Updating .env.tasks-webapi..."
-            printf '%s\n' "$ENV_VARS" > .env.tasks-webapi
+            #printf '%s\n' "${{ secrets.TASKS_WEBAPI_ENV_VARS }}" > .env.tasks-webapi
+            cat > .env.tasks-webapi << 'ENVEOF'
+$ENV_VARS
+ENVEOF
+
+            if [ ! -s .env.tasks-webapi ]; then
+              echo "✗ .env.tasks-webapi is empty!"
+              exit 1
+            fi
             
             echo "Logging in to GHCR..."
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             echo "Updating image tag to $IMAGE_SHA..."
-            sed -i "s|image: ghcr.io/.*/tasks-webapi:.*|image: ghcr.io/$GITHUB_REPOSITORY/tasks-webapi:$IMAGE_SHA|" docker-compose.webapi.prod.yml
+            sed -i "s|image: ghcr.io/.*/tasks-webapi:.*|image: ghcr.io/${{ github.repository }}/tasks-webapi:$IMAGE_SHA|" docker-compose.webapi.prod.yml
+
+            # Check if sed was successful
+            if ! grep -q "$IMAGE_SHA" docker-compose.webapi.prod.yml; then
+              echo "✗ sed failed to update image tag!"
+              cat docker-compose.webapi.prod.yml
+              exit 1
+            fi
             
             echo "Pulling new image..."
             docker compose -f docker-compose.webapi.prod.yml pull tasks-webapi
             
             echo "Restarting container..."
             docker compose -f docker-compose.webapi.prod.yml up -d tasks-webapi
-            
-            echo "Checking container status..."
-            sleep 5
-            docker compose -f docker-compose.webapi.prod.yml ps tasks-webapi
-            
-            echo "Cleaning up..."
-            docker logout ghcr.io
-            # docker image prune -f
+
+            echo "Waiting for container to start..."
+            sleep 10
+
+            # Check if container is running
+            if ! docker compose -f docker-compose.webapi.prod.yml ps tasks-webapi | grep -q "Up"; then
+              echo "✗ Container failed to start!"
+              echo "=== Container logs ==="
+              docker compose -f docker-compose.webapi.prod.yml logs --tail=50 tasks-webapi
+              echo "=== Rolling back ==="
+              cp docker-compose.webapi.prod.yml.bak docker-compose.webapi.prod.yml
+              docker compose -f docker-compose.webapi.prod.yml up -d tasks-webapi
+              exit 1
+            fi
+
+            echo "✓ Container is running!"
+
+            echo "Cleaning up on host..."
+            docker logout ghcr.io || true
+            #docker image prune -f
             
             echo "=== Deployment completed successfully ==="
           EOF
       
       - name: Cleanup SSH key
         if: always()
-        run: rm -f ~/.ssh/deploy_key
+        run: rm -f ~/.ssh/deploy_key_tasks-webapi
