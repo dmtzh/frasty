@@ -1,7 +1,9 @@
 from __future__ import annotations
+
+import re
 from dataclasses import dataclass
 from enum import StrEnum
-import re
+from typing import Self
 
 from shared.utils.string import strip_and_lowercase
 
@@ -30,7 +32,7 @@ class ActionName(str):
        - Use this mode when input comes from untrusted sources (e.g., JSON).
     """
     
-    def __new__(cls, value: str) -> ActionName:
+    def __new__(cls, value: str) -> Self:
         # 1. Reject non-str types explicitly.
         if not isinstance(value, str):
             raise TypeError(f"Expected a str, got {type(value).__name__}")
