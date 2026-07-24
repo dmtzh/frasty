@@ -106,22 +106,22 @@ jobs:
             fi
             
             echo "Pulling new image..."
-            docker compose -f docker-compose.webapi.prod.yml pull tasks-webapi
+            docker compose -f docker-compose.webapi.prod.yml pull taskswebapi
             
             echo "Restarting container..."
-            docker compose -f docker-compose.webapi.prod.yml up -d tasks-webapi
+            docker compose -f docker-compose.webapi.prod.yml up -d taskswebapi
 
             echo "Waiting for container to start..."
             sleep 10
 
             # Check if container is running
-            if ! docker compose -f docker-compose.webapi.prod.yml ps tasks-webapi | grep -q "Up"; then
+            if ! docker compose -f docker-compose.webapi.prod.yml ps taskswebapi | grep -q "Up"; then
               echo "✗ Container failed to start!"
               echo "=== Container logs ==="
-              docker compose -f docker-compose.webapi.prod.yml logs --tail=50 tasks-webapi
+              docker compose -f docker-compose.webapi.prod.yml logs --tail=50 taskswebapi
               echo "=== Rolling back ==="
               cp docker-compose.webapi.prod.yml.bak docker-compose.webapi.prod.yml
-              docker compose -f docker-compose.webapi.prod.yml up -d tasks-webapi
+              docker compose -f docker-compose.webapi.prod.yml up -d taskswebapi
               exit 1
             fi
 
