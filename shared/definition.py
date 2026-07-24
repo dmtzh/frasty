@@ -2,7 +2,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 
-from expression import Result, effect
+from expression import Option, Result, effect
 from expression.collections.block import Block
 from expression.extra.result.traversable import traverse
 
@@ -25,8 +25,8 @@ class ActionDefinitionAdapter:
         def parse_name() -> Result[ActionName, list[ValueErr]]:
             if "action" not in data:
                 return Result.Error([ValueMissing("action")])
-            raw_name = str(data.get("action") or "").strip()
-            return Result.Ok(ActionName(raw_name.lower())) if raw_name else Result.Error([ValueInvalid("action")])
+            opt_action = Option.of_optional(ActionName.parse(data.get("action")))
+            return Result.of_option(opt_action, [ValueInvalid("action")])
         def parse_type() -> Result[ActionType, list[ValueErr]]:
             raw_type = str(data.get("type", ActionType.CUSTOM) or "")
             opt_type = ActionType.parse(raw_type)
