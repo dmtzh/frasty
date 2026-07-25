@@ -38,7 +38,7 @@ jobs:
         uses: actions/checkout@v7
       
       - name: Cache pip dependencies
-        uses: actions/cache@v7
+        uses: actions/cache@v6
         with:
           path: /root/.cache/pip
           key: ${{ runner.os }}-pip-tasks-webapi-${{ hashFiles('tasks/webapi/requirements.txt') }}
