@@ -1,0 +1,19 @@
+name: frasty-webapi-cd
+
+services:
+  taskswebapi:
+    image: ghcr.io/dmtzh/frasty/tasks-webapi:${TASKS_WEBAPI_TAG}
+    container_name: frasty-tasks-webapi
+    ports:
+      - 8000:8000
+    env_file:
+      - .env.tasks-webapi
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
+
+networks:
+  frasty-network:
+    external: true

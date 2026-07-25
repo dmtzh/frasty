@@ -46,8 +46,6 @@ jobs:
           docker tag ghcr.io/${{ github.repository }}/tasks-webapi:$SHA \
                      ghcr.io/${{ github.repository }}/tasks-webapi:latest
           docker push ghcr.io/${{ github.repository }}/tasks-webapi:latest
-
-          docker logout ghcr.io || true
       
       - name: Setup SSH key
         run: |
@@ -62,6 +60,18 @@ jobs:
           chmod 600 "$SSH_KEY_FILE" && echo "✓ Permissions set"
           ls -l "$SSH_KEY_FILE"
           echo "=== SSH key setup completed ==="
+      
+      - name: Sync compose files to VPS
+        run: |
+          echo "=== Starting syncing compose files ==="
+          
+          scp -i ~/.ssh/deploy_key_tasks-webapi \
+              -P ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              deploy/docker-compose.webapi.prod.yml deployer@host.docker.internal:/opt/frasty/
+          
+          echo "=== Syncing completed successfully ==="
       
       - name: Deploy to VPS
         env:
@@ -79,60 +89,83 @@ jobs:
             
             # Chande working folder
             cd /opt/frasty
-            
-            # Backup current config
-            cp docker-compose.webapi.prod.yml docker-compose.webapi.prod.yml.bak
-            
-            # Generate .env file
-            echo "Updating .env.tasks-webapi..."
-            echo "$ENCODED_VARS" | base64 -d > .env.tasks-webapi
 
-            if [ ! -s .env.tasks-webapi ]; then
-              echo "✗ .env.tasks-webapi is empty!"
-              exit 1
-            fi
-            
+            # Ensure credentials are always cleared
+            cleanup() {
+              echo "=== Cleaning up Docker credentials ==="
+              docker logout ghcr.io || true
+            }
+            trap cleanup EXIT
+
             echo "Logging in to GHCR..."
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
-            echo "Updating image tag to $IMAGE_SHA..."
-            sed -i "s|image: ghcr.io/.*/tasks-webapi:.*|image: ghcr.io/${{ github.repository }}/tasks-webapi:$IMAGE_SHA|" docker-compose.webapi.prod.yml
+            # Backup current config
+            cp docker-compose.webapi.prod.yml docker-compose.webapi.prod.yml.bak
+            # Backup .env
+            cp .env.tasks-webapi .env.tasks-webapi.bak
+            cp .env.tags .env.tags.bak
+            
+            # Generate .env.tasks-webapi file
+            echo "Updating .env.tasks-webapi..."
+            echo "$ENCODED_VARS" | base64 -d > .env.tasks-webapi
+            if [ ! -s .env.tasks-webapi ]; then
+              echo "✗ .env.tasks-webapi is empty!"
+              echo "=== Rolling back ==="
+              cp .env.tasks-webapi.bak .env.tasks-webapi
+              exit 1
+            fi
 
-            # Check if sed was successful
-            if ! grep -q "$IMAGE_SHA" docker-compose.webapi.prod.yml; then
-              echo "✗ sed failed to update image tag!"
-              cat docker-compose.webapi.prod.yml
+            # Update TASKS_WEBAPI_TAG in .env.tags
+            if grep -q "^TASKS_WEBAPI_TAG=" .env.tags; then
+              sed -i "s|^TASKS_WEBAPI_TAG=.*|TASKS_WEBAPI_TAG=$IMAGE_SHA|" .env.tags
+            else
+              echo "TASKS_WEBAPI_TAG=$IMAGE_SHA" >> .env.tags
+            fi
+            if ! grep -q "$IMAGE_SHA" .env.tags; then
+              echo "✗ sed failed to update tasks-webapi image tag!"
+              cat .env.tags
+              echo "=== Rolling back ==="
+              cp .env.tasks-webapi.bak .env.tasks-webapi
+              cp .env.tags.bak .env.tags
               exit 1
             fi
             
             echo "Pulling new image..."
-            docker compose -f docker-compose.webapi.prod.yml pull taskswebapi
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml pull taskswebapi
             
             echo "Restarting container..."
-            docker compose -f docker-compose.webapi.prod.yml up -d taskswebapi
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml up -d taskswebapi
 
             echo "Waiting for container to start..."
             sleep 10
 
             # Check if container is running
-            if ! docker compose -f docker-compose.webapi.prod.yml ps taskswebapi | grep -q "Up"; then
+            if ! docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml ps taskswebapi | grep -q "Up"; then
               echo "✗ Container failed to start!"
               echo "=== Container logs ==="
-              docker compose -f docker-compose.webapi.prod.yml logs --tail=50 taskswebapi
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml logs --tail=50 taskswebapi
               echo "=== Rolling back ==="
+              cp .env.tasks-webapi.bak .env.tasks-webapi
+              cp .env.tags.bak .env.tags
               cp docker-compose.webapi.prod.yml.bak docker-compose.webapi.prod.yml
-              docker compose -f docker-compose.webapi.prod.yml up -d taskswebapi
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml up -d taskswebapi
               exit 1
             fi
 
             echo "✓ Container is running!"
 
             echo "Cleaning up on host..."
-            docker logout ghcr.io || true
-            #docker image prune -f
+            # docker image prune -f
             
             echo "=== Deployment completed successfully ==="
           EOF
+      
+      - name: Cleanup Docker credentials on Runner
+        if: always()
+        run: |
+          echo "=== Cleaning up Docker credentials on Runner ==="
+          docker logout ghcr.io || true
       
       - name: Cleanup SSH key
         if: always()

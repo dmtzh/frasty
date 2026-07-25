@@ -8,7 +8,9 @@ on:
       - 'tasks/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
+      - '.github/workflows/cd-tasks-webapi.yml'
       - '.github/workflows/ci-tasks-webapi.yml'
+      - 'deploy/docker-compose.webapi.prod.yml'
   push:
     branches: [main]
     paths:
@@ -16,7 +18,9 @@ on:
       - 'tasks/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
+      - '.github/workflows/cd-tasks-webapi.yml'
       - '.github/workflows/ci-tasks-webapi.yml'
+      - 'deploy/docker-compose.webapi.prod.yml'
   workflow_dispatch:
 
 concurrency:
@@ -31,10 +35,10 @@ jobs:
     
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       
       - name: Cache pip dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v7
         with:
           path: /root/.cache/pip
           key: ${{ runner.os }}-pip-tasks-webapi-${{ hashFiles('tasks/webapi/requirements.txt') }}
