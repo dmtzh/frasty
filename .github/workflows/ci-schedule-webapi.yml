@@ -1,0 +1,58 @@
+name: CI Schedule WebAPI
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'schedule/webapi/**'
+      - 'schedule/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-schedule-webapi.yml'
+      - '.github/workflows/ci-schedule-webapi.yml'
+      - 'deploy/docker-compose.webapi.prod.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'schedule/webapi/**'
+      - 'schedule/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-schedule-webapi.yml'
+      - '.github/workflows/ci-schedule-webapi.yml'
+      - 'deploy/docker-compose.webapi.prod.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-schedule-webapi-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Schedule WebAPI
+    runs-on: self-hosted
+    container: python:3.13-alpine
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v6
+        with:
+          path: /root/.cache/pip
+          key: ${{ runner.os }}-pip-schedule-webapi-${{ hashFiles('schedule/webapi/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-schedule-webapi-
+      
+      - name: Install system dependencies
+        run: |
+          apk update
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio Expression aiofiles
+      
+      - name: Run tests with pytest
+        run: pytest tests/ -v --tb=short

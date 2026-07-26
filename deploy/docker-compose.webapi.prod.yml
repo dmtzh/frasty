@@ -13,6 +13,17 @@ services:
     restart: unless-stopped
     networks:
       - frasty-network
+  
+  schedulewebapi:
+    image: ghcr.io/dmtzh/frasty/schedule-webapi:${SCHEDULE_WEBAPI_TAG}
+    container_name: frasty-sched-webapi
+    env_file:
+      - .env.schedule-webapi
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
 
 networks:
   frasty-network:
