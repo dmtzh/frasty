@@ -7,9 +7,9 @@ from expression import effect
 import pytest
 
 import config
+from infrastructure.persistence.filesystem import file
 from shared.customtypes import IdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-import shared.infrastructure.storage.file as file
 from shared.infrastructure.storage.repository import AlreadyExistsException, NotFoundException
 from shared.utils.parse import parse_from_dict
 from shared.utils.string import strip_and_lowercase

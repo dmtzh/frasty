@@ -5,8 +5,9 @@ import aiofiles.os as aos
 from expression import Result
 
 from shared.infrastructure.serialization.serializer import Serializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.utils.exceptiondecorators import async_catch_ex
+
+from filewithversion import FileWithVersion
 
 class FileWithVersionLimited[TId, TItem, TItemDto](FileWithVersion[TId, TItem, TItemDto]):
     def __init__(

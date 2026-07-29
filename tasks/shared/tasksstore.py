@@ -2,9 +2,9 @@ from collections.abc import Callable
 import os
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.task import Task, TaskAdapter
 

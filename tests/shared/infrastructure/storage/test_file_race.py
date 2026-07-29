@@ -5,8 +5,8 @@ import os
 import pytest
 
 import config
+from infrastructure.persistence.filesystem import file
 from shared.infrastructure.serialization.serializer import Serializer
-import shared.infrastructure.storage.file as file
 from shared.infrastructure.storage.repository import AlreadyExistsException
 from shared.utils.crockfordid import CrockfordId
 

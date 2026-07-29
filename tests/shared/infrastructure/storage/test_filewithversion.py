@@ -7,12 +7,13 @@ import aiofiles.os as aos
 from expression import Result, effect
 import pytest
 
-import config
+from infrastructure.persistence.filesystem import filewithversion
 from shared.customtypes import IdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-import shared.infrastructure.storage.filewithversion as filewithversion
 from shared.infrastructure.storage.repository import AlreadyExistsException
 from shared.utils.string import strip_and_lowercase
+
+import config
 
 class SampleFirstName(StrEnum):
     ALICE = "Alice"

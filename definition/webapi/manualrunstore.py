@@ -2,12 +2,13 @@ from collections.abc import Callable, Coroutine
 import os
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-import config
-from manualrunstate import ManualRunState, ManualRunStateAdapter
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.customtypes import RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
+
+import config
+from manualrunstate import ManualRunState, ManualRunStateAdapter
 
 P = ParamSpec("P")
 R = TypeVar("R")

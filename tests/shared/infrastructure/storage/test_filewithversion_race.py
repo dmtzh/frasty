@@ -4,11 +4,12 @@ import os
 
 import pytest
 
-import config
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.infrastructure.serialization.serializer import Serializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repository import AlreadyExistsException
 from shared.utils.crockfordid import CrockfordId
+
+import config
 
 @pytest.fixture(autouse=True, scope="module")
 def folder_path():

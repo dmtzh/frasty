@@ -2,9 +2,9 @@ from collections.abc import Callable, Coroutine
 import os
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
+from infrastructure.persistence.filesystem.filewithversionlimited import FileWithVersionLimited
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversionlimited import FileWithVersionLimited
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.taskpendingresultsqueue import TaskPendingResultsQueue, TaskPendingResultsQueueAdapter
 

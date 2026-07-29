@@ -4,14 +4,15 @@ from typing import Any
 
 from expression import Result
 
-import config
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.customtypes import DefinitionIdValue
 from shared.definition import Definition, DefinitionAdapter
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repository import AlreadyExistsException, NotFoundError, NotFoundException, StorageError
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.utils.exceptiondecorators import async_ex_to_error_result
+
+import config
 
 class DefinitionsStore[T]:
     def __init__(self, items_sub_folder_name: str, to_list: Callable[[T], list[dict[str, Any]]], from_list: Callable[[list[dict[str, Any]]], Result[T, Any]]):

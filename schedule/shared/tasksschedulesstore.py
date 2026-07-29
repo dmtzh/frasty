@@ -1,7 +1,7 @@
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.customtypes import ScheduleIdValue, TaskIdValue
 from shared.domainschedule import TaskSchedule, TaskScheduleAdapter
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 
 type ItemType = dict[TaskIdValue, TaskSchedule]

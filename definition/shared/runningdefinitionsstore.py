@@ -4,10 +4,10 @@ from typing import Any, Concatenate, ParamSpec, TypeVar
 
 from expression import Result
 
+from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
 from shared.customtypes import DefinitionIdValue, IdValue, RunIdValue
 from shared.definitioncustomtypes import GroupIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
-from shared.infrastructure.storage.filewithversion import FileWithVersion
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 
 from .groupofrunningdefinitions import GroupOfRunningDefinitionsState, GroupOfRunningDefinitionsStateAdapter
