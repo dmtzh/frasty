@@ -10,6 +10,7 @@ on:
 concurrency:
   group: cd-vps-deploy
   cancel-in-progress: false
+  queue: max
 
 jobs:
   build-and-deploy:
