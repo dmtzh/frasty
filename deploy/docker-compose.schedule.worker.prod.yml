@@ -1,0 +1,17 @@
+name: frasty-schedule-worker-cd
+
+services:
+  scheduleworker:
+    image: ghcr.io/dmtzh/frasty/schedule-worker:${SCHEDULE_WORKER_TAG}
+    container_name: frasty-sched-worker
+    env_file:
+      - .env.schedule-worker
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
+
+networks:
+  frasty-network:
+    external: true
