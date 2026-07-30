@@ -1,35 +1,35 @@
-name: CI Tasks WebAPI
+name: CI Schedule WebAPI
 
 on:
   pull_request:
     branches: [main]
     paths:
-      - 'tasks/webapi/**'
-      - 'tasks/shared/**'
+      - 'schedule/webapi/**'
+      - 'schedule/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
-      - '.github/workflows/cd-tasks-webapi.yml'
-      - '.github/workflows/ci-tasks-webapi.yml'
-      - 'deploy/docker-compose.webapi.prod.yml'
+      - '.github/workflows/cd-schedule-webapi.yaml'
+      - '.github/workflows/ci-schedule-webapi.yaml'
+      - 'deploy/docker-compose.webapi.prod.yaml'
   push:
     branches: [main]
     paths:
-      - 'tasks/webapi/**'
-      - 'tasks/shared/**'
+      - 'schedule/webapi/**'
+      - 'schedule/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
-      - '.github/workflows/cd-tasks-webapi.yml'
-      - '.github/workflows/ci-tasks-webapi.yml'
-      - 'deploy/docker-compose.webapi.prod.yml'
+      - '.github/workflows/cd-schedule-webapi.yaml'
+      - '.github/workflows/ci-schedule-webapi.yaml'
+      - 'deploy/docker-compose.webapi.prod.yaml'
   workflow_dispatch:
 
 concurrency:
-  group: ci-tasks-webapi-${{ github.ref }}
+  group: ci-schedule-webapi-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    name: Test Tasks WebAPI
+    name: Test Schedule WebAPI
     runs-on: self-hosted
     container: python:3.13-alpine
     
@@ -41,9 +41,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: /root/.cache/pip
-          key: ${{ runner.os }}-pip-tasks-webapi-${{ hashFiles('tasks/webapi/requirements.txt') }}
+          key: ${{ runner.os }}-pip-schedule-webapi-${{ hashFiles('schedule/webapi/requirements.txt') }}
           restore-keys: |
-            ${{ runner.os }}-pip-tasks-webapi-
+            ${{ runner.os }}-pip-schedule-webapi-
       
       - name: Install system dependencies
         run: |

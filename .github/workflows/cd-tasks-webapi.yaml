@@ -70,7 +70,7 @@ jobs:
               -P ${{ secrets.DEPLOY_SSH_PORT }} \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=10 \
-              deploy/docker-compose.webapi.prod.yml deployer@host.docker.internal:/opt/frasty/
+              deploy/docker-compose.webapi.prod.yaml deployer@host.docker.internal:/opt/frasty/
           
           echo "=== Syncing completed successfully ==="
       
@@ -102,7 +102,7 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Backup current config
-            cp docker-compose.webapi.prod.yml docker-compose.webapi.prod.yml.bak
+            cp docker-compose.webapi.prod.yaml docker-compose.webapi.prod.yaml.bak
             # Backup .env
             cp .env.tasks-webapi .env.tasks-webapi.bak
             cp .env.tags .env.tags.bak
@@ -133,24 +133,24 @@ jobs:
             fi
             
             echo "Pulling new image..."
-            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml pull taskswebapi
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml pull taskswebapi
             
             echo "Restarting container..."
-            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml up -d taskswebapi
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml up -d taskswebapi
 
             echo "Waiting for container to start..."
             sleep 10
 
             # Check if container is running
-            if ! docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml ps taskswebapi | grep -q "Up"; then
+            if ! docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml ps taskswebapi | grep -q "Up"; then
               echo "✗ Container failed to start!"
               echo "=== Container logs ==="
-              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml logs --tail=50 taskswebapi
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml logs --tail=50 taskswebapi
               echo "=== Rolling back ==="
               cp .env.tasks-webapi.bak .env.tasks-webapi
               cp .env.tags.bak .env.tags
-              cp docker-compose.webapi.prod.yml.bak docker-compose.webapi.prod.yml
-              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yml up -d taskswebapi
+              cp docker-compose.webapi.prod.yaml.bak docker-compose.webapi.prod.yaml
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml up -d taskswebapi
               exit 1
             fi
 

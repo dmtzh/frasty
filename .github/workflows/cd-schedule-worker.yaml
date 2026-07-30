@@ -70,7 +70,7 @@ jobs:
               -P ${{ secrets.DEPLOY_SSH_PORT }} \
               -o StrictHostKeyChecking=no \
               -o ConnectTimeout=10 \
-              deploy/docker-compose.schedule.worker.prod.yml deployer@host.docker.internal:/opt/frasty/
+              deploy/docker-compose.schedule.worker.prod.yaml deployer@host.docker.internal:/opt/frasty/
           
           echo "=== Syncing completed successfully ==="
       
@@ -102,7 +102,7 @@ jobs:
             echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             
             # Backup current config
-            cp docker-compose.schedule.worker.prod.yml docker-compose.schedule.worker.prod.yml.bak
+            cp docker-compose.schedule.worker.prod.yaml docker-compose.schedule.worker.prod.yaml.bak
             # Backup .env
             cp .env.schedule-worker .env.schedule-worker.bak
             cp .env.tags .env.tags.bak
@@ -133,24 +133,24 @@ jobs:
             fi
             
             echo "Pulling new image..."
-            docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yml pull scheduleworker
+            docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yaml pull scheduleworker
             
             echo "Restarting container..."
-            docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yml up -d scheduleworker
+            docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yaml up -d scheduleworker
 
             echo "Waiting for container to start..."
             sleep 10
 
             # Check if container is running
-            if ! docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yml ps scheduleworker | grep -q "Up"; then
+            if ! docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yaml ps scheduleworker | grep -q "Up"; then
               echo "✗ Container failed to start!"
               echo "=== Container logs ==="
-              docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yml logs --tail=50 scheduleworker
+              docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yaml logs --tail=50 scheduleworker
               echo "=== Rolling back ==="
               cp .env.schedule-worker.bak .env.schedule-worker
               cp .env.tags.bak .env.tags
-              cp docker-compose.schedule.worker.prod.yml.bak docker-compose.schedule.worker.prod.yml
-              docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yml up -d scheduleworker
+              cp docker-compose.schedule.worker.prod.yaml.bak docker-compose.schedule.worker.prod.yaml
+              docker compose --env-file .env.tags -f docker-compose.schedule.worker.prod.yaml up -d scheduleworker
               exit 1
             fi
 

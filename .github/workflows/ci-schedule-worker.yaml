@@ -8,9 +8,9 @@ on:
       - 'schedule/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
-      - '.github/workflows/cd-schedule-worker.yml'
-      - '.github/workflows/ci-schedule-worker.yml'
-      - 'deploy/docker-compose.schedule.worker.prod.yml'
+      - '.github/workflows/cd-schedule-worker.yaml'
+      - '.github/workflows/ci-schedule-worker.yaml'
+      - 'deploy/docker-compose.schedule.worker.prod.yaml'
   push:
     branches: [main]
     paths:
@@ -18,9 +18,9 @@ on:
       - 'schedule/shared/**'
       - 'infrastructure/**'
       - 'shared/**'
-      - '.github/workflows/cd-schedule-worker.yml'
-      - '.github/workflows/ci-schedule-worker.yml'
-      - 'deploy/docker-compose.schedule.worker.prod.yml'
+      - '.github/workflows/cd-schedule-worker.yaml'
+      - '.github/workflows/ci-schedule-worker.yaml'
+      - 'deploy/docker-compose.schedule.worker.prod.yaml'
   workflow_dispatch:
 
 concurrency:
