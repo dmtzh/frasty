@@ -1,0 +1,58 @@
+name: CI Definition Worker
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'definition/runner/**'
+      - 'definition/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-definition-worker.yaml'
+      - '.github/workflows/ci-definition-worker.yaml'
+      - 'deploy/docker-compose.definition.worker.prod.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'definition/runner/**'
+      - 'definition/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-definition-worker.yaml'
+      - '.github/workflows/ci-definition-worker.yaml'
+      - 'deploy/docker-compose.definition.worker.prod.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-definition-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Definition Worker
+    runs-on: self-hosted
+    container: python:3.13-alpine
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v6
+        with:
+          path: /root/.cache/pip
+          key: ${{ runner.os }}-pip-definition-worker-${{ hashFiles('definition/runner/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-definition-worker-
+      
+      - name: Install system dependencies
+        run: |
+          apk update
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio Expression aiofiles
+      
+      - name: Run tests with pytest
+        run: pytest tests/ -v --tb=short

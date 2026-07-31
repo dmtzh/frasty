@@ -1,0 +1,17 @@
+name: frasty-definition-worker-cd
+
+services:
+  definitionworker:
+    image: ghcr.io/dmtzh/frasty/definition-worker:${DEFINITION_WORKER_TAG}
+    container_name: frasty-def-worker
+    env_file:
+      - .env.definition-worker
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
+
+networks:
+  frasty-network:
+    external: true
