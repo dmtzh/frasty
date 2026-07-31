@@ -1,0 +1,8 @@
+# Ignore absolutely everything by default
+**
+
+# Allow directories so Docker can traverse them
+!**/
+
+# Allow all .py files in any directory
+!**/*.py

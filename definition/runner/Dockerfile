@@ -17,7 +17,7 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /usr/src/app
 
-COPY definition/runner/*.py ./
+COPY definition/runner/ ./
 COPY shared/ ./shared/
 COPY definition/shared/ ./shared/
 COPY infrastructure/ ./infrastructure/
