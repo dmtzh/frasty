@@ -24,6 +24,19 @@ services:
     restart: unless-stopped
     networks:
       - frasty-network
+  
+  definitionwebapi:
+    image: ghcr.io/dmtzh/frasty/definiton-webapi:${DEFINITION_WEBAPI_TAG}
+    container_name: frasty-def-webapi
+    ports:
+      - 8001:8000
+    env_file:
+      - .env.definition-webapi
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
 
 networks:
   frasty-network:

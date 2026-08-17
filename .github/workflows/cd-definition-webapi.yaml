@@ -1,0 +1,173 @@
+name: CD Definition WebAPI
+
+on:
+  workflow_run:
+    workflows: ["CI Definition WebAPI"]
+    types:
+      - completed
+    branches: [main]
+
+concurrency:
+  group: cd-vps-deploy
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Definition WebAPI
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: self-hosted
+    environment: definition-webapi-production
+    permissions:
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin
+      
+      - name: Build Docker image
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker build \
+            -f definition/webapi/Dockerfile \
+            -t ghcr.io/${{ github.repository }}/definition-webapi:$SHA \
+            .
+      
+      - name: Push image to GHCR
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker push ghcr.io/${{ github.repository }}/definition-webapi:$SHA
+          docker tag ghcr.io/${{ github.repository }}/definition-webapi:$SHA \
+                     ghcr.io/${{ github.repository }}/definition-webapi:latest
+          docker push ghcr.io/${{ github.repository }}/definition-webapi:latest
+      
+      - name: Setup SSH key
+        run: |
+          echo "=== Starting SSH key setup ==="
+          SSH_KEY_FILE=~/.ssh/deploy_key_definition-webapi
+          mkdir -p ~/.ssh && echo "✓ Directory created"
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "$SSH_KEY_FILE"
+          echo "✓ Key written"
+          echo "Key validation:"
+          test -s "$SSH_KEY_FILE" && echo "✓ File is not empty" || echo "✗ File is empty!"
+          head -n 1 "$SSH_KEY_FILE" | grep -q "BEGIN" && echo "✓ Valid key format" || echo "✗ Invalid key format!"
+          chmod 600 "$SSH_KEY_FILE" && echo "✓ Permissions set"
+          ls -l "$SSH_KEY_FILE"
+          echo "=== SSH key setup completed ==="
+      
+      - name: Sync compose files to VPS
+        run: |
+          echo "=== Starting syncing compose files ==="
+          
+          scp -i ~/.ssh/deploy_key_definition-webapi \
+              -P ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              deploy/docker-compose.webapi.prod.yaml deployer@host.docker.internal:/opt/frasty/
+          
+          echo "=== Syncing completed successfully ==="
+      
+      - name: Deploy to VPS
+        env:
+          IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ENCODED_VARS=$(printf '%s' "${{ secrets.DEFINITION_WEBAPI_ENV_VARS }}" | base64 -w 0)
+          ssh -i ~/.ssh/deploy_key_definition-webapi \
+              -p ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              deployer@host.docker.internal << EOF
+            set -eu
+            
+            echo "=== Starting deployment of definition-webapi ==="
+            echo "Image SHA: $IMAGE_SHA"
+            
+            # Chande working folder
+            cd /opt/frasty
+
+            # Ensure credentials are always cleared
+            cleanup() {
+              echo "=== Cleaning up Docker credentials ==="
+              docker logout ghcr.io || true
+            }
+            trap cleanup EXIT
+
+            echo "Logging in to GHCR..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Backup current config
+            cp docker-compose.webapi.prod.yaml docker-compose.webapi.prod.yaml.bak
+            # Backup .env
+            cp .env.definition-webapi .env.definition-webapi.bak
+            cp .env.tags .env.tags.bak
+            
+            # Generate .env.definition-webapi file
+            echo "Updating .env.definition-webapi..."
+            echo "$ENCODED_VARS" | base64 -d > .env.definition-webapi
+            if [ ! -s .env.definition-webapi ]; then
+              echo "✗ .env.definition-webapi is empty!"
+              echo "=== Rolling back ==="
+              cp .env.definition-webapi.bak .env.definition-webapi
+              exit 1
+            fi
+
+            # Update DEFINITION_WEBAPI_TAG in .env.tags
+            if grep -q "^DEFINITION_WEBAPI_TAG=" .env.tags; then
+              sed -i "s|^DEFINITION_WEBAPI_TAG=.*|DEFINITION_WEBAPI_TAG=$IMAGE_SHA|" .env.tags
+            else
+              echo "DEFINITION_WEBAPI_TAG=$IMAGE_SHA" >> .env.tags
+            fi
+            if ! grep -q "$IMAGE_SHA" .env.tags; then
+              echo "✗ sed failed to update definition-webapi image tag!"
+              cat .env.tags
+              echo "=== Rolling back ==="
+              cp .env.definition-webapi.bak .env.definition-webapi
+              cp .env.tags.bak .env.tags
+              exit 1
+            fi
+            
+            echo "Pulling new image..."
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml pull definitionwebapi
+            
+            echo "Restarting container..."
+            docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml up -d definitionwebapi
+
+            echo "Waiting for container to start..."
+            sleep 10
+
+            # Check if container is running
+            if ! docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml ps definitionwebapi | grep -q "Up"; then
+              echo "✗ Container failed to start!"
+              echo "=== Container logs ==="
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml logs --tail=50 definitionwebapi
+              echo "=== Rolling back ==="
+              cp .env.definition-webapi.bak .env.definition-webapi
+              cp .env.tags.bak .env.tags
+              cp docker-compose.webapi.prod.yaml.bak docker-compose.webapi.prod.yaml
+              docker compose --env-file .env.tags -f docker-compose.webapi.prod.yaml up -d definitionwebapi
+              exit 1
+            fi
+
+            echo "✓ Container is running!"
+
+            echo "Cleaning up on host..."
+            # docker image prune -f
+            
+            echo "=== Deployment completed successfully ==="
+          EOF
+      
+      - name: Cleanup Docker credentials on Runner
+        if: always()
+        run: |
+          echo "=== Cleaning up Docker credentials on Runner ==="
+          docker logout ghcr.io || true
+      
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key_definition-webapi
