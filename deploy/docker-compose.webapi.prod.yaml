@@ -26,7 +26,7 @@ services:
       - frasty-network
   
   definitionwebapi:
-    image: ghcr.io/dmtzh/frasty/definiton-webapi:${DEFINITION_WEBAPI_TAG}
+    image: ghcr.io/dmtzh/frasty/definition-webapi:${DEFINITION_WEBAPI_TAG}
     container_name: frasty-def-webapi
     ports:
       - 8001:8000
