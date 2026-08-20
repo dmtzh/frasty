@@ -38,7 +38,6 @@ jobs:
           docker build \
             -f definition/webapi/Dockerfile \
             -t ghcr.io/${{ github.repository }}/definition-webapi:$SHA \
-            --ignore-file definition/webapi/.dockerignore \
             .
       
       - name: Push image to GHCR
