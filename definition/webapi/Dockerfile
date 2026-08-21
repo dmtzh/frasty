@@ -16,10 +16,11 @@ COPY --from=builder /opt/venv /opt/venv
 
 WORKDIR /usr/src/app
 
-COPY definition/webapi/ ./
 COPY shared/ ./shared/
 COPY definition/shared/ ./shared/
 COPY infrastructure/ ./infrastructure/
+COPY definition/webapi/ ./
+RUN rm requirements.txt
 
 RUN chown -R appuser:appuser /usr/src/app
 
