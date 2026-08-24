@@ -1,0 +1,58 @@
+name: CI Tasks Worker
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'tasks/runner/**'
+      - 'tasks/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-tasks-worker.yaml'
+      - '.github/workflows/ci-tasks-worker.yaml'
+      - 'deploy/docker-compose.tasks.worker.prod.yaml'
+  push:
+    branches: [main]
+    paths:
+      - 'tasks/runner/**'
+      - 'tasks/shared/**'
+      - 'infrastructure/**'
+      - 'shared/**'
+      - '.github/workflows/cd-tasks-worker.yaml'
+      - '.github/workflows/ci-tasks-worker.yaml'
+      - 'deploy/docker-compose.tasks.worker.prod.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: ci-tasks-worker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test Tasks Worker
+    runs-on: self-hosted
+    container: python:3.13-alpine
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v6
+        with:
+          path: /root/.cache/pip
+          key: ${{ runner.os }}-pip-tasks-worker-${{ hashFiles('tasks/runner/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-tasks-worker-
+      
+      - name: Install system dependencies
+        run: |
+          apk update
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-asyncio Expression aiofiles
+      
+      - name: Run tests with pytest
+        run: pytest tests/ -v --tb=short

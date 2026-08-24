@@ -1,0 +1,180 @@
+name: CD Tasks Worker
+
+on:
+  workflow_run:
+    workflows: ["CI Tasks Worker"]
+    types:
+      - completed
+    branches: [main]
+
+concurrency:
+  group: cd-vps-deploy
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  build-and-deploy:
+    name: Build and Deploy Tasks Worker
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: self-hosted
+    environment: tasks-worker-production
+    permissions:
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+      
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io \
+            -u ${{ github.actor }} --password-stdin
+      
+      - name: Build Docker image
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker build \
+            -f tasks/runner/Dockerfile \
+            -t ghcr.io/${{ github.repository }}/tasks-worker:$SHA \
+            .
+      
+      - name: Push image to GHCR
+        run: |
+          SHA=${{ github.event.workflow_run.head_sha }}
+          docker push ghcr.io/${{ github.repository }}/tasks-worker:$SHA
+          docker tag ghcr.io/${{ github.repository }}/tasks-worker:$SHA \
+                     ghcr.io/${{ github.repository }}/tasks-worker:latest
+          docker push ghcr.io/${{ github.repository }}/tasks-worker:latest
+      
+      - name: Setup SSH key
+        run: |
+          echo "=== Starting SSH key setup ==="
+          SSH_KEY_FILE=~/.ssh/deploy_key_tasks-worker
+          mkdir -p ~/.ssh && echo "✓ Directory created"
+          echo "${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}" > "$SSH_KEY_FILE"
+          echo "✓ Key written"
+          echo "Key validation:"
+          test -s "$SSH_KEY_FILE" && echo "✓ File is not empty" || echo "✗ File is empty!"
+          head -n 1 "$SSH_KEY_FILE" | grep -q "BEGIN" && echo "✓ Valid key format" || echo "✗ Invalid key format!"
+          chmod 600 "$SSH_KEY_FILE" && echo "✓ Permissions set"
+          ls -l "$SSH_KEY_FILE"
+          echo "=== SSH key setup completed ==="
+      
+      - name: Sync compose files to VPS
+        run: |
+          echo "=== Starting syncing compose files ==="
+          
+          scp -i ~/.ssh/deploy_key_tasks-worker \
+              -P ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              -o ConnectTimeout=10 \
+              deploy/docker-compose.tasks.worker.prod.yaml deployer@host.docker.internal:/opt/frasty/docker-compose.tasks.worker.prod.yaml.new
+          
+          echo "=== Syncing completed successfully ==="
+      
+      - name: Deploy to VPS
+        env:
+          IMAGE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          ENCODED_VARS=$(printf '%s' "${{ secrets.TASKS_WORKER_ENV_VARS }}" | base64 -w 0)
+          ssh -i ~/.ssh/deploy_key_tasks-worker \
+              -p ${{ secrets.DEPLOY_SSH_PORT }} \
+              -o StrictHostKeyChecking=no \
+              deployer@host.docker.internal << EOF
+            set -eu
+            
+            echo "=== Starting deployment of tasks-worker ==="
+            echo "Image SHA: $IMAGE_SHA"
+            
+            # Chande working folder
+            cd /opt/frasty
+
+            # Ensure credentials are always cleared
+            cleanup() {
+              echo "=== Cleaning up Docker credentials ==="
+              docker logout ghcr.io || true
+            }
+            trap cleanup EXIT
+
+            echo "Logging in to GHCR..."
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Backup current config
+            [ -f docker-compose.tasks.worker.prod.yaml ] && cp docker-compose.tasks.worker.prod.yaml docker-compose.tasks.worker.prod.yaml.bak
+            # Backup .env
+            [ -f .env.tasks-worker ] && cp .env.tasks-worker .env.tasks-worker.bak
+            cp .env.tags .env.tags.bak
+
+            # Replace current config with new one
+            cp docker-compose.tasks.worker.prod.yaml.new docker-compose.tasks.worker.prod.yaml
+            
+            # Generate .env.tasks-worker file
+            echo "Updating .env.tasks-worker..."
+            echo "$ENCODED_VARS" | base64 -d > .env.tasks-worker
+            if [ ! -s .env.tasks-worker ]; then
+              echo "✗ .env.tasks-worker is empty!"
+              echo "=== Rolling back ==="
+              rm .env.tasks-worker
+              [ -f .env.tasks-worker.bak ] && cp .env.tasks-worker.bak .env.tasks-worker
+              exit 1
+            fi
+
+            # Update TASKS_WORKER_TAG in .env.tags
+            if grep -q "^TASKS_WORKER_TAG=" .env.tags; then
+              sed -i "s|^TASKS_WORKER_TAG=.*|TASKS_WORKER_TAG=$IMAGE_SHA|" .env.tags
+            else
+              echo "TASKS_WORKER_TAG=$IMAGE_SHA" >> .env.tags
+            fi
+            if ! grep -q "$IMAGE_SHA" .env.tags; then
+              echo "✗ sed failed to update tasks-worker image tag!"
+              cat .env.tags
+              echo "=== Rolling back ==="
+              rm .env.tasks-worker
+              [ -f .env.tasks-worker.bak ] && cp .env.tasks-worker.bak .env.tasks-worker
+              cp .env.tags.bak .env.tags
+              exit 1
+            fi
+            
+            echo "Pulling new image..."
+            docker compose --env-file .env.tags -f docker-compose.tasks.worker.prod.yaml pull tasksworker
+            
+            echo "Restarting container..."
+            docker compose --env-file .env.tags -f docker-compose.tasks.worker.prod.yaml up -d tasksworker
+
+            echo "Waiting for container to start..."
+            sleep 10
+
+            # Check if container is running
+            if ! docker compose --env-file .env.tags -f docker-compose.tasks.worker.prod.yaml ps tasksworker | grep -q "Up"; then
+              echo "✗ Container failed to start!"
+              echo "=== Container logs ==="
+              docker compose --env-file .env.tags -f docker-compose.tasks.worker.prod.yaml logs --tail=50 tasksworker
+              echo "=== Rolling back ==="
+              rm .env.tasks-worker
+              [ -f .env.tasks-worker.bak ] && cp .env.tasks-worker.bak .env.tasks-worker
+              cp .env.tags.bak .env.tags
+              rm docker-compose.tasks.worker.prod.yaml
+              [ -f docker-compose.tasks.worker.prod.yaml.bak ] && cp docker-compose.tasks.worker.prod.yaml.bak docker-compose.tasks.worker.prod.yaml
+              [ -f docker-compose.tasks.worker.prod.yaml ] && docker compose --env-file .env.tags -f docker-compose.tasks.worker.prod.yaml up -d tasksworker
+              exit 1
+            fi
+
+            echo "✓ Container is running!"
+
+            echo "Cleaning up on host..."
+            # docker image prune -f
+            
+            echo "=== Deployment completed successfully ==="
+          EOF
+      
+      - name: Cleanup Docker credentials on Runner
+        if: always()
+        run: |
+          echo "=== Cleaning up Docker credentials on Runner ==="
+          docker logout ghcr.io || true
+      
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key_tasks-worker

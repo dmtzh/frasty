@@ -1,0 +1,17 @@
+name: frasty-tasks-worker-cd
+
+services:
+  tasksworker:
+    image: ghcr.io/dmtzh/frasty/tasks-worker:${TASKS_WORKER_TAG}
+    container_name: frasty-tasks-worker
+    env_file:
+      - .env.tasks-worker
+    volumes:
+      - /opt/frasty/data:/usr/src/app/data
+    restart: unless-stopped
+    networks:
+      - frasty-network
+
+networks:
+  frasty-network:
+    external: true
