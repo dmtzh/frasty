@@ -12,6 +12,7 @@ from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.customtypes import DefinitionIdValue, Error, Metadata, RunIdValue, StepIdValue, TaskIdValue
 from shared.pipeline.actionhandler import ActionData, run_action_adapter
+from shared.tasksstore import TasksStore
 from shared.utils.exceptiondecorators import async_ex_to_error_result
 
 # async def execute_definition(input: ExecuteDefinitionInput):
@@ -37,6 +38,8 @@ async def execute_task(task_id: TaskIdValue):
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 ADD_DEFINITION_URL = os.environ['ADD_DEFINITION_URL']
 CHANGE_SCHEDULE_URL = os.environ['CHANGE_SCHEDULE_URL']
+
+tasks_storage = TasksStore(STORAGE_ROOT_FOLDER)
 
 class AddDefinitionError(Error):
     '''Add definition error'''

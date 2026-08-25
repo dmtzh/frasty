@@ -8,6 +8,7 @@ from shared.completedresult import CompletedResult
 from shared.customtypes import TaskIdValue
 from shared.executedefinitionaction import ExecuteDefinitionInput, run_execute_definition_action
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory
+from shared.tasksstore import TasksStore
 from shared.utils.parse import parse_from_dict
 
 EXECUTE_TASK_ACTION = Action(ActionName("execute_task"), ActionType.SERVICE)
@@ -21,5 +22,7 @@ def execute_definition(data: ActionData[None, ExecuteDefinitionInput]):
     return run_execute_definition_action(config.run_action, data)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
+
+tasks_storage = TasksStore(STORAGE_ROOT_FOLDER)
 
 app = config.create_faststream_app()

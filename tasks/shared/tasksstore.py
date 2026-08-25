@@ -8,16 +8,14 @@ from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.task import Task, TaskAdapter
 
-import config
-
 P = ParamSpec("P")
 R = TypeVar("R")
 
 class TasksStore:
-    def __init__(self, items_sub_folder_name: str):
-        folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "TasksStorage")
+    def __init__(self, root_folder: str):
+        folder_path = os.path.join(root_folder, "TasksStorage")
         file_repo_with_ver = FileWithVersion[TaskIdValue, Task, dict[str, Any]](
-            items_sub_folder_name,
+            Task.__name__,
             TaskAdapter.to_dict,
             TaskAdapter.from_dict,
             JsonSerializer[dict[str, Any]](),
@@ -46,5 +44,3 @@ class TasksStore:
     
     def with_storage(self, func: Callable[Concatenate[Task | None, P], tuple[R, Task]]):
         return self._item_action(func)
-    
-tasks_storage = TasksStore(Task.__name__)
