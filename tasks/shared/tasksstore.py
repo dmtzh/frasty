@@ -2,7 +2,7 @@ from collections.abc import Callable
 import os
 from typing import Any, Concatenate, ParamSpec, TypeVar
 
-from infrastructure.persistence.filesystem.filewithversion import FileWithVersion
+from infrastructure.persistence.filesystem.filewithversionlimited import FileWithVersionLimited
 from shared.customtypes import TaskIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
@@ -14,13 +14,14 @@ R = TypeVar("R")
 class TasksStore:
     def __init__(self, root_folder: str):
         folder_path = os.path.join(root_folder, "TasksStorage")
-        file_repo_with_ver = FileWithVersion[TaskIdValue, Task, dict[str, Any]](
+        file_repo_with_ver = FileWithVersionLimited[TaskIdValue, Task, dict[str, Any]](
             Task.__name__,
             TaskAdapter.to_dict,
             TaskAdapter.from_dict,
             JsonSerializer[dict[str, Any]](),
             "json",
-            folder_path
+            folder_path,
+            1
         )
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
