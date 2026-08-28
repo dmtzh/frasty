@@ -1,3 +1,6 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
 import aiohttp
 
 from shared.infrastructure.serialization.serializer import Serializer
@@ -15,7 +18,59 @@ from .apiclient import (
 from .config import YandexDiskRepositoryConfig
 from .pathresolver import YandexDiskPathResolver
 
-class YandexDiskRepository[TId, TItem](AsyncRepository[TId, TItem]):
+@dataclass(frozen=True)
+class PublicLink:
+    """
+    Value object representing a public read-only link to a stored resource.
+    
+    Attributes:
+        url: Direct URL for anonymous read-only access (e.g., "https://yadi.sk/i/...").
+        public_key: Internal key used to revoke the publication via unpublish().
+    """
+    url: str
+    public_key: str
+
+class PublishableAsyncRepository[TId](ABC):
+    """
+    Extension contract for storage backends that support generating
+    public read-only links to stored resources.
+    
+    Key invariants:
+       - publish() is idempotent: calling it twice returns the same PublicLink.
+       - unpublish() is idempotent: revoking an already-unpublished resource succeeds.
+       - get_public_link() returns None if the resource exists but is not published.
+       - All operations return None for non-existent resources (consistent with AsyncRepository.get).
+    """
+    
+    @abstractmethod
+    async def publish(self, id: TId) -> PublicLink | None:
+        """
+        Generate a public read-only link for the resource.
+        
+        Returns:
+            PublicLink if resource exists (new or existing link).
+            None if resource does not exist.
+            
+        Raises:
+            StorageError on unexpected API/network failures.
+        """
+        pass
+
+    @abstractmethod
+    async def get_public_link(self, id: TId) -> PublicLink | None:
+        """
+        Retrieve the existing public link without modifying state.
+        
+        Returns:
+            PublicLink if resource exists and is published.
+            None if resource does not exist OR exists but is not published.
+            
+        Raises:
+            StorageError on unexpected API/network failures.
+        """
+        pass
+
+class YandexDiskRepository[TId, TItem](AsyncRepository[TId, TItem], PublishableAsyncRepository[TId]):
     """
     AsyncRepository implementation backed by Yandex Disk.
     
@@ -101,3 +156,54 @@ class YandexDiskRepository[TId, TItem](AsyncRepository[TId, TItem]):
             except YandexDiskNotFoundException:
                 # Strict idempotency: if it's already gone, we consider it a success
                 pass
+
+    async def publish(self, id: TId) -> PublicLink | None:
+        """
+        Generate a public read-only link. Idempotent.
+        Returns None if the resource does not exist (consistent with get()).
+        
+        The /publish endpoint only toggles the visibility flag and returns 
+        a metadata href. It does NOT return the public_url or public_key.
+        Therefore, this method performs a two-step sequence:
+        1. Call /publish to make the resource public.
+        2. Call /resources (metadata) to fetch the actual public_url and public_key.
+        """
+        path = self._resolver.resolve(id)
+
+        async with aiohttp.ClientSession(timeout=self._timeout) as session:
+            api_client = YandexDiskApiClient(session, self._oauth_token)
+            try:
+                # --- Step 1: Trigger publication (idempotent operation) ---
+                await api_client.publish_resource(path)
+                # --- Step 2: Fetch metadata to extract the actual public link ---
+                metadata = await api_client.get_resource_metadata(path)
+            except YandexDiskNotFoundException:
+                return None
+
+        # Check if resource is actually published
+        public_url = metadata.get("public_url")
+        public_key = metadata.get("public_key")
+        if public_url is None or public_key is None:
+            return None
+        return PublicLink(url=public_url, public_key=public_key)
+
+    async def get_public_link(self, id: TId) -> PublicLink | None:
+        """
+        Retrieve existing public link without state modification.
+        Returns None if resource doesn't exist OR is not published.
+        """
+        path = self._resolver.resolve(id)
+
+        async with aiohttp.ClientSession(timeout=self._timeout) as session:
+            api_client = YandexDiskApiClient(session, self._oauth_token)
+            try:
+                metadata = await api_client.get_resource_metadata(path)
+            except YandexDiskNotFoundException:
+                return None
+            
+        # Check if resource is actually published
+        public_url = metadata.get("public_url")
+        public_key = metadata.get("public_key")
+        if public_url is None or public_key is None:
+            return None
+        return PublicLink(url=public_url, public_key=public_key)

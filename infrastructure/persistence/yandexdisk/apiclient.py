@@ -111,3 +111,30 @@ class YandexDiskApiClient:
         params = {"path": path}
         async with self._session.delete(url, headers=self._headers, params=params) as resp:
             await self._validate_response(resp)
+
+    async def publish_resource(self, path: str) -> dict[str, Any]:
+        """
+        Calls PUT /v1/disk/resources/publish?path={path}.
+        Returns metadata dict with 'public_key' and 'public_url'.
+        
+        Idempotent: if already published, API returns the existing link.
+        Raises YandexDiskNotFoundError(404) if the resource doesn't exist.
+        """
+        url = "https://cloud-api.yandex.net/v1/disk/resources/publish"
+        params = {"path": path}
+        async with self._session.put(url, headers=self._headers, params=params) as resp:
+            await self._validate_response(resp)
+            return await resp.json()
+
+    async def get_resource_metadata(self, path: str) -> dict[str, Any]:
+        """
+        Calls GET /v1/disk/resources?path={path}.
+        Returns metadata dict including 'public_key' and 'public_url' if published.
+        
+        Raises YandexDiskNotFoundError(404) if the resource doesn't exist.
+        """
+        url = "https://cloud-api.yandex.net/v1/disk/resources"
+        params = {"path": path}
+        async with self._session.get(url, headers=self._headers, params=params) as resp:
+            await self._validate_response(resp)
+            return await resp.json()
