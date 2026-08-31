@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Callable
 from decimal import Decimal, InvalidOperation
+import math
 from typing import Any
 
 from expression import Result
@@ -532,3 +533,234 @@ class NonEmptyStr(str):
 
         # 4. Construct and return.
         return cls(processed)
+
+class PositiveFloat(float):
+    """
+    A strictly positive float type (value > 0).
+f
+    This class is a thin wrapper around Python's built-in ``float`` that enforces
+    the invariant "value > 0" at construction time. It is intended for use in
+    configuration dataclasses and domain models where a positive float is
+    semantically required.
+
+    Construction modes
+    ------------------
+    1. Direct construction via ``PositiveFloat(value)``:
+       - Accepts ONLY ``float`` and ``int`` values (not ``bool``, ``str``, etc.).
+       - Raises ``TypeError`` for non-float/non-int types.
+       - Raises ``ValueError`` for non-positive values, booleans, inf, or nan.
+       - Use this mode when the caller is certain the value is a valid ``float``
+         (e.g. after parsing/validation, or when working with already-validated data).
+
+    2. Safe parsing via ``PositiveFloat.parse(value)``:
+       - Accepts ``float``, ``int``, ``str`` (representations of positive numbers).
+       - Returns a ``PositiveFloat`` instance on success, or ``None`` on any failure.
+       - Never raises exceptions.
+       - Use this mode when the input comes from untrusted sources
+         (e.g. JSON configuration, user input).
+
+    Important limitations
+    ---------------------
+    * ``PositiveFloat`` inherits from ``float``. Arithmetic operations
+      (``+``, ``-``, ``*``, etc.) return a plain ``float``, NOT a ``PositiveFloat``.
+      This means the "value > 0" invariant is NOT preserved across arithmetic.
+      Example::
+
+          x = PositiveFloat(5.0)
+          y = PositiveFloat(3.0)
+          z = x - y   # z == 2.0, but type(z) is float, not PositiveFloat
+          w = y - x   # w == -2.0, type(w) is float, and the invariant is violated
+
+      If you need to preserve the invariant, re-validate after arithmetic:
+      ``PositiveFloat.parse(x - y)``.
+
+    * ``isinstance(PositiveFloat(3.14), float)`` returns ``True``. This is intentional
+      for compatibility with code that expects plain ``float`` values.
+
+    * Type checkers (mypy, pyright) cannot statically verify the "value > 0"
+      invariant. This class provides runtime validation only.
+
+    Edge cases handled by ``parse()``
+    ---------------------------------
+    * ``bool`` values are explicitly rejected (Python's ``bool`` is a subclass
+      of ``int``, so ``True`` would otherwise be accepted as ``1.0``).
+
+    * ``bytes`` values are explicitly rejected. Although Python's ``float(b"3.14")``
+      returns 3.14, bytes represent binary data, not string-encoded numbers.
+      In a JSON-based pipeline, bytes should never appear as numeric input.
+
+    * ``Decimal`` values are explicitly rejected. Decimal support is not required
+      for this pipeline, and implicit Decimal -> float conversion would introduce
+      precision loss.
+
+    * ``float('inf')``, ``float('-inf')``, ``float('nan')`` return ``None``.
+
+    * Negative values and zero return ``None``.
+
+    * Non-parseable strings (``"abc"``, ``""``) return ``None``.
+
+    Examples
+    --------
+    >>> PositiveFloat(3.14)
+    PositiveFloat(3.14)
+    >>> PositiveFloat(42)
+    PositiveFloat(42.0)
+    >>> PositiveFloat(0.0)
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected a positive float, got 0.0
+    >>> PositiveFloat(-1.0)
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected a positive float, got -1.0
+    >>> PositiveFloat(True)
+    Traceback (most recent call last):
+        ...
+    ValueError: Expected a positive float, got True
+    >>> PositiveFloat("3.14")
+    Traceback (most recent call last):
+        ...
+    TypeError: Expected a float or int, got str
+    >>> PositiveFloat.parse(3.14)
+    PositiveFloat(3.14)
+    >>> PositiveFloat.parse(42)
+    PositiveFloat(42.0)
+    >>> PositiveFloat.parse("3.14")
+    PositiveFloat(3.14)
+    >>> PositiveFloat.parse("42")
+    PositiveFloat(42.0)
+    >>> PositiveFloat.parse(0.0) is None
+    True
+    >>> PositiveFloat.parse(-1.0) is None
+    True
+    >>> PositiveFloat.parse(True) is None
+    True
+    >>> PositiveFloat.parse(float('inf')) is None
+    True
+    >>> PositiveFloat.parse(float('nan')) is None
+    True
+    >>> PositiveFloat.parse(None) is None
+    True
+    >>> PositiveFloat.parse("invalid") is None
+    True
+    >>> from decimal import Decimal
+    >>> PositiveFloat.parse(Decimal("3.14")) is None
+    True
+    """
+
+    def __new__(cls, value: float | int) -> PositiveFloat:
+        # 1. Reject booleans explicitly (bool is a subclass of int in Python).
+        #    This must be checked BEFORE isinstance(value, int), because
+        #    isinstance(True, int) returns True.
+        if isinstance(value, bool):
+            raise ValueError(f"Expected a positive float, got {value!r}")
+
+        # 2. Reject non-float/non-int types (str, None, bytes, Decimal, etc.).
+        #    The constructor is strict: it accepts ONLY float and int values.
+        #    For safe conversion from other types, use PositiveFloat.parse().
+        if not isinstance(value, (float, int)):
+            raise TypeError(
+                f"Expected a float or int, got {type(value).__name__}"
+            )
+
+        # 3. Reject special float values (inf/nan).
+        if isinstance(value, float) and (math.isinf(value) or math.isnan(value)):
+            raise ValueError(f"Expected a positive float, got {value!r}")
+
+        # 4. Convert int to float for uniform handling.
+        float_value = float(value)
+
+        # 5. Reject non-positive values.
+        if float_value <= 0:
+            raise ValueError(f"Expected a positive float, got {float_value!r}")
+
+        return super().__new__(cls, float_value)
+
+    def __repr__(self) -> str:
+        """
+        Return a string representation that clearly identifies this as a PositiveFloat.
+
+        Example:
+            >>> repr(PositiveFloat(3.14))
+            'PositiveFloat(3.14)'
+            >>> str(PositiveFloat(3.14))
+            '3.14'
+        """
+        return f"PositiveFloat({float(self)})"
+
+    def __str__(self) -> str:
+        """
+        Return the plain numeric string representation.
+
+        This is necessary because overriding __repr__ in a subclass of float
+        can cause __str__ and __format__ (used by f-strings) to fall back
+        to the overridden __repr__ in some Python implementations.
+
+        Example:
+            >>> str(PositiveFloat(3.14))
+            '3.14'
+            >>> f"{PositiveFloat(3.14)}"
+            '3.14'
+            >>> format(PositiveFloat(3.14))
+            '3.14'
+        """
+        return str(float(self))
+
+    @classmethod
+    def parse(cls, value: object) -> PositiveFloat | None:
+        """
+        Safely attempt to convert a value to a PositiveFloat.
+
+        Returns a PositiveFloat instance on success, or None on any failure.
+        This method never raises exceptions.
+
+        All parsing and validation logic is self-contained within this method.
+        No external helper function (e.g. parse_float) is used, because:
+        - There are no consumers outside PositiveFloat (YAGNI)
+        - NonEmptyStr.parse() follows the same self-contained pattern
+        - Single point of truth eliminates risk of divergence
+
+        See the class docstring for a full list of handled edge cases.
+        """
+        # 1. Reject booleans explicitly (bool is a subclass of int in Python).
+        if isinstance(value, bool):
+            return None
+
+        # 2. Reject bytes explicitly: float(b"3.14") works in Python, but bytes
+        # represent binary data, not string-encoded numbers.
+        if isinstance(value, bytes):
+            return None
+
+        # 3. Reject Decimal explicitly: Decimal support is not required for this
+        # pipeline. Accepting Decimal would introduce implicit precision loss.
+        if isinstance(value, Decimal):
+            return None
+
+        # 4. Handle float: reject special values (inf/nan) and non-positive.
+        if isinstance(value, float):
+            if math.isinf(value) or math.isnan(value):
+                return None
+            if value <= 0:
+                return None
+            return cls(value)
+
+        # 5. Handle int: reject non-positive, convert to float.
+        if isinstance(value, int):
+            if value <= 0:
+                return None
+            return cls(float(value))
+
+        # 6. Handle str: attempt conversion, reject special values and non-positive.
+        if isinstance(value, str):
+            try:
+                result = float(value)
+            except ValueError:
+                return None
+            if math.isinf(result) or math.isnan(result):
+                return None
+            if result <= 0:
+                return None
+            return cls(result)
+
+        # 7. All other types (None, list, dict, etc.) are rejected.
+        return None
