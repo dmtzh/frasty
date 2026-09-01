@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 @dataclass(frozen=True)
 class ValueMissing:
@@ -7,6 +8,7 @@ class ValueMissing:
 @dataclass(frozen=True)
 class ValueInvalid:
     name: str
+    value: Any = None  # optional, backward-compatible
 
 type ValueError = ValueInvalid | ValueMissing
 

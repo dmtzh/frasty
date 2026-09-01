@@ -7,6 +7,7 @@ from typing import Any
 from expression import Result
 
 from shared.utils.string import strip_and_lowercase
+from shared.validation import ValueError as ValueErr, ValueMissing, ValueInvalid
 
 def parse_bool_str(s: str) -> bool | None:
     """
@@ -51,6 +52,48 @@ def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> 
         return Result.Error(f"'{key}' key is missing")
     raw_value = d[key]
     return parse_value(raw_value, key, parser)
+
+def parse_dict_field[T](
+    d: dict,
+    key: str,
+    parser: Callable[[Any], T | None],
+) -> Result[T, ValueErr]:
+    """
+    Analog of parse_from_dict that returns typed validation errors
+    (ValueMissing / ValueInvalid) instead of plain strings.
+
+    Args:
+        d: Source dictionary.
+        key: Key to look up in the dictionary.
+        parser: Safe parser function that returns T on success or None on failure.
+
+    Returns:
+        Result.Ok(T) if the key exists and the parser succeeds.
+        Result.Error(ValueMissing(key)) if the key is absent from the dictionary.
+        Result.Error(ValueInvalid(key, value)) if the parser returns None.
+
+    Examples:
+        >>> parse_dict_field({"name": "alice"}, "name", NonEmptyStr.parse)
+        Result.Ok(NonEmptyStr('alice'))
+
+        >>> parse_dict_field({}, "name", NonEmptyStr.parse)
+        Result.Error(ValueMissing(name='name'))
+
+        >>> parse_dict_field({"name": ""}, "name", NonEmptyStr.parse)
+        Result.Error(ValueInvalid(name='name', value=''))
+
+        >>> parse_dict_field({"count": -1}, "count", PositiveInt.parse)
+        Result.Error(ValueInvalid(name='count', value=-1))
+    """
+    if key not in d:
+        return Result.Error(ValueMissing(key))
+    raw_value = d[key]
+    opt_parsed_value = parser(raw_value)
+    match opt_parsed_value:
+        case None:
+            return Result.Error(ValueInvalid(key, raw_value))
+        case parsed_value:
+            return Result.Ok(parsed_value)
 
 def parse_int(value) -> int | None:
     """
