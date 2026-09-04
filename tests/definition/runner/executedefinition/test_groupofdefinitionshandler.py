@@ -12,7 +12,9 @@ from shared.definitioncustomtypes import GroupIdValue
 from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState, DefinitionIdWithValue
 from shared.pipeline.actionhandler import ActionData, ActionInput
-from config import group_of_running_definitions_storage
+from shared.runningdefinitionsstore import GroupOfRunningDefinitionsStore
+
+from tests.config.config import STORAGE_ROOT_FOLDER
 
 P = ParamSpec("P")
 R = TypeVar("R")
@@ -20,7 +22,7 @@ R = TypeVar("R")
 @pytest.fixture
 def convert_to_storage_action():
     # Returns the storage wrapper decorator for group-level state transactions
-    return group_of_running_definitions_storage.with_storage
+    return GroupOfRunningDefinitionsStore(STORAGE_ROOT_FOLDER).with_storage
 
 @pytest.fixture
 def run_definition_action():
