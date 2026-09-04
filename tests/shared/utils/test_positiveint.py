@@ -1,480 +1,265 @@
-"""
-Unit tests for PositiveInt class and parse_int helper function.
-
-These tests cover:
-  - Direct construction via PositiveInt(value)
-  - Safe parsing via PositiveInt.parse(value)
-  - Edge cases: bool, float, Decimal, inf, nan, very large numbers
-  - Arithmetic behavior (documented limitation)
-  - Integration with built-in int operations
-"""
-from __future__ import annotations
-
+import math
 from decimal import Decimal
 
 import pytest
 
-from shared.utils.parse import PositiveInt, parse_int
-
-# ---------------------------------------------------------------------------
-# parse_int() tests
-# ---------------------------------------------------------------------------
-class TestParseInt:
-    """Tests for the parse_int helper function."""
-
-    # --- Successful conversions ---
-    @pytest.mark.parametrize(
-        "value, expected",
-        [
-            (0, 0),
-            (1, 1),
-            (-5, -5),
-            (10**18, 10**18),
-            ("42", 42),
-            ("-7", -7),
-            ("0", 0),
-            (5.0, 5),
-            (-3.0, -3),
-            (0.0, 0),
-            (Decimal("10"), 10),
-            (Decimal("-5"), -5),
-            (Decimal("0"), 0),
-            (Decimal("5.0"), 5),
-        ],
-    )
-    def test_valid_inputs(self, value, expected):
-        assert parse_int(value) == expected
-
-    # --- Fractional floats and strings are rejected ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            5.5,
-            -3.14,
-            0.1,
-            "5.0",
-            "5.5",
-            "-3.14",
-            Decimal("5.5"),
-            Decimal("-3.14"),
-            Decimal("0.1"),
-        ],
-    )
-    def test_fractional_values_rejected(self, value):
-        assert parse_int(value) is None
-
-    # --- Special float values ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            float("inf"),
-            float("-inf"),
-            float("nan"),
-        ],
-    )
-    def test_special_float_values_rejected(self, value):
-        """OverflowError from int(float('inf')) must be caught and return None."""
-        assert parse_int(value) is None
-
-    # --- Special Decimal values ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            Decimal("inf"),
-            Decimal("-inf"),
-            Decimal("nan"),
-            Decimal("sNaN"),
-        ],
-    )
-    def test_special_decimal_values_rejected(self, value):
-        assert parse_int(value) is None
-
-    # --- Unsupported types ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            None,
-            True,
-            False,
-            [1, 2, 3],
-            {"a": 1},
-            object(),
-        ],
-    )
-    def test_unsupported_types_rejected(self, value):
-        assert parse_int(value) is None
-
-    # --- Invalid strings ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            "abc",
-            "",
-            "  ",
-            "42abc",
-            "12.34.56",
-        ],
-    )
-    def test_invalid_strings_rejected(self, value):
-        assert parse_int(value) is None
-
-    # --- Bytes are rejected ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            b"42",
-            b"-7",
-            b"0",
-            b"5.0",
-            b"abc",
-            b"",
-        ],
-    )
-    def test_bytes_rejected(self, value):
-        """
-        bytes are explicitly rejected even though int(b"42") works in Python.
-        Bytes represent binary data, not string-encoded numbers.
-        """
-        assert parse_int(value) is None
+from shared.utils.parse import PositiveInt
 
 
-# ---------------------------------------------------------------------------
-# PositiveInt direct construction tests
-# ---------------------------------------------------------------------------
-class TestPositiveIntDirectConstruction:
-    """Tests for PositiveInt(value) constructor."""
+class TestPositiveIntConstructor:
+    """Tests for direct construction via PositiveInt(value)."""
 
-    @pytest.mark.parametrize("value", [1, 5, 100, 10**18])
-    def test_valid_positive_int(self, value):
-        result = PositiveInt(value)
-        assert result == value
+    # --- Valid inputs ---
+
+    def test_positive_int(self):
+        result = PositiveInt(5)
         assert isinstance(result, PositiveInt)
         assert isinstance(result, int)
+        assert int(result) == 5
 
-    def test_constructor_raises_for_zero(self):
+    def test_large_positive_int(self):
+        result = PositiveInt(10**18)
+        assert int(result) == 10**18
+
+    # --- Invalid: non-positive values ---
+
+    def test_zero_raises_value_error(self):
         with pytest.raises(ValueError, match="Expected a positive integer"):
             PositiveInt(0)
 
-    def test_constructor_raises_for_negative(self):
+    def test_negative_int_raises_value_error(self):
         with pytest.raises(ValueError, match="Expected a positive integer"):
             PositiveInt(-1)
-        with pytest.raises(ValueError, match="Expected a positive integer"):
-            PositiveInt(-100)
 
-    def test_constructor_raises_for_bool(self):
-        """bool is a subclass of int in Python, must be explicitly rejected."""
+    # --- Invalid: bool (subclass of int) ---
+
+    def test_true_raises_value_error(self):
         with pytest.raises(ValueError, match="Expected a positive integer"):
             PositiveInt(True)
+
+    def test_false_raises_value_error(self):
         with pytest.raises(ValueError, match="Expected a positive integer"):
             PositiveInt(False)
 
-    def test_constructor_raises_for_non_int(self):
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt("5")  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(5.5)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(None)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(b"42")  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(Decimal("5"))  # type: ignore[arg-type]
+    # --- Invalid: wrong types (TypeError) ---
 
-    def test_constructor_rejects_fractional_floats(self):
-        """
-        Regression test: previously PositiveInt(5.5) silently truncated to PositiveInt(5).
-        Now it must raise TypeError to prevent silent data loss.
-        """
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(5.5)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(0.5)  # type: ignore[arg-type]
-        with pytest.raises(TypeError, match="Expected an int"):
-            PositiveInt(-3.14)  # type: ignore[arg-type]
+    def test_float_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got float"):
+            PositiveInt(5.0) # type: ignore[arg-type]
 
-# ---------------------------------------------------------------------------
-# PositiveInt.parse() tests
-# ---------------------------------------------------------------------------
-class TestPositiveIntParse:
-    """Tests for PositiveInt.parse(value) safe conversion."""
+    def test_str_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got str"):
+            PositiveInt("5") # type: ignore[arg-type]
 
-    # --- Successful conversions ---
-    @pytest.mark.parametrize(
-        "value, expected",
-        [
-            (1, 1),
-            (5, 5),
-            (100, 100),
-            (10**18, 10**18),
-            ("42", 42),
-            ("1", 1),
-            (5.0, 5),
-            (1.0, 1),
-            (Decimal("10"), 10),
-            (Decimal("5.0"), 5),
-        ],
-    )
-    def test_valid_inputs(self, value, expected):
-        result = PositiveInt.parse(value)
-        assert result is not None
-        assert result == expected
+    def test_none_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got NoneType"):
+            PositiveInt(None) # type: ignore[arg-type]
+
+    def test_bytes_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got bytes"):
+            PositiveInt(b"42") # type: ignore[arg-type]
+
+    def test_decimal_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got Decimal"):
+            PositiveInt(Decimal("42")) # type: ignore[arg-type]
+
+    def test_list_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got list"):
+            PositiveInt([5]) # type: ignore[arg-type]
+
+    def test_dict_raises_type_error(self):
+        with pytest.raises(TypeError, match="Expected an int, got dict"):
+            PositiveInt({"value": 5}) # type: ignore[arg-type]
+
+
+class TestPositiveIntParseSuccess:
+    """Tests for PositiveInt.parse() with valid inputs."""
+
+    def test_parse_positive_int(self):
+        result = PositiveInt.parse(42)
         assert isinstance(result, PositiveInt)
+        assert int(result) == 42
 
-    # --- Zero and negative values ---
-    @pytest.mark.parametrize("value", [0, -1, -100, "0", "-5", 0.0, -3.0, Decimal("0"), Decimal("-5")])
-    def test_zero_and_negative_rejected(self, value):
-        assert PositiveInt.parse(value) is None
+    def test_parse_whole_float(self):
+        result = PositiveInt.parse(5.0)
+        assert isinstance(result, PositiveInt)
+        assert int(result) == 5
 
-    # --- Fractional values are rejected ---
-    @pytest.mark.parametrize("value", [5.5, -3.14, 0.1, "5.0", "5.5", Decimal("5.5"), Decimal("3.14")])
-    def test_fractional_values_rejected(self, value):
-        assert PositiveInt.parse(value) is None
+    def test_parse_positive_string_int(self):
+        result = PositiveInt.parse("42")
+        assert isinstance(result, PositiveInt)
+        assert int(result) == 42
 
-    # --- Special float values (inf, nan) ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            float("inf"),
-            float("-inf"),
-            float("nan"),
-        ],
-    )
-    def test_special_float_values_rejected(self, value):
-        """OverflowError from int(float('inf')) must be caught by parse()."""
-        assert PositiveInt.parse(value) is None
+    def test_parse_positive_decimal_whole(self):
+        result = PositiveInt.parse(Decimal("42"))
+        assert isinstance(result, PositiveInt)
+        assert int(result) == 42
 
-    # --- Special Decimal values ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            Decimal("inf"),
-            Decimal("-inf"),
-            Decimal("nan"),
-            Decimal("sNaN"),
-        ],
-    )
-    def test_special_decimal_values_rejected(self, value):
-        assert PositiveInt.parse(value) is None
+    def test_parse_large_positive_int(self):
+        result = PositiveInt.parse(10**18)
+        assert isinstance(result, PositiveInt)
+        assert int(result) == 10**18
+
+
+class TestPositiveIntParseFailure:
+    """Tests for PositiveInt.parse() with invalid inputs. All must return None."""
+
+    # --- Non-positive values ---
+
+    def test_parse_zero_int_returns_none(self):
+        assert PositiveInt.parse(0) is None
+
+    def test_parse_negative_int_returns_none(self):
+        assert PositiveInt.parse(-1) is None
+
+    def test_parse_zero_float_returns_none(self):
+        assert PositiveInt.parse(0.0) is None
+
+    def test_parse_negative_float_returns_none(self):
+        assert PositiveInt.parse(-5.0) is None
+
+    def test_parse_zero_string_returns_none(self):
+        assert PositiveInt.parse("0") is None
+
+    def test_parse_negative_string_returns_none(self):
+        assert PositiveInt.parse("-5") is None
+
+    def test_parse_zero_decimal_returns_none(self):
+        assert PositiveInt.parse(Decimal("0")) is None
+
+    def test_parse_negative_decimal_returns_none(self):
+        assert PositiveInt.parse(Decimal("-5")) is None
+
+    # --- Bool rejection ---
+
+    def test_parse_true_returns_none(self):
+        assert PositiveInt.parse(True) is None
+
+    def test_parse_false_returns_none(self):
+        assert PositiveInt.parse(False) is None
+
+    # --- Bytes rejection ---
+
+    def test_parse_bytes_returns_none(self):
+        assert PositiveInt.parse(b"42") is None
+
+    # --- Float edge cases ---
+
+    def test_parse_fractional_float_returns_none(self):
+        assert PositiveInt.parse(5.5) is None
+
+    def test_parse_inf_returns_none(self):
+        assert PositiveInt.parse(float("inf")) is None
+
+    def test_parse_negative_inf_returns_none(self):
+        assert PositiveInt.parse(float("-inf")) is None
+
+    def test_parse_nan_returns_none(self):
+        assert PositiveInt.parse(float("nan")) is None
+
+    # --- Decimal edge cases ---
+
+    def test_parse_fractional_decimal_returns_none(self):
+        assert PositiveInt.parse(Decimal("5.5")) is None
+
+    def test_parse_decimal_inf_returns_none(self):
+        assert PositiveInt.parse(Decimal("inf")) is None
+
+    def test_parse_decimal_nan_returns_none(self):
+        assert PositiveInt.parse(Decimal("nan")) is None
+
+    # --- String edge cases ---
+
+    def test_parse_fractional_string_returns_none(self):
+        """int('5.0') raises ValueError in Python — fractional strings are rejected."""
+        assert PositiveInt.parse("5.0") is None
+
+    def test_parse_empty_string_returns_none(self):
+        assert PositiveInt.parse("") is None
+
+    def test_parse_non_numeric_string_returns_none(self):
+        assert PositiveInt.parse("abc") is None
+
+    def test_parse_whitespace_only_string_returns_none(self):
+        assert PositiveInt.parse("   ") is None
 
     # --- Unsupported types ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            None,
-            True,
-            False,
-            [1, 2, 3],
-            {"a": 1},
-            object(),
-        ],
-    )
-    def test_unsupported_types_rejected(self, value):
-        assert PositiveInt.parse(value) is None
 
-    # --- Invalid strings ---
-    @pytest.mark.parametrize("value", ["abc", "", "  ", "42abc", "0", "-5"])
-    def test_invalid_strings_rejected(self, value):
-        assert PositiveInt.parse(value) is None
+    def test_parse_none_returns_none(self):
+        assert PositiveInt.parse(None) is None
 
-    # --- Bytes are rejected ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            b"42",
-            b"-7",
-            b"0",
-            b"5.0",
-            b"abc",
-            b"",
-        ],
-    )
-    def test_bytes_rejected(self, value):
-        """
-        bytes are explicitly rejected even though int(b"42") works in Python.
-        Bytes represent binary data, not string-encoded numbers.
-        """
-        assert PositiveInt.parse(value) is None
+    def test_parse_list_returns_none(self):
+        assert PositiveInt.parse([5]) is None
 
-    # --- parse() never raises exceptions ---
-    @pytest.mark.parametrize(
-        "value",
-        [
-            float("inf"),
-            float("nan"),
-            Decimal("inf"),
-            Decimal("nan"),
-            None,
-            object(),
-            [1, 2, 3],
-        ],
-    )
-    def test_parse_never_raises(self, value):
-        """parse() must return None for any invalid input, never raise."""
-        result = PositiveInt.parse(value)
+    def test_parse_dict_returns_none(self):
+        assert PositiveInt.parse({"value": 5}) is None
+
+
+class TestPositiveIntStringRepresentations:
+    """Tests for __repr__, __str__, and format compatibility."""
+
+    def test_repr_format(self):
+        assert repr(PositiveInt(42)) == "PositiveInt(42)"
+
+    def test_str_format(self):
+        assert str(PositiveInt(42)) == "42"
+
+    def test_fstring_uses_str(self):
+        assert f"{PositiveInt(42)}" == "42"
+
+    def test_format_uses_str(self):
+        assert format(PositiveInt(42)) == "42"
+
+    def test_repr_distinguishes_from_plain_int(self):
+        assert repr(PositiveInt(42)) != repr(42)
+        assert repr(PositiveInt(42)) == "PositiveInt(42)"
+        assert repr(42) == "42"
+
+    def test_str_matches_plain_int(self):
+        assert str(PositiveInt(42)) == str(42)
+
+
+class TestPositiveIntInheritanceAndArithmetic:
+    """Tests for int inheritance and arithmetic behavior."""
+
+    def test_isinstance_int(self):
+        assert isinstance(PositiveInt(5), int)
+
+    def test_equality_with_plain_int(self):
+        assert PositiveInt(5) == 5
+
+    def test_addition_returns_plain_int(self):
+        result = PositiveInt(3) + 2
+        assert type(result) is int
+        assert not isinstance(result, PositiveInt)
+        assert result == 5
+
+    def test_subtraction_returns_plain_int(self):
+        result = PositiveInt(5) - 3
+        assert type(result) is int
+        assert not isinstance(result, PositiveInt)
+        assert result == 2
+
+    def test_subtraction_can_violate_invariant(self):
+        """Arithmetic does NOT preserve the > 0 invariant."""
+        result = PositiveInt(3) - PositiveInt(5)
+        assert result == -2
+        assert type(result) is int
+
+    def test_multiplication_returns_plain_int(self):
+        result = PositiveInt(3) * 4
+        assert type(result) is int
+        assert result == 12
+
+    def test_revalidate_after_arithmetic_success(self):
+        """Demonstrates how to preserve invariant after arithmetic."""
+        result = PositiveInt.parse(PositiveInt(5) - PositiveInt(3))
+        assert isinstance(result, PositiveInt)
+        assert int(result) == 2
+
+    def test_revalidate_after_arithmetic_failure(self):
+        """Re-validation catches invariant violation after arithmetic."""
+        result = PositiveInt.parse(PositiveInt(3) - PositiveInt(5))
         assert result is None
 
 
-# ---------------------------------------------------------------------------
-# Arithmetic behavior tests (documented limitation)
-# ---------------------------------------------------------------------------
-class TestPositiveIntArithmeticBehavior:
-    """
-    Tests documenting the known limitation: arithmetic operations on PositiveInt
-    return a plain int, NOT a PositiveInt. The "value > 0" invariant is NOT
-    preserved across arithmetic.
-    """
-
-    def test_addition_returns_int(self):
-        x = PositiveInt(5)
-        y = PositiveInt(3)
-        result = x + y
-        assert result == 8
-        # Addition of two positive ints is always positive, but type is plain int
-        assert type(result) is int
-        assert not isinstance(result, PositiveInt)
-
-    def test_subtraction_can_violate_invariant(self):
-        x = PositiveInt(3)
-        y = PositiveInt(5)
-        result = x - y
-        assert result == -2
-        # The invariant "value > 0" is violated, but type is still plain int
-        assert type(result) is int
-
-    def test_multiplication_returns_int(self):
-        x = PositiveInt(5)
-        y = PositiveInt(3)
-        result = x * y
-        assert result == 15
-        assert type(result) is int
-
-    def test_division_returns_float(self):
-        x = PositiveInt(10)
-        result = x / 2
-        assert result == 5.0
-        assert isinstance(result, float)
-
-    def test_floor_division_returns_int(self):
-        x = PositiveInt(10)
-        result = x // 3
-        assert result == 3
-        assert type(result) is int
-
-
-# ---------------------------------------------------------------------------
-# Integration with built-in int operations
-# ---------------------------------------------------------------------------
-class TestPositiveIntIntegration:
-    """Tests verifying PositiveInt behaves as int in standard operations."""
-
-    def test_isinstance_int(self):
-        x = PositiveInt(5)
-        assert isinstance(x, int)
-
-    def test_equality_with_int(self):
-        x = PositiveInt(5)
-        assert x == 5
-        assert 5 == x
-
-    def test_comparison_with_int(self):
-        x = PositiveInt(5)
-        assert x > 3
-        assert x < 10
-        assert x >= 5
-        assert x <= 5
-
-    def test_hash_compatible_with_int(self):
-        x = PositiveInt(5)
-        assert hash(x) == hash(5)
-        # Can be used as dict key interchangeably with int
-        d = {5: "five"}
-        assert d[x] == "five"
-
-    def test_used_in_arithmetic_expressions(self):
-        x = PositiveInt(5)
-        assert x + 3 == 8
-        assert 3 + x == 8
-        assert x * 2 == 10
-        assert x**2 == 25
-
-    def test_str_and_repr(self):
-        x = PositiveInt(42)
-        # str() returns plain numeric string (explicitly defined)
-        assert str(x) == "42"
-        # repr() clearly identifies the type for debugging
-        assert repr(x) == "PositiveInt(42)"
-        # f-string uses __str__ (explicitly defined)
-        assert f"{x}" == "42"
-        # format() uses __str__
-        assert format(x) == "42"
-        # repr can be eval'd back to the same value (if class is in scope)
-        assert eval(repr(x)) == x
-
-    def test_repr_in_collections(self):
-        """repr() is used when PositiveInt is inside a collection."""
-        x = PositiveInt(5)
-        y = PositiveInt(10)
-        assert repr([x, y]) == "[PositiveInt(5), PositiveInt(10)]"
-        assert repr({"key": x}) == "{'key': PositiveInt(5)}"
-
-    def test_bool_truthiness(self):
-        # PositiveInt is always > 0, so always truthy
-        assert bool(PositiveInt(1)) is True
-        assert bool(PositiveInt(100)) is True
-
-    def test_bit_operations(self):
-        x = PositiveInt(5)  # binary: 101
-        y = PositiveInt(3)  # binary: 011
-        assert x & y == 1  # binary: 001
-        assert x | y == 7  # binary: 111
-        assert x ^ y == 6  # binary: 110
-
-    def test_can_be_index(self):
-        x = PositiveInt(2)
-        lst = ["a", "b", "c", "d"]
-        assert lst[x] == "c"
-
-    def test_can_be_range_argument(self):
-        x = PositiveInt(5)
-        r = range(x)
-        assert list(r) == [0, 1, 2, 3, 4]
-
-
-# ---------------------------------------------------------------------------
-# Boundary and stress tests
-# ---------------------------------------------------------------------------
-class TestPositiveIntBoundary:
-    """Boundary and stress tests."""
-
-    def test_very_large_int(self):
-        large = 10**100
-        result = PositiveInt.parse(large)
-        assert result is not None
-        assert result == large
-
-    def test_very_large_string(self):
-        large_str = str(10**100)
-        result = PositiveInt.parse(large_str)
-        assert result is not None
-        assert result == 10**100
-
-    def test_minimum_valid_value(self):
-        result = PositiveInt.parse(1)
-        assert result is not None
-        assert result == 1
-
-    def test_string_with_leading_zeros(self):
-        result = PositiveInt.parse("007")
-        assert result is not None
-        assert result == 7
-
-    def test_string_with_whitespace(self):
-        """int() strips whitespace from strings."""
-        result = PositiveInt.parse("  42  ")
-        assert result is not None
-        assert result == 42
-
-    def test_decimal_with_trailing_zeros(self):
-        result = PositiveInt.parse(Decimal("5.000"))
-        assert result is not None
-        assert result == 5

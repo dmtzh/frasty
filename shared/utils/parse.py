@@ -95,65 +95,6 @@ def parse_dict_field[T](
         case parsed_value:
             return Result.Ok(parsed_value)
 
-def parse_int(value) -> int | None:
-    """
-    Safely convert a value to a plain Python int.
-
-    ...
-
-    Returns None for any input that cannot be unambiguously converted to an int,
-    including:
-      - bool values (Python's bool is a subclass of int, so True/False would
-        otherwise be accepted as 1/0)
-      - bytes values (binary data, not string representations of numbers)
-      - floats with a fractional part
-      - strings with a fractional part
-      - float('inf'), float('-inf'), float('nan')
-      - Decimal('inf'), Decimal('-inf'), Decimal('nan')
-      - extremely large Decimal values that overflow int conversion
-      - None, lists, dicts, and other unsupported types
-
-    OverflowError and InvalidOperation raised internally by int() / Decimal
-    conversion are caught and result in None, so the caller never sees an
-    exception from this function.
-    """
-    # 1. Reject booleans explicitly: Python's bool is a subclass of int,
-    # so int(True) == 1 and int(False) == 0. We reject them to prevent
-    # accidental acceptance of boolean values as integers.
-    if isinstance(value, bool):
-        return None
-
-    # 2. Reject bytes explicitly: int(b"42") works in Python, but bytes represent
-    # binary data, not string-encoded numbers. In a JSON-based pipeline, bytes
-    # should never appear as numeric input.
-    if isinstance(value, bytes):
-        return None
-
-    # 3. Strict float handling: reject fractional parts and special values (inf/nan).
-    if isinstance(value, float):
-        if not value.is_integer():
-            return None
-
-    # 4. Strict Decimal handling: reject fractional parts and special values.
-    if isinstance(value, Decimal):
-        if value.is_nan() or value.is_infinite():
-            return None
-        try:
-            if value != value.to_integral_value():
-                return None
-        except InvalidOperation:
-            return None
-
-    try:
-        return int(value)
-    except (ValueError, TypeError, OverflowError, InvalidOperation):
-        # ValueError   -> int("abc"), int("5.0"), int(float('nan'))
-        # TypeError    -> int(None), int([]), int({})
-        # OverflowError-> int(float('inf')), int(Decimal('inf')),
-        #                 int(Decimal('1e1000000'))
-        # InvalidOperation -> Decimal edge cases during conversion
-        return None
-
 class PositiveInt(int):
     """
     A strictly positive integer type (value > 0).
@@ -204,20 +145,25 @@ class PositiveInt(int):
     ---------------------------------
     * ``bool`` values are explicitly rejected (Python's ``bool`` is a subclass
       of ``int``, so ``True`` would otherwise be accepted as ``1``).
+
     * ``bytes`` values are explicitly rejected. Although Python's ``int(b"42")``
       returns 42, bytes represent binary data, not string-encoded numbers.
       In a JSON-based pipeline, bytes should never appear as numeric input.
+
     * ``float('inf')``, ``float('-inf')``, ``float('nan')`` return ``None``.
+
     * ``Decimal('inf')``, ``Decimal('nan')``, extremely large ``Decimal``
       values return ``None``.
+
     * Fractional floats (``5.5``) and fractional string literals (``"5.0"``)
       return ``None``. Whole floats (``5.0``) are accepted and converted to ``5``.
+
     * Negative values and zero return ``None``.
 
     Examples
     --------
     >>> PositiveInt(5)
-    5
+    PositiveInt(5)
     >>> PositiveInt(0)
     Traceback (most recent call last):
         ...
@@ -230,13 +176,16 @@ class PositiveInt(int):
     Traceback (most recent call last):
         ...
     ValueError: Expected a positive integer, got True
-
+    >>> PositiveInt("5")
+    Traceback (most recent call last):
+        ...
+    TypeError: Expected an int, got str
     >>> PositiveInt.parse(5)
-    5
+    PositiveInt(5)
     >>> PositiveInt.parse("42")
-    42
+    PositiveInt(42)
     >>> PositiveInt.parse(5.0)
-    5
+    PositiveInt(5)
     >>> PositiveInt.parse(5.5) is None
     True
     >>> PositiveInt.parse("5.0") is None
@@ -255,6 +204,11 @@ class PositiveInt(int):
     True
     >>> PositiveInt.parse("invalid") is None
     True
+    >>> from decimal import Decimal
+    >>> PositiveInt.parse(Decimal("42"))
+    PositiveInt(42)
+    >>> PositiveInt.parse(Decimal("5.5")) is None
+    True
     """
 
     def __new__(cls, value: int) -> PositiveInt:
@@ -263,34 +217,28 @@ class PositiveInt(int):
         #    isinstance(True, int) returns True.
         if isinstance(value, bool):
             raise ValueError(f"Expected a positive integer, got {value!r}")
-        
+
         # 2. Reject non-int types (str, float, None, bytes, Decimal, etc.).
         #    The constructor is strict: it accepts ONLY int values.
         #    For safe conversion from other types, use PositiveInt.parse().
         if not isinstance(value, int):
             raise TypeError(f"Expected an int, got {type(value).__name__}")
-        
+
         # 3. Reject non-positive values.
         if value <= 0:
             raise ValueError(f"Expected a positive integer, got {value!r}")
-        
+
         return super().__new__(cls, value)
 
     def __repr__(self) -> str:
         """
         Return a string representation that clearly identifies this as a PositiveInt.
 
-        This is primarily useful for debugging and logging, where it's important
-        to distinguish a validated PositiveInt from a plain int.
-
         Example:
             >>> repr(PositiveInt(42))
             'PositiveInt(42)'
-            >>> str(PositiveInt(42))  # str() is unchanged, returns '42'
+            >>> str(PositiveInt(42))
             '42'
-
-        Note: This intentionally differs from int.__repr__, which would return '42'.
-        If compatibility with code that expects repr(int) is required, remove this method.
         """
         return f"PositiveInt({int(self)})"
 
@@ -301,8 +249,6 @@ class PositiveInt(int):
         This is necessary because overriding __repr__ in a subclass of int
         can cause __str__ and __format__ (used by f-strings) to fall back
         to the overridden __repr__ in some Python implementations.
-        By explicitly defining __str__, we ensure that str(), f-strings,
-        and format() return the plain numeric value.
 
         Example:
             >>> str(PositiveInt(42))
@@ -322,9 +268,15 @@ class PositiveInt(int):
         Returns a PositiveInt instance on success, or None on any failure.
         This method never raises exceptions.
 
+        All parsing and validation logic is self-contained within this method.
+        No external helper function (e.g. parse_int) is used, because:
+        - There are no consumers outside PositiveInt (parse_int was removed)
+        - PositiveFloat follows the same self-contained pattern
+        - Single point of truth eliminates risk of divergence
+
         See the class docstring for a full list of handled edge cases.
         """
-        # 1. Reject booleans (Python's bool is a subclass of int)
+        # 1. Reject booleans explicitly (bool is a subclass of int in Python).
         if isinstance(value, bool):
             return None
 
@@ -334,10 +286,16 @@ class PositiveInt(int):
             return None
 
         # 3. Handle floats: reject fractional parts and special values (inf/nan).
+        #    Whole floats (5.0) are accepted and converted to int.
         if isinstance(value, float):
+            if math.isinf(value) or math.isnan(value):
+                return None
             if not value.is_integer():
                 return None
-            value = int(value)
+            int_value = int(value)
+            if int_value <= 0:
+                return None
+            return cls(int_value)
 
         # 4. Handle Decimal: reject fractional parts and special values.
         if isinstance(value, Decimal):
@@ -349,21 +307,31 @@ class PositiveInt(int):
             except InvalidOperation:
                 return None
             try:
-                value = int(value)
+                int_value = int(value)
             except (OverflowError, InvalidOperation):
                 return None
-
-        # 5. Attempt integer conversion (handles str, other numeric types, etc.)
-        opt_parsed_int = parse_int(value)
-
-        # 6. Enforce positivity
-        match opt_parsed_int:
-            case None:
+            if int_value <= 0:
                 return None
-            case positive_int if positive_int > 0:
-                return cls(positive_int)
-            case _:
+            return cls(int_value)
+
+        # 5. Handle int: reject non-positive.
+        if isinstance(value, int):
+            if value <= 0:
                 return None
+            return cls(value)
+
+        # 6. Handle str: attempt conversion, reject fractional and non-positive.
+        if isinstance(value, str):
+            try:
+                int_value = int(value)
+            except ValueError:
+                return None
+            if int_value <= 0:
+                return None
+            return cls(int_value)
+
+        # 7. All other types (None, list, dict, etc.) are rejected.
+        return None
 
 def parse_value[T, R](value: T, value_name: str, parser: Callable[[T], R | None]) -> Result[R, str]:
     opt_parsed_value = parser(value)
