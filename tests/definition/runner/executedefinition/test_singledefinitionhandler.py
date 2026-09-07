@@ -12,12 +12,13 @@ from shared.definition import ActionDefinition, Definition
 from shared.executedefinitionaction import ExecuteDefinitionInput
 from shared.pipeline.actionhandler import ActionData, ActionInput
 from shared.runningdefinition import RunningDefinitionState
+from shared.runningdefinitionsstore import RunningDefinitionsStore
 
-from config import running_definitions_storage
+from tests.config.config import STORAGE_ROOT_FOLDER
 
 @pytest.fixture
 def convert_to_storage_action():
-    return running_definitions_storage.with_storage
+    return RunningDefinitionsStore(STORAGE_ROOT_FOLDER).with_storage
 
 @pytest.fixture
 def run_first_step_action():
