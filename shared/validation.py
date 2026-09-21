@@ -201,3 +201,37 @@ class InvalidId:
         - Safe to share across validation contexts.
     """
     pass
+
+def format_value_errors(errors: tuple[ValueError, ...]) -> str:
+    """
+    Format a tuple of typed value errors into a human-readable string.
+
+    Converts type-safe ValueError instances into the standard string representation
+    expected by the pipeline core (CompletedWith.Error).
+
+    Canonical formats:
+      - ValueMissing(name)   → "'{name}' is missing"
+      - ValueInvalid(name, value) → "'{name}' value {value!r} is invalid"
+
+    Args:
+        errors: Tuple of ValueError instances to format.
+
+    Returns:
+        Comma-separated string of formatted error messages.
+
+    Examples:
+        >>> format_value_errors((ValueMissing("field_name"),))
+        "'field_name' is missing"
+        >>> format_value_errors((ValueInvalid("threshold", -1), ValueMissing("algorithm")))
+        "'threshold' value -1 is invalid, 'algorithm' is missing"
+        >>> format_value_errors(())
+        ''
+    """
+    def _format_single_value_error(err: ValueError) -> str:
+        match err:
+            case ValueMissing(name=name):
+                return f"'{name}' is missing"
+            case ValueInvalid(name=name, value=value):
+                return f"'{name}' value {value!r} is invalid"
+
+    return ", ".join(_format_single_value_error(e) for e in errors)
