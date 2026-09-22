@@ -515,7 +515,7 @@ class NonEmptyStr(str):
         return str.__str__(self)
 
     @classmethod
-    def parse(cls, value: object, strip: bool = True) -> NonEmptyStr | None:
+    def parse(cls, value: object, strip: bool = True):
         """
         Safely attempt to convert a value to a NonEmptyStr.
 
