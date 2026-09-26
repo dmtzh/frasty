@@ -3,6 +3,7 @@ from collections.abc import Callable
 from decimal import Decimal, InvalidOperation
 import math
 from typing import Any
+from warnings import deprecated
 
 from expression import Result
 
@@ -47,6 +48,7 @@ def parse_bool_str(s: str) -> bool | None:
     }
     return bool_map.get(strip_and_lowercase(s), None)
 
+@deprecated("Use parse_dict_field instead.")
 def parse_from_dict[T](d: dict, key: str, parser: Callable[[Any], T | None]) -> Result[T, str]:
     if key not in d:
         return Result.Error(f"'{key}' key is missing")
