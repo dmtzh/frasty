@@ -90,12 +90,7 @@ def parse_dict_field[T](
     if key not in d:
         return Result.Error(ValueMissing(key))
     raw_value = d[key]
-    opt_parsed_value = parser(raw_value)
-    match opt_parsed_value:
-        case None:
-            return Result.Error(ValueInvalid(key, raw_value))
-        case parsed_value:
-            return Result.Ok(parsed_value)
+    return parse_val(raw_value, key, parser)
 
 class PositiveInt(int):
     """
@@ -335,11 +330,20 @@ class PositiveInt(int):
         # 7. All other types (None, list, dict, etc.) are rejected.
         return None
 
+@deprecated("Use parse_val instead.")
 def parse_value[T, R](value: T, value_name: str, parser: Callable[[T], R | None]) -> Result[R, str]:
     opt_parsed_value = parser(value)
     match opt_parsed_value:
         case None:
             return Result.Error(f"invalid '{value_name}' value {value}")
+        case parsed_value:
+            return Result.Ok(parsed_value)
+
+def parse_val[T, R](value: T, value_name: str, parser: Callable[[T], R | None]) -> Result[R, ValueErr]:
+    opt_parsed_value = parser(value)
+    match opt_parsed_value:
+        case None:
+            return Result.Error(ValueInvalid(value_name, value))
         case parsed_value:
             return Result.Ok(parsed_value)
 
