@@ -1,5 +1,6 @@
 from __future__ import annotations
 from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 import math
 from typing import Any
@@ -91,6 +92,71 @@ def parse_dict_field[T](
         return Result.Error(ValueMissing(key))
     raw_value = d[key]
     return parse_val(raw_value, key, parser)
+
+
+@dataclass(frozen=True)
+class DefaultValue:
+    """
+    Sentinel wrapper for the optional ``default_value`` configuration field.
+
+    Distinguishes "default value is not specified" (``None``) from "default
+    value is explicitly set, possibly to ``None``" (``DefaultValue(None)``).
+    It is intended for use in configuration dataclasses
+    (e.g. ``GetFromJsonQuery.default_value``, ``ApplyRegexConfig.default_value``,
+    ``GetContentFromHtmlConfigSelector``) where a fallback value is substituted
+    when a selector/query produces no matches.
+
+    Notes
+    -----
+    * The ``value`` is NOT cloned when substituted into a DataDto — mutable
+      values (``dict``, ``list``) are shared by reference across all DataDto
+      elements.
+    * Implemented as a frozen dataclass (not a ``NamedTuple``) on purpose: a
+      ``NamedTuple`` would compare equal to a plain ``tuple``, which can mask
+      bugs. ``DefaultValue(5) == (5,)`` is ``False``.
+    * Unrelated to the ``Result.default_value()`` / ``Option.default_value()``
+      methods from the ``expression`` library (those unwrap a Result/Option);
+      this class *wraps* an explicitly specified fallback value.
+
+    Examples
+    --------
+    >>> DefaultValue(5)
+    DefaultValue(value=5)
+    >>> DefaultValue(None)
+    DefaultValue(value=None)
+    """
+    value: Any
+
+
+def parse_optional_default_value(d: dict, key: str = "default_value") -> DefaultValue | None:
+    """
+    Read an optional ``default_value`` field from a configuration dict.
+
+    Returns ``None`` when the key is absent ("default value is not specified")
+    and ``DefaultValue(value)`` when the key is present — even when the
+    value itself is ``None`` ("default value is explicitly set to None").
+    This preserves the sentinel semantics of ``DefaultValue``.
+
+    Args:
+        d: Source dictionary.
+        key: Name of the optional field. Defaults to ``"default_value"``.
+
+    Returns:
+        ``None`` if the key is absent, otherwise ``DefaultValue(d[key])``.
+
+    Examples
+    --------
+    >>> parse_optional_default_value({}) is None
+    True
+    >>> parse_optional_default_value({"default_value": "n/a"})
+    DefaultValue(value='n/a')
+    >>> parse_optional_default_value({"default_value": None})
+    DefaultValue(value=None)
+    """
+    if key not in d:
+        return None
+    return DefaultValue(d[key])
+
 
 class PositiveInt(int):
     """
