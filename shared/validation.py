@@ -135,8 +135,69 @@ class ValueInvalid:
         return ValueInvalid(name=f"{prefix}.{self.name}", value=self.value)
 
 
+@dataclass(frozen=True)
+class ValueDuplicate:
+    """
+    Validation error indicating that a field value is a duplicate within
+    the dataset or collection being validated.
+
+    The `name` attribute uses dotted path notation (e.g., "candle[0]",
+    "input_data[3].id") to represent hierarchical field paths from
+    the validation root to the specific duplicated field.
+
+    The `value` attribute preserves the original duplicate value for
+    debugging and error reporting.
+
+    Use `with_prefix(prefix)` to prepend a prefix to the field name, joining
+    with a dot separator. The prefix typically represents a parent context
+    in the validation hierarchy.
+
+    Immutability:
+    - Instances are frozen (immutable). `with_prefix` returns a new instance.
+    - Safe to share across validation contexts.
+
+    Examples:
+        >>> ValueDuplicate("candle[0]", 1784612700).with_prefix("input_data[3]")
+        ValueDuplicate(name='input_data[3].candle[0]', value=1784612700)
+    """
+
+    name: str
+    value: Any
+
+    def with_prefix(self, prefix: str) -> 'ValueDuplicate':
+        """
+        Prepend a prefix to this error's field name, joined by a dot.
+
+        The resulting name follows dotted path notation: "{prefix}.{self.name}".
+        The dot separator is fixed and not configurable — this is a standard
+        convention for hierarchical names in Python (cf. logging, JMESPath,
+        JSONPath, Python imports).
+
+        The `value` attribute is preserved unchanged in the new instance.
+
+        Args:
+            prefix: The string to prepend to the field name. This becomes
+                the parent portion of the resulting dotted path.
+
+        Returns:
+            A new ValueDuplicate instance with name formatted as
+            "{prefix}.{self.name}" and the same `value` as the original.
+
+        Examples:
+            >>> ValueDuplicate("candle[0]", 1784612700).with_prefix("input_data[3]")
+            ValueDuplicate(name='input_data[3].candle[0]', value=1784612700)
+
+        Notes:
+            - The original instance is not modified (frozen dataclass).
+            - No validation is performed on `prefix`; it is used as-is.
+            - If `prefix` is empty, the result will be ".{self.name}" — this
+              is the caller's responsibility to avoid.
+        """
+        return ValueDuplicate(name=f"{prefix}.{self.name}", value=self.value)
+
+
 # Type alias for the union of validation errors.
-type ValueError = ValueInvalid | ValueMissing
+type ValueError = ValueInvalid | ValueMissing | ValueDuplicate
 
 
 def with_prefix(prefix: str, errs: tuple[ValueError, ...]) -> tuple[ValueError, ...]:
@@ -210,8 +271,9 @@ def format_value_errors(errors: tuple[ValueError, ...]) -> str:
     expected by the pipeline core (CompletedWith.Error).
 
     Canonical formats:
-      - ValueMissing(name)   → "'{name}' is missing"
-      - ValueInvalid(name, value) → "'{name}' value {value!r} is invalid"
+    - ValueMissing(name) → "'{name}' is missing"
+    - ValueInvalid(name, value) → "'{name}' value {value!r} is invalid"
+    - ValueDuplicate(name, value) → "'{name}' value {value!r} is a duplicate"
 
     Args:
         errors: Tuple of ValueError instances to format.
@@ -220,18 +282,23 @@ def format_value_errors(errors: tuple[ValueError, ...]) -> str:
         Comma-separated string of formatted error messages.
 
     Examples:
-        >>> format_value_errors((ValueMissing("field_name"),))
-        "'field_name' is missing"
-        >>> format_value_errors((ValueInvalid("threshold", -1), ValueMissing("algorithm")))
-        "'threshold' value -1 is invalid, 'algorithm' is missing"
-        >>> format_value_errors(())
-        ''
+        >>> format_value_errors((ValueDuplicate("candle[0]", 1784612700),))
+        "'candle[0]' value 1784612700 is a duplicate"
+
+        >>> format_value_errors((
+        ...     ValueInvalid("threshold", -1),
+        ...     ValueDuplicate("candle[0]", 1784612700),
+        ... ))
+        "'threshold' value -1 is invalid, 'candle[0]' value 1784612700 is a duplicate"
     """
+
     def _format_single_value_error(err: ValueError) -> str:
         match err:
             case ValueMissing(name=name):
                 return f"'{name}' is missing"
             case ValueInvalid(name=name, value=value):
                 return f"'{name}' value {value!r} is invalid"
+            case ValueDuplicate(name=name, value=value):
+                return f"'{name}' value {value!r} is a duplicate"
 
     return ", ".join(_format_single_value_error(e) for e in errors)
