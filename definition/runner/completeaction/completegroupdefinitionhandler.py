@@ -1,6 +1,8 @@
+import asyncio
 from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, Concatenate, NamedTuple
+import weakref
 
 from expression import Result
 
@@ -63,6 +65,32 @@ class _EventHandlerError:
     event: GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted
     error: Any
 
+class _KeyedLock:
+    """Manages dynamic asyncio locks based on a GroupIdValue key."""
+    def __init__(self):
+        # WeakValueDictionary automatically removes keys when locks are no longer in use
+        self._locks = weakref.WeakValueDictionary()
+        self._master_lock = None
+
+    async def get_lock(self, key: GroupIdValue) -> asyncio.Lock:
+        if self._master_lock is None:
+            self._master_lock = asyncio.Lock()
+            
+        async with self._master_lock:
+            # 1. Try to fetch the lock safely using .get() to avoid throwing a KeyError
+            lock = self._locks.get(key)
+            
+            # 2. If it doesn't exist, create it and store a strong local reference
+            if lock is None:
+                lock = asyncio.Lock()
+                self._locks[key] = lock
+                
+            # 3. Returning 'lock' (the strong reference) ensures Python 
+            # won't garbage-collect it until the calling function captures it.
+            return lock
+
+_lock_manager = _KeyedLock()
+
 def _complete_group_definition_workflow(
     convert_to_storage_action: ToStorageActionConverter,
     event_handler: Callable[[GroupOfRunningDefinitionsState.Events.AllDefinitionsCompleted], Coroutine[Any, Any, Result]],
@@ -86,7 +114,12 @@ def _complete_group_definition_workflow(
                     .map_error(lambda err: _EventHandlerError(all_defs_completed, err))
             case _:
                 return Result[GroupOfRunningDefinitionsState.Events.Event | None, _EventHandlerError].Ok(opt_evt)
-    
-    opt_evt_res = AsyncResult(apply_complete_definition(cmd.run_id, cmd.group_id))
+
+    async def apply_complete_definition_wrapper(run_id: RunIdValue, group_id: GroupIdValue):
+        lock = await _lock_manager.get_lock(group_id)
+        async with lock:
+            res = await apply_complete_definition(run_id, group_id)
+        return res
+    opt_evt_res = AsyncResult(apply_complete_definition_wrapper(cmd.run_id, cmd.group_id))
     res = opt_evt_res.bind(handle_all_definitions_completed)
     return res.to_coroutine()
