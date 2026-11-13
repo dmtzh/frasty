@@ -34,8 +34,8 @@ class RabbitMQClient:
     async def send_command(self, command: str, message: Message) -> Result[None, Error.CommandRecipientNotFound | Error.SendCommandTimeout]:
         publish_task = asyncio.create_task(self._broker.publish_to_default_exchange(command, message))
         try:
-            five_seconds = 5
-            publish_res = await asyncio.wait_for(publish_task, timeout=five_seconds)
+            thirty_seconds = 30
+            publish_res = await asyncio.wait_for(publish_task, timeout=thirty_seconds)
             match publish_res:
                 case Result(tag=ResultTag.OK, ok=_):
                     return Result.Ok(None)
