@@ -235,9 +235,10 @@ async def test_e2e_execute_and_complete_single_definition_with_data_result_insid
     definition_completed_evt = next((e for e in running_state.get_events() if type(e) is RunningDefinitionState.Events.DefinitionCompleted), None)
     assert definition_completed_evt is not None
     assert type(definition_completed_evt.result) is CompletedWith.Data
-    assert type(definition_completed_evt.result.data) is dict
-    assert "definition_id" in definition_completed_evt.result.data
-    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data)
+    assert type(definition_completed_evt.result.data) is list
+    assert len(definition_completed_evt.result.data) == 1
+    assert "definition_id" in definition_completed_evt.result.data[0]
+    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data[0])
     assert data_to_completed_result_res.is_ok()
     assert type(data_to_completed_result_res.ok) is CompletedWith.Data
 
@@ -279,9 +280,10 @@ async def test_e2e_execute_and_complete_single_definition_with_no_data_result_in
     definition_completed_evt = next((e for e in running_state.get_events() if type(e) is RunningDefinitionState.Events.DefinitionCompleted), None)
     assert definition_completed_evt is not None
     assert type(definition_completed_evt.result) is CompletedWith.Data
-    assert type(definition_completed_evt.result.data) is dict
-    assert "definition_id" in definition_completed_evt.result.data
-    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data)
+    assert type(definition_completed_evt.result.data) is list
+    assert len(definition_completed_evt.result.data) == 1
+    assert "definition_id" in definition_completed_evt.result.data[0]
+    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data[0])
     assert data_to_completed_result_res.is_ok()
     assert type(data_to_completed_result_res.ok) is CompletedWith.NoData
 
@@ -323,8 +325,9 @@ async def test_e2e_execute_and_complete_single_definition_with_error_result_insi
     definition_completed_evt = next((e for e in running_state.get_events() if type(e) is RunningDefinitionState.Events.DefinitionCompleted), None)
     assert definition_completed_evt is not None
     assert type(definition_completed_evt.result) is CompletedWith.Data
-    assert type(definition_completed_evt.result.data) is dict
-    assert "definition_id" in definition_completed_evt.result.data
-    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data)
+    assert type(definition_completed_evt.result.data) is list
+    assert len(definition_completed_evt.result.data) == 1
+    assert "definition_id" in definition_completed_evt.result.data[0]
+    data_to_completed_result_res = CompletedResultAdapter.from_dict(definition_completed_evt.result.data[0])
     assert data_to_completed_result_res.is_ok()
     assert type(data_to_completed_result_res.ok) is CompletedWith.Error

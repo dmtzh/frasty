@@ -73,7 +73,8 @@ async def _event_handler(run_action: RunAsyncAction, data: ActionData[None, Comp
                             opt_definition_id = parent_action_with_def_id.metadata.get_definition_id()
                             definition_id_dict = {"definition_id": opt_definition_id.to_value_with_checksum()} if opt_definition_id is not None else {}
                             evt_result_dict = definition_id_dict | CompletedResultAdapter.to_dict(evt.result)
-                            return await parent_action_with_def_id.run_complete_definition(run_action, CompletedWith.Data(evt_result_dict))
+                            evt_result = [evt_result_dict]
+                            return await parent_action_with_def_id.run_complete_definition(run_action, CompletedWith.Data(evt_result))
                         case True:
                             return await parent_action_with_def_id.run_complete_definition(run_action, evt.result)
 
