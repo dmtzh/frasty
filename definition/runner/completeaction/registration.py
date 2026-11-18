@@ -3,6 +3,7 @@ import functools
 from expression import Result
 
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
+from shared.customtypes import DefinitionIdValue
 from shared.definitioncustomtypes import GroupIdValue
 from shared.groupofrunningdefinitions import GroupOfRunningDefinitionsState
 from shared.pipeline.actionhandler import COMPLETE_ACTION, ActionData, ActionInput, ActionHandlerFactory, AsyncActionHandler, DataDtoAdapter, RunAsyncAction
@@ -23,7 +24,7 @@ def register_complete_action_handler(run_action: RunAsyncAction, action_handler:
                 return None
             case definition_id, None:
                 # action completed, definition id is required for complete action
-                event_handler = functools.partial(_event_handler, run_action, data)
+                event_handler = functools.partial(_event_handler, run_action, data, definition_id)
                 cmd = CompleteActionCommand(data.run_id, definition_id, data.step_id, data.input)
                 complete_res = await handle_complete_definition_action(running_definitions_storage.with_storage, event_handler, cmd)
                 opt_complete_error = complete_res.swap().default_value(None)
@@ -53,7 +54,7 @@ def register_complete_action_handler(run_action: RunAsyncAction, action_handler:
         lambda data: CompletedResultAdapter.from_dict(data[0]) if data else Result.Error("input data is missing")
     )(handle_complete_action)
 
-async def _event_handler(run_action: RunAsyncAction, data: ActionData[None, CompleteInput], evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
+async def _event_handler(run_action: RunAsyncAction, data: ActionData[None, CompleteInput], completing_definition_id: DefinitionIdValue, evt: RunningDefinitionState.Events.StepRunning | RunningDefinitionState.Events.DefinitionCompleted):
     match evt:
         case RunningDefinitionState.Events.StepRunning():
             data_dict = DataDtoAdapter.to_input_data(evt.input_data) | (evt.step_definition.config or {})
@@ -70,8 +71,7 @@ async def _event_handler(run_action: RunAsyncAction, data: ActionData[None, Comp
                     is_group_definition = parent_action_with_def_id.metadata.get_id("group_id", GroupIdValue) is not None
                     match is_group_definition:
                         case False:
-                            opt_definition_id = parent_action_with_def_id.metadata.get_definition_id()
-                            definition_id_dict = {"definition_id": opt_definition_id.to_value_with_checksum()} if opt_definition_id is not None else {}
+                            definition_id_dict = {"definition_id": completing_definition_id.to_value_with_checksum()}
                             evt_result_dict = definition_id_dict | CompletedResultAdapter.to_dict(evt.result)
                             evt_result = [evt_result_dict]
                             return await parent_action_with_def_id.run_complete_definition(run_action, CompletedWith.Data(evt_result))
