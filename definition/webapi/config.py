@@ -11,6 +11,7 @@ from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter
 from shared.definition import Definition, DefinitionAdapter
+from shared.definitionsstore import DefinitionsStore
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, run_action_adapter
 from shared.utils.parse import parse_from_dict
 
@@ -48,6 +49,8 @@ def complete_manual_run_handler_input_validator(data: list[dict[str, Any]]):
     return CompletedResultAdapter.from_dict(data[0])
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
+
+definitions_storage = DefinitionsStore(STORAGE_ROOT_FOLDER)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

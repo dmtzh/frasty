@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from shared.completedresult import CompletedResult, CompletedResultAdapter, CompletedWith
 from shared.customtypes import DefinitionIdValue, Metadata, RunIdValue, StepIdValue
 from shared.definition import ActionDefinition, Definition, DefinitionAdapter, StepsMissing
-from shared.definitionsstore import definitions_storage
 from shared.executedefinitionaction import EXECUTE_DEFINITION_ACTION, ExecuteDefinitionInput, run_execute_definition_action
 from shared.infrastructure.storage.repository import NotFoundError, NotFoundException, StorageError
 from shared.pipeline.actionhandler import ActionData
@@ -21,7 +20,7 @@ from shared.utils.exceptiondecorators import async_catch_ex, async_ex_to_error_r
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
-from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, manual_run_handler, run_action, run_manual_run_action
+from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, definitions_storage, manual_run_handler, run_action, run_manual_run_action
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 

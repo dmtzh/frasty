@@ -12,15 +12,13 @@ from shared.infrastructure.storage.repository import AlreadyExistsException, Not
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 from shared.utils.exceptiondecorators import async_ex_to_error_result
 
-import config
-
-class DefinitionsStore[T]:
-    def __init__(self, items_sub_folder_name: str, to_list: Callable[[T], list[dict[str, Any]]], from_list: Callable[[list[dict[str, Any]]], Result[T, Any]]):
-        folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "DefinitionsStorage")
-        file_repo_with_ver = FileWithVersion[DefinitionIdValue, T, list[dict[str, Any]]](
-            items_sub_folder_name,
-            to_list,
-            from_list,
+class DefinitionsStore:
+    def __init__(self, root_folder: str):
+        folder_path = os.path.join(root_folder, "DefinitionsStorage")
+        file_repo_with_ver = FileWithVersion[DefinitionIdValue, Definition, list[dict[str, Any]]](
+            Definition.__name__,
+            DefinitionAdapter.to_list,
+            DefinitionAdapter.from_list,
             JsonSerializer[list[dict[str, Any]]](),
             "json",
             folder_path
@@ -28,8 +26,8 @@ class DefinitionsStore[T]:
         self._file_repo_with_ver = file_repo_with_ver
         self._item_action = ItemActionInAsyncRepositoryWithVersion(file_repo_with_ver)
     
-    def add(self, id: DefinitionIdValue, definition: T):
-        def add_func(opt_def: T | None):
+    def add(self, id: DefinitionIdValue, definition: Definition):
+        def add_func(opt_def: Definition | None):
             if opt_def is not None:
                 raise AlreadyExistsException(f"Definition {id} already exists")
             return None, definition
@@ -37,8 +35,8 @@ class DefinitionsStore[T]:
     
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
-    def update(self, id: DefinitionIdValue, definition: T):
-        def update_func(opt_def: T | None):
+    def update(self, id: DefinitionIdValue, definition: Definition):
+        def update_func(opt_def: Definition | None):
             if opt_def is None:
                 raise NotFoundException(f"Definition {id} not found")
             return None, definition
@@ -50,9 +48,3 @@ class DefinitionsStore[T]:
             return None
         ver, definition = opt_ver_with_definition
         return (definition, ver)
-
-definitions_storage = DefinitionsStore(
-    Definition.__name__,
-    DefinitionAdapter.to_list,
-    DefinitionAdapter.from_list
-)
