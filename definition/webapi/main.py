@@ -20,7 +20,7 @@ from shared.utils.exceptiondecorators import async_catch_ex, async_ex_to_error_r
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
-from config import COMPLETE_MANUAL_RUN_ACTION, ManualRunInput, app, complete_manual_run_handler, definitions_storage, manual_run_handler, run_action, run_manual_run_action
+from config import COMPLETE_MANUAL_RUN_ACTION, CompleteManualRunInput, ManualRunInput, app, complete_manual_run_handler, definitions_storage, manual_run_handler, run_action, run_manual_run_action
 from manualrunstate import ManualRunStateAdapter, ManualRunState
 from manualrunstore import manual_run_storage
 
@@ -216,7 +216,7 @@ async def handle_manual_run_action(data: ActionData[None, ManualRunInput]):
         .merge()
 
 @complete_manual_run_handler
-async def handle_complete_manual_run_action(data: ActionData[None, CompletedResult]):
+async def handle_complete_manual_run_action(data: ActionData[None, list[CompleteManualRunInput]]):
     @async_ex_to_error_result(StorageError.from_exception)
     @async_ex_to_error_result(NotFoundError.from_exception, NotFoundException)
     @manual_run_storage.with_storage
@@ -226,11 +226,11 @@ async def handle_complete_manual_run_action(data: ActionData[None, CompletedResu
         new_state = state.complete(result)
         return (result, new_state)
     
-    complete_manual_run_res = await apply_complete_manual_run(data.run_id, data.input)
+    complete_manual_run_res = await apply_complete_manual_run(data.run_id, data.input[0].result)
     if complete_manual_run_res.is_error():
         return CompletedWith.Error(str(complete_manual_run_res.error))
-    
-    result_dict = CompletedResultAdapter.to_dict(data.input)
-    return CompletedWith.Data(result_dict)
+
+    result_data = [input.data for input in data.input]
+    return CompletedWith.Data(result_data)
 
 # ------------------------------------------------------------------------------------------------------------

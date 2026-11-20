@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import os
 from typing import Any
 
-from expression import effect
+from expression import effect, Result
 from fastapi import FastAPI
 
 from infrastructure.rabbitmq import config
@@ -12,8 +12,10 @@ from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter
 from shared.definition import Definition, DefinitionAdapter
 from shared.definitionsstore import DefinitionsStore
-from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, run_action_adapter
+from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto, run_action_adapter
 from shared.utils.parse import parse_from_dict
+from shared.utils.result import traverse_accumulating_with_index
+from shared.validation import ValueMissing, format_value_errors
 
 run_action = config.run_action
 
@@ -39,14 +41,26 @@ def manual_run_handler(func: Callable[[ActionData[None, ManualRunInput]], Corout
         lambda dto_list: ManualRunInput.from_dto(dto_list[0])
     )(func)
 
+@dataclass(frozen=True)
+class CompleteManualRunInput:
+    result: CompletedResult
+    data: DataDto
 COMPLETE_MANUAL_RUN_ACTION = Action(ActionName("complete_manual_run"), ActionType.SERVICE)
-def complete_manual_run_handler(func: Callable[[ActionData[None, CompletedResult]], Coroutine[Any, Any, CompletedResult | None]]):
+def complete_manual_run_handler(func: Callable[[ActionData[None, list[CompleteManualRunInput]]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
         COMPLETE_MANUAL_RUN_ACTION,
         complete_manual_run_handler_input_validator
     )(func)
-def complete_manual_run_handler_input_validator(data: list[dict[str, Any]]):
-    return CompletedResultAdapter.from_dict(data[0])
+def complete_manual_run_handler_input_validator(dto_list: list[DataDto]) -> Result[list[CompleteManualRunInput], Any]:
+    if not dto_list:
+        return Result.Error(format_value_errors((ValueMissing("input_data"),)))
+
+    def validate_item(idx: int, dto: DataDto) -> Result[CompleteManualRunInput, str]:
+        return CompletedResultAdapter.from_dict(dto) \
+            .map(lambda res: CompleteManualRunInput(res, dto)) \
+            .map_error(lambda err: f"input_data[{idx}].{err}")
+    return traverse_accumulating_with_index(dto_list, validate_item) \
+        .map_error(", ".join)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
