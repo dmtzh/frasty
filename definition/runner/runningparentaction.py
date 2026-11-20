@@ -5,7 +5,7 @@ from expression import Result
 from shared.completedresult import CompletedResult
 from shared.customtypes import Metadata, RunIdValue, StepIdValue
 from shared.pipeline.actionhandler import CompleteActionData, RunAsyncAction
-from shared.utils.parse import parse_from_dict
+from shared.utils.parse import parse_dict_field
 
 @dataclass(frozen=True)
 class RunningParentAction:
@@ -33,7 +33,7 @@ class RunningParentAction:
     def parse(metadata: Metadata):
         opt_parent_run_id = metadata.get_id("parent_run_id", RunIdValue)
         opt_parent_step_id = metadata.get_id("parent_step_id", StepIdValue)
-        opt_parent_metadata = parse_from_dict(metadata, "parent_metadata", lambda pm: pm if isinstance(pm, dict) and pm else None).default_value(None)
+        opt_parent_metadata = parse_dict_field(metadata, "parent_metadata", lambda pm: pm if isinstance(pm, dict) and pm else None).default_value(None)
         
         if opt_parent_run_id is None or opt_parent_step_id is None or opt_parent_metadata is None:
             return None
