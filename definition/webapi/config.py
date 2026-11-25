@@ -10,12 +10,12 @@ from fastapi import FastAPI
 from infrastructure.rabbitmq import config
 from shared.action import Action, ActionName, ActionType
 from shared.completedresult import CompletedResult, CompletedResultAdapter
-from shared.definition import Definition, DefinitionAdapter
+from shared.definition import Definition, DefinitionAdapter, StepsMissing
 from shared.definitionsstore import DefinitionsStore
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto, run_action_adapter
-from shared.utils.parse import parse_from_dict
+from shared.utils.parse import parse_dict_field
 from shared.utils.result import traverse_accumulating_with_index
-from shared.validation import ValueMissing, format_value_errors
+from shared.validation import ValueError as ValueErr, ValueMissing, format_value_errors
 
 run_action = config.run_action
 
@@ -25,11 +25,11 @@ class ManualRunInput:
     definition: Definition
     def to_dto(self):
         return {"definition": DefinitionAdapter.to_list(self.definition)}
-    @effect.result['ManualRunInput', str]()
+    @effect.result['ManualRunInput', StepsMissing | list[ValueErr]]()
     @staticmethod
     def from_dto(dto: dict[str, Any]) -> Generator[Any, Any, 'ManualRunInput']:
-        list_definition = yield from parse_from_dict(dto, "definition", lambda lst: lst if isinstance(lst, list) else None)
-        definition = yield from DefinitionAdapter.from_list(list_definition).map_error(str)
+        list_definition = yield from parse_dict_field(dto, "definition", lambda lst: lst if isinstance(lst, list) else None).map_error(lambda err: [err])
+        definition = yield from DefinitionAdapter.from_list(list_definition)
         return ManualRunInput(definition)
 async def run_manual_run_action(data: ActionData[None, ManualRunInput]):
     run_action_dto = ActionData(data.run_id, data.step_id, data.config, data.input.to_dto(), data.metadata)
@@ -38,7 +38,7 @@ async def run_manual_run_action(data: ActionData[None, ManualRunInput]):
 def manual_run_handler(func: Callable[[ActionData[None, ManualRunInput]], Coroutine[Any, Any, CompletedResult | None]]):
     return ActionHandlerFactory(config.run_action, config.action_handler).create_without_config(
         MANUAL_RUN_ACTION,
-        lambda dto_list: ManualRunInput.from_dto(dto_list[0])
+        lambda dto_list: ManualRunInput.from_dto(dto_list[0]).map_error(lambda errs: str(errs) if isinstance(errs, StepsMissing) else format_value_errors(tuple(errs)))
     )(func)
 
 @dataclass(frozen=True)
