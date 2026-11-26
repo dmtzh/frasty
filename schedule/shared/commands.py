@@ -6,7 +6,7 @@ from typing import Any, Optional
 from expression import Result, effect
 
 from shared.customtypes import ScheduleIdValue, TaskIdValue
-from shared.utils.parse import parse_from_dict
+from shared.utils.parse import parse_dict_field
 from shared.utils.result import ResultTag
 from shared.utils.string import strip_and_lowercase
 from shared.validation import ValueError as ValueErr, ValueInvalid, ValueMissing
@@ -65,7 +65,7 @@ class CommandAdapter:
         def parse_id[T](id_name: str, id_parser: Callable[[str], T | None]) -> Result[T, list[ValueErr]]:
             if id_name not in command_dto:
                 return Result.Error([ValueMissing(id_name)])
-            return parse_from_dict(command_dto, id_name, id_parser).map_error(lambda _: [ValueInvalid(id_name)])
+            return parse_dict_field(command_dto, id_name, id_parser).map_error(lambda err: [err])
         task_id_res = parse_id("task_id", TaskIdValue.from_value_with_checksum)
         schedule_id_res = parse_id("schedule_id", ScheduleIdValue.from_value_with_checksum)
         match task_id_res, schedule_id_res:
@@ -80,7 +80,7 @@ class CommandAdapter:
         def parse_id[T](id_name: str, id_parser: Callable[[str], T | None]) -> Result[T, list[ValueErr]]:
             if id_name not in command_dto:
                 return Result.Error([ValueMissing(id_name)])
-            return parse_from_dict(command_dto, id_name, id_parser).map_error(lambda _: [ValueInvalid(id_name)])
+            return parse_dict_field(command_dto, id_name, id_parser).map_error(lambda err: [err])
         task_id_res = parse_id("task_id", TaskIdValue.from_value_with_checksum)
         schedule_id_res = parse_id("schedule_id", ScheduleIdValue.from_value_with_checksum)
         schedule_res = CronScheduleAdapter.from_dict(command_dto)
@@ -97,7 +97,7 @@ class CommandAdapter:
         def parse_command_type() -> Result[CommandDtoTypes, list[ValueErr]]:
             if "type" not in command_dto:
                 return Result.Error([ValueMissing("type")])
-            return parse_from_dict(command_dto, "type", CommandDtoTypes.parse).map_error(lambda _: [ValueInvalid("type")])
+            return parse_dict_field(command_dto, "type", CommandDtoTypes.parse).map_error(lambda err: [err])
         command_type = yield from parse_command_type()
         match command_type:
             case CommandDtoTypes.CLEAR:
