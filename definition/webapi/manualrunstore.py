@@ -7,19 +7,14 @@ from shared.customtypes import RunIdValue
 from shared.infrastructure.serialization.json import JsonSerializer
 from shared.infrastructure.storage.repositoryitemaction import ItemActionInAsyncRepositoryWithVersion
 
-import config
 from manualrunstate import ManualRunState, ManualRunStateAdapter
 
 P = ParamSpec("P")
 R = TypeVar("R")
 
 class ManualRunStore:
-    def __init__(self):
-        # This is a singleton
-        self.__class__.__new__ = lambda cls: self
-        self.__class__.__init__ = lambda self: None
-
-        folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "DefinitionsStorage")
+    def __init__(self, root_folder: str):
+        folder_path = os.path.join(root_folder, "DefinitionsStorage")
         file_repo_with_ver = FileWithVersion[RunIdValue, ManualRunState, dict[str, Any]](
             ManualRunState.__name__,
             ManualRunStateAdapter.to_dict,
@@ -46,5 +41,3 @@ class ManualRunStore:
                 return state
             case None:
                 return None
-
-manual_run_storage = ManualRunStore()

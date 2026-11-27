@@ -17,6 +17,8 @@ from shared.utils.parse import parse_dict_field
 from shared.utils.result import traverse_accumulating_with_index
 from shared.validation import ValueError as ValueErr, ValueMissing, format_value_errors
 
+from manualrunstore import ManualRunStore
+
 run_action = config.run_action
 
 MANUAL_RUN_ACTION = Action(ActionName("manual_run"), ActionType.SERVICE)
@@ -65,6 +67,7 @@ def complete_manual_run_handler_input_validator(dto_list: list[DataDto]) -> Resu
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
 
 definitions_storage = DefinitionsStore(STORAGE_ROOT_FOLDER)
+manual_run_storage = ManualRunStore(STORAGE_ROOT_FOLDER)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

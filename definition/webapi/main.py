@@ -20,9 +20,8 @@ from shared.utils.exceptiondecorators import async_catch_ex, async_ex_to_error_r
 from shared.utils.result import ResultTag
 from shared.validation import ValueInvalid, ValueMissing, ValueError as ValueErr
 
-from config import COMPLETE_MANUAL_RUN_ACTION, CompleteManualRunInput, ManualRunInput, app, complete_manual_run_handler, definitions_storage, manual_run_handler, run_action, run_manual_run_action
+from config import COMPLETE_MANUAL_RUN_ACTION, CompleteManualRunInput, ManualRunInput, app, complete_manual_run_handler, definitions_storage, manual_run_handler, manual_run_storage, run_action, run_manual_run_action
 from manualrunstate import ManualRunStateAdapter, ManualRunState
-from manualrunstore import manual_run_storage
 
 @app.get("/tickets")
 def tickets():
