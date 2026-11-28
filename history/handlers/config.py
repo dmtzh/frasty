@@ -12,6 +12,9 @@ from shared.customtypes import DefinitionIdValue, TaskIdValue
 from shared.pipeline.actionhandler import ActionData, ActionHandlerFactory, DataDto
 from shared.utils.parse import parse_from_dict
 
+from shared.taskresulthistory import LegacyTaskResultHistoryItemAdapter
+from shared.taskresultshistorystore import TaskResultsHistoryStore
+
 ADD_TASK_RESULT_TO_HISTORY_ACTION = Action(ActionName("add_task_result_to_history"), ActionType.SERVICE)
 @dataclass(frozen=True)
 class AddTaskResultToHistoryConfig:
@@ -33,5 +36,12 @@ def add_task_result_to_history_handler(func: Callable[[ActionData[AddTaskResultT
     )(func)
 
 STORAGE_ROOT_FOLDER = os.environ['STORAGE_ROOT_FOLDER']
+
+legacy_taskresultshistory_storage = TaskResultsHistoryStore(
+    STORAGE_ROOT_FOLDER,
+    "LegacyTaskResults",
+    LegacyTaskResultHistoryItemAdapter.to_dict,
+    LegacyTaskResultHistoryItemAdapter.from_dict
+)
 
 app = config.create_faststream_app()

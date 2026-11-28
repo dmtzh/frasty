@@ -3,11 +3,10 @@ from fastapi import HTTPException
 
 from shared.customtypes import RunIdValue, TaskIdValue
 from shared.taskresulthistory import LegacyTaskResultHistoryItemAdapter
-from shared.taskresultshistorystore import legacy_taskresultshistory_storage
 from shared.utils.exceptiondecorators import async_catch_ex
 from shared.utils.result import ResultTag
 
-from config import app
+from config import app, legacy_taskresultshistory_storage
 
 @app.get("/tasks/legacy/{id}/run/history/{run_id}")
 async def get_result(id: str, run_id: str):

@@ -17,8 +17,8 @@ P = ParamSpec("P")
 R = TypeVar("R")
 
 class TaskResultsHistoryStore[T]:
-    def __init__(self, items_sub_folder_name: str, to_dict: Callable[[T], dict[str, Any]], from_dict: Callable[[dict[str, Any]], Result[T, Any]]):
-        self._folder_path = os.path.join(config.STORAGE_ROOT_FOLDER, "HistoryStorage", items_sub_folder_name)
+    def __init__(self, root_folder: str, items_sub_folder_name: str, to_dict: Callable[[T], dict[str, Any]], from_dict: Callable[[dict[str, Any]], Result[T, Any]]):
+        self._folder_path = os.path.join(root_folder, "HistoryStorage", items_sub_folder_name)
         self._to_dict = to_dict
         self._from_dict = from_dict
     
@@ -49,13 +49,8 @@ class TaskResultsHistoryStore[T]:
             case None:
                 return None
 
-legacy_taskresultshistory_storage = TaskResultsHistoryStore(
-    "LegacyTaskResults",
-    LegacyTaskResultHistoryItemAdapter.to_dict,
-    LegacyTaskResultHistoryItemAdapter.from_dict
-)
-
 taskresultshistory_storage = TaskResultsHistoryStore(
+    config.STORAGE_ROOT_FOLDER,
     "TaskResults",
     TaskResultHistoryItemAdapter.to_dict,
     TaskResultHistoryItemAdapter.from_dict

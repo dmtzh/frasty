@@ -5,9 +5,10 @@ from shared.infrastructure.storage.repository import StorageError
 from shared.taskpendingresultsqueue import CompletedTaskData, TaskPendingResultsQueue, TaskPendingResultsQueueItem
 from shared.taskpendingresultsqueuestore import taskpendingresultsqueue_storage
 from shared.taskresulthistory import LegacyTaskResultHistoryItem
-from shared.taskresultshistorystore import legacy_taskresultshistory_storage
 from shared.utils.asyncresult import async_result, coroutine_result
 from shared.utils.exceptiondecorators import async_ex_to_error_result
+
+from config import legacy_taskresultshistory_storage
 
 class AddTaskResultToHistoryHandlerStorageError(StorageError):
     '''Unexpected add task result to history handler storage error'''
